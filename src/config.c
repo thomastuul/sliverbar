@@ -19,7 +19,8 @@ void config_defaults(panel_config *c) {
     copy(c->terminal, sizeof(c->terminal), "alacritty");
     copy(c->location, sizeof(c->location), "München");
     copy(c->language, sizeof(c->language), "de");
-    copy(c->color_bg, 16, "#191A21");
+    copy(c->color_panel_bg, 16, "#191A21");
+    copy(c->color_bg, 16, "#282A36");
     copy(c->color_fg, 16, "#ff5555");
     copy(c->color_free, 16, "#bfbfbf");
     copy(c->color_focus, 16, "#69FF94");
@@ -90,6 +91,7 @@ static int assign(panel_config *c, const char *k, const char *v) {
     STR("power_menu", power_menu);
     STR("weather_cache", weather_cache);
     STR("weather_image", weather_image);
+    STR("color_panel_bg", color_panel_bg);
     STR("color_bg", color_bg);
     STR("color_fg", color_fg);
     STR("color_free", color_free);

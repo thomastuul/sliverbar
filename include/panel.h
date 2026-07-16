@@ -15,7 +15,7 @@ typedef struct {
     char terminal[64], location[128], language[16];
     char launcher[PANEL_PATH_MAX], power_menu[PANEL_PATH_MAX];
     char weather_cache[PANEL_PATH_MAX], weather_image[PANEL_PATH_MAX];
-    char color_bg[16], color_fg[16], color_free[16], color_focus[16];
+    char color_panel_bg[16], color_bg[16], color_fg[16], color_free[16], color_focus[16];
     char color_free_bg[16], color_focused_free[16], color_focused_free_bg[16];
     char color_occupied[16], color_occupied_bg[16];
     char color_focused_occupied[16], color_focused_occupied_bg[16];

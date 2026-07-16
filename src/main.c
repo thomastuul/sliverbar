@@ -570,7 +570,7 @@ int main(int argc, char **argv) {
                      "-F",
                      cfg.color_fg,
                      "-B",
-                     cfg.color_bg,
+                     cfg.color_panel_bg,
                      "-u",
                      underline,
                      "-n",

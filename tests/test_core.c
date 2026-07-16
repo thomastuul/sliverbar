@@ -31,6 +31,8 @@ int main(int argc, char **argv) {
     config_defaults(&cfg);
     CHECK(cfg.height == 25);
     CHECK(cfg.volume_step == 2);
+    CHECK(strcmp(cfg.color_panel_bg, "#191A21") == 0);
+    CHECK(strcmp(cfg.color_bg, "#282A36") == 0);
 
     char path[] = "/tmp/lemonbar-c-test-XXXXXX";
     int fd = mkstemp(path);
