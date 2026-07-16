@@ -1,15 +1,22 @@
 # lemonbar-c
 
-Portable C17 implementation of the panel logic in `../lemonbar`. The existing
-Bash implementation remains an independent reference and fallback.
+Portable C17 implementation of the panel logic in `../lemonbar`. It creates,
+draws, and controls its X11 dock window directly; the Lemonbar program is not a
+build-time or runtime dependency. The existing Bash implementation remains an
+independent reference and fallback.
 
 ## Supported platform
 
-Linux with X11, bspwm and lemonbar. XCB is used when its development files are
-available; otherwise the build provides an `xprop` fallback. Runtime backends
-are detected dynamically and executed without a
-shell: `bspc`, `lemonbar`, `amixer` or `pactl`, `xrandr`, optional `nmcli`, and
-optional desktop applications configured by the user.
+Linux with X11 and bspwm. The native window uses XCB, Cairo, Pango, Fontconfig,
+and the standard EWMH dock properties. Runtime backends are detected
+dynamically and executed without a shell: `bspc`, `amixer` or `pactl`,
+`xrandr`, optional `nmcli`, and optional desktop applications configured by the
+user.
+
+The target system needs the runtime libraries for XCB, Cairo, Pango, GLib, and
+Fontconfig. Development headers and analysis tools are needed only in the
+container. A build without the native development libraries still provides the
+configuration-check and version CLI, but it cannot start a panel.
 
 ## Build
 
@@ -21,7 +28,9 @@ keeps compilers, development headers, XCB, and analysis tools out of the host:
 ```
 
 Set `CONTAINER_ENGINE=podman` to use Podman. The script builds and tests three
-presets: an XCB release, an explicit non-XCB fallback, and an ASan/UBSan build.
+presets: a native release, an explicit CLI-only dependency fallback, and an
+ASan/UBSan native build. Native builds are rendered under Xvfb and their nested
+left-, right-, and scroll-action routing is tested automatically.
 The host-owned release binary is written to:
 
 ```text
@@ -39,49 +48,60 @@ ctest --test-dir build/lemonbar_c --output-on-failure
 Sanitizers can be enabled with `-DLEMONBAR_C_SANITIZERS=ON`. Install with
 `cmake --install build/lemonbar_c`.
 
-The XCB release links dynamically to libc and libxcb on the target host. The
-fallback can be built with `-DLEMONBAR_C_WITH_XCB=OFF` and does not link to
-libxcb. Inspect a release with `ldd` before distributing it to another system.
+The native release is dynamically linked. Inspect it with `ldd` before
+distributing it to another system. `-DLEMONBAR_C_WITH_XCB=OFF` intentionally
+builds the CLI-only variant used to verify that configuration and version
+operations remain available without native development headers.
 
 ## Development checks
 
 The repository contains project-local `clang-format` and `clang-tidy`
-configuration files. Run the checks from the repository root:
+configuration files. Both tools run inside the container as part of:
 
 ```sh
-clang-format --dry-run --Werror lemonbar_c/{include,src,tests}/*.[ch]
-clang-tidy -quiet -p build/lemonbar_c lemonbar_c/src/*.c lemonbar_c/tests/*.c
+./lemonbar_c/scripts/container-build.sh
 ```
+
+The same command also runs the release, CLI-only, and sanitizer CTest suites.
+No compiler, formatter, analyzer, or development headers are required on the
+host.
 
 ## Run
 
 ```sh
-build/lemonbar_c/lemonbar-panel \
-  --config build/lemonbar_c/panel.conf
+lemonbar_c/build/container-release/lemonbar-panel \
+  --config lemonbar_c/config/panel.conf
 ```
 
 Print the centrally managed project version with:
 
 ```sh
-build/lemonbar_c/lemonbar-panel --version
+lemonbar_c/build/container-release/lemonbar-panel --version
 ```
 
-The program owns Lemonbar, subscribes to bspwm and X11 events, handles clicks
-through a private action protocol, and shuts down all direct children. It uses
-`$XDG_RUNTIME_DIR/lemonbar-c` for its lock. It does not evaluate shell code.
+The program owns its X11 dock window, subscribes to bspwm and X11 events,
+handles clicks through a private action protocol, and shuts down all direct
+children. It uses `$XDG_RUNTIME_DIR/lemonbar-c` for its lock. It does not
+evaluate shell code.
 
 The Bash panel and C panel must not be displayed simultaneously during visual
 testing. `autostart` is intentionally not changed by this project.
 
+`super + b` continues to work because the native window publishes the
+`lemonbar-c` application name. Trayer remains a separate X11 dock and is raised
+above the panel in the reserved tray area.
+
 ## Architecture
 
-- one `poll(2)` loop handles `timerfd`, `signalfd`, Lemonbar actions, bspwm,
+- one `poll(2)` loop handles `timerfd`, `signalfd`, native mouse actions, bspwm,
   NetworkManager and X11;
-- Lemonbar actions use a private `|`-separated protocol and are never evaluated
-  by a shell;
+- an XCB window with EWMH dock and strut properties replaces Lemonbar;
+- Cairo and Pango render the existing block model with measured left, centered,
+  and right-aligned regions;
+- mouse actions use a private `|`-separated protocol and are never evaluated by
+  a shell;
 - CPU, battery, clock, screencast, network state and cache parsing are native C;
-- XCB is preferred for active-window events, with persistent `xprop -spy`
-  watchers as a portable, event-driven fallback;
+- XCB property events update the active-window title without polling;
 - weather downloads run in a supervised child and are atomically published;
 - optional programs are detected at runtime and executed with explicit argv.
 
@@ -98,7 +118,7 @@ and `XDG_RUNTIME_DIR` unless explicitly configured. Run
 | --- | --- |
 | `start.sh`, `sighandler.sh` | supervisor, `poll`, `timerfd`, `signalfd` |
 | `events.sh`, workspace block | persistent `bspc subscribe report` parser |
-| `xtmon.sh`, `title_server.sh` | XCB property events or persistent `xprop -spy` watchers |
+| `xtmon.sh`, `title_server.sh` | native XCB property events |
 | clock, CPU, battery, screencast | native `/proc`, `/sys`, time and XDG logic |
 | volume and brightness | backend detection plus validated action protocol |
 | network worker | `/sys/class/net`, optional nmcli query and monitor |

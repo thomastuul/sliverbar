@@ -10,9 +10,12 @@ RUN apt-get update \
         clang-format \
         clang-tidy \
         cmake \
+        libcairo2-dev \
+        libpango1.0-dev \
         libxcb1-dev \
         ninja-build \
         pkg-config \
+        xauth \
         xvfb \
     && rm -rf /var/lib/apt/lists/*
 

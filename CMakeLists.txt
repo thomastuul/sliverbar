@@ -12,6 +12,8 @@ include(CTest)
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(XCB QUIET IMPORTED_TARGET xcb)
+    pkg_check_modules(CAIRO_XCB QUIET IMPORTED_TARGET cairo-xcb)
+    pkg_check_modules(PANGOCAIRO QUIET IMPORTED_TARGET pangocairo)
 endif()
 
 option(LEMONBAR_C_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
@@ -32,11 +34,15 @@ target_link_libraries(lemonbar-panel PRIVATE lemonbar_core)
 target_compile_definitions(lemonbar-panel PRIVATE _GNU_SOURCE _POSIX_C_SOURCE=200809L)
 configure_file(include/version.h.in generated/version.h @ONLY)
 target_include_directories(lemonbar-panel PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
-if(LEMONBAR_C_WITH_XCB AND XCB_FOUND)
-    target_link_libraries(lemonbar-panel PRIVATE PkgConfig::XCB)
-    target_compile_definitions(lemonbar-panel PRIVATE HAVE_XCB=1)
+if(LEMONBAR_C_WITH_XCB AND XCB_FOUND AND CAIRO_XCB_FOUND AND PANGOCAIRO_FOUND)
+    target_sources(lemonbar-panel PRIVATE src/native_panel.c)
+    target_link_libraries(
+        lemonbar-panel PRIVATE PkgConfig::XCB PkgConfig::CAIRO_XCB PkgConfig::PANGOCAIRO
+    )
+    target_compile_definitions(lemonbar-panel PRIVATE HAVE_XCB=1 HAVE_NATIVE_PANEL=1)
+    set(LEMONBAR_C_NATIVE_PANEL ON)
 else()
-    message(STATUS "XCB backend unavailable or disabled; using the xprop fallback")
+    message(STATUS "Native X11 dependencies unavailable or disabled; building CLI-only fallback")
 endif()
 target_compile_options(lemonbar-panel PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 
@@ -68,4 +74,14 @@ if(BUILD_TESTING)
     set_tests_properties(version PROPERTIES
         PASS_REGULAR_EXPRESSION "^lemonbar-panel ${PROJECT_VERSION}"
     )
+    if(LEMONBAR_C_NATIVE_PANEL)
+        find_program(XVFB_RUN xvfb-run)
+        if(XVFB_RUN)
+            add_test(
+                NAME native_panel_smoke
+                COMMAND ${XVFB_RUN} -a $<TARGET_FILE:lemonbar-panel>
+                        --config ${CMAKE_CURRENT_BINARY_DIR}/panel.conf --smoke-test
+            )
+        endif()
+    endif()
 endif()

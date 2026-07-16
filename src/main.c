@@ -1,3 +1,4 @@
+#include "native_panel.h"
 #include "panel.h"
 #include "version.h"
 
@@ -20,11 +21,6 @@
 #include <xcb/xproto.h>
 #endif
 
-typedef struct {
-    pid_t pid;
-    int read_fd, write_fd;
-} child;
-
 static int join_path(char *out, size_t size, const char *base, const char *suffix) {
     size_t a = strlen(base), b = strlen(suffix);
     if (a + b + 1 > size)
@@ -33,6 +29,12 @@ static int join_path(char *out, size_t size, const char *base, const char *suffi
     memcpy(out + a, suffix, b + 1);
     return 0;
 }
+
+#ifdef HAVE_NATIVE_PANEL
+typedef struct {
+    pid_t pid;
+    int read_fd, write_fd;
+} child;
 
 static int child_pipe(char *const argv[], bool input, child *out) {
     int p[2];
@@ -108,6 +110,8 @@ static void store_title(const char *title, unsigned max, panel_state *s, const p
              c->color_bg,
              c->color_free,
              safe);
+    if (getenv("LEMONBAR_C_DEBUG"))
+        log_message("DEBUG", "title=%s", clipped);
 }
 
 #ifdef HAVE_XCB
@@ -139,6 +143,11 @@ static void update_title_xcb(xcb_connection_t *x,
     xcb_flush(x);
     xcb_get_property_reply_t *r =
         xcb_get_property_reply(x, xcb_get_property(x, 0, win, net_name, utf8, 0, 1024), NULL);
+    if (!r || xcb_get_property_value_length(r) <= 0) {
+        free(r);
+        r = xcb_get_property_reply(
+            x, xcb_get_property(x, 0, win, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 0, 1024), NULL);
+    }
     if (!r || xcb_get_property_value_length(r) <= 0) {
         free(r);
         return;
@@ -428,22 +437,25 @@ do_action(const panel_config *c, const char *line, bool *volume_dirty, bool *wor
             *workspace_dirty = true;
     }
 }
+#endif
 
 static void usage(FILE *f, const char *name) {
-    fprintf(f, "Usage: %s [--config PATH] [--check-config] [--version]\n", name);
+    fprintf(f, "Usage: %s [--config PATH] [--check-config] [--smoke-test] [--version]\n", name);
 }
 
 int main(int argc, char **argv) {
     panel_config cfg;
     config_defaults(&cfg);
     const char *config = NULL;
-    bool check = false;
+    bool check = false, smoke_test = false;
     signal(SIGPIPE, SIG_IGN);
     for (int i = 1; i < argc; i++) {
         if (!strcmp(argv[i], "--config") && i + 1 < argc)
             config = argv[++i];
         else if (!strcmp(argv[i], "--check-config"))
             check = true;
+        else if (!strcmp(argv[i], "--smoke-test"))
+            smoke_test = true;
         else if (!strcmp(argv[i], "--version")) {
             puts("lemonbar-panel " LEMONBAR_C_VERSION);
             return 0;
@@ -487,6 +499,11 @@ int main(int argc, char **argv) {
         puts("configuration valid");
         return 0;
     }
+#ifndef HAVE_NATIVE_PANEL
+    (void)smoke_test;
+    log_message("ERROR", "native X11 support was unavailable when this binary was built");
+    return 1;
+#else
     const char *runtime = getenv("XDG_RUNTIME_DIR");
     char fallback[64];
     if (!runtime) {
@@ -511,7 +528,6 @@ int main(int argc, char **argv) {
     ftruncate(lock, 0);
     dprintf(lock, "%ld\n", (long)getpid());
     int xfd = -1;
-#ifdef HAVE_XCB
     xcb_connection_t *x = xcb_connect(NULL, NULL);
     if (xcb_connection_has_error(x)) {
         log_message("ERROR", "cannot connect to X11");
@@ -528,28 +544,67 @@ int main(int argc, char **argv) {
     xcb_change_window_attributes(x, root, XCB_CW_EVENT_MASK, &mask);
     xcb_flush(x);
     xfd = xcb_get_file_descriptor(x);
-#else
-    char dimensions[8192];
-    unsigned width = 1920;
-    char *xrandr[] = {"xrandr", "--current", NULL};
-    if (!run_capture(xrandr, dimensions, sizeof(dimensions), 1200)) {
-        char *p = strstr(dimensions, "current ");
-        if (p)
-            sscanf(p, "current %u x", &width);
-    } else {
-        char *xdpy[] = {"xdpyinfo", NULL};
-        if (!run_capture(xdpy, dimensions, sizeof(dimensions), 1200)) {
-            char *p = strstr(dimensions, "dimensions:");
-            if (p)
-                sscanf(p, "dimensions: %ux", &width);
-        }
+    native_panel *panel = native_panel_create(x, screen, &cfg, error, sizeof(error));
+    if (!panel) {
+        log_message("ERROR", "%s", error);
+        xcb_disconnect(x);
+        return 1;
     }
-    snprintf(cfg.geometry, sizeof(cfg.geometry), "%ux%d+0+0", width, cfg.height);
-#endif
-    char height[16], areas[16], underline[16];
-    snprintf(height, sizeof(height), "%d", cfg.height);
-    snprintf(areas, sizeof(areas), "%d", cfg.clickable_areas);
-    snprintf(underline, sizeof(underline), "%d", cfg.underline);
+    if (smoke_test) {
+        panel_state smoke = {0};
+        snprintf(smoke.workspace,
+                 sizeof(smoke.workspace),
+                 "%%{F%s}%%{B%s}%%{A3:notify|Native panel|space preserved:}"
+                 "%%{A4:volume|up:}%%{A1:workspace|I:} native %%{A}%%{A}%%{A}%%{B-}%%{F-}",
+                 cfg.color_focus,
+                 cfg.color_bg);
+        snprintf(smoke.title,
+                 sizeof(smoke.title),
+                 "%%{B%s}%%{F%s} Native X11 panel %%{F-}%%{B-}",
+                 cfg.color_bg,
+                 cfg.color_free);
+        snprintf(smoke.clock,
+                 sizeof(smoke.clock),
+                 "%%{B%s}%%{F%s} smoke test %%{F-}%%{B-}",
+                 cfg.color_bg,
+                 cfg.color_clock);
+        if (native_panel_draw(panel, &smoke)) {
+            log_message("ERROR", "native smoke-test rendering failed");
+            native_panel_destroy(panel);
+            xcb_disconnect(x);
+            close(lock);
+            return 1;
+        }
+        const char *expected_actions[] = {
+            "workspace|I", "notify|Native panel|space preserved", "volume|up"};
+        const uint8_t buttons[] = {1, 3, 4};
+        for (size_t i = 0; i < sizeof(buttons) / sizeof(buttons[0]); i++) {
+            xcb_button_press_event_t click = {0};
+            click.response_type = XCB_BUTTON_PRESS;
+            click.event = native_panel_window(panel);
+            click.event_x = 4;
+            click.detail = buttons[i];
+            char smoke_action[64] = "";
+            bool redraw = false;
+            if (!native_panel_handle_event(panel,
+                                           (const xcb_generic_event_t *)&click,
+                                           smoke_action,
+                                           sizeof(smoke_action),
+                                           &redraw) ||
+                strcmp(smoke_action, expected_actions[i]) != 0) {
+                log_message("ERROR", "native smoke-test action routing failed");
+                native_panel_destroy(panel);
+                xcb_disconnect(x);
+                close(lock);
+                return 1;
+            }
+        }
+        usleep(100000);
+        native_panel_destroy(panel);
+        xcb_disconnect(x);
+        close(lock);
+        return 0;
+    }
     sigset_t signals;
     sigemptyset(&signals);
     sigaddset(&signals, SIGINT);
@@ -560,51 +615,11 @@ int main(int argc, char **argv) {
     int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
     struct itimerspec tick = {{1, 0}, {0, 1}};
     timerfd_settime(tfd, 0, &tick, NULL);
-    char *lemon[] = {"lemonbar",
-                     "-p",
-                     "-a",
-                     areas,
-                     "-g",
-                     cfg.geometry,
-                     "-f",
-                     cfg.font,
-                     "-f",
-                     cfg.icon_font,
-                     "-F",
-                     cfg.color_fg,
-                     "-B",
-                     cfg.color_panel_bg,
-                     "-u",
-                     underline,
-                     "-n",
-                     cfg.wm_name,
-                     NULL};
-    child bar = {.read_fd = -1, .write_fd = -1};
-    int action_pipe[2];
-    if (pipe2(action_pipe, O_CLOEXEC | O_NONBLOCK))
-        return 1;
-    int input_pipe[2];
-    pipe2(input_pipe, O_CLOEXEC);
-    pid_t bp = fork();
-    if (!bp) {
-        dup2(input_pipe[0], 0);
-        dup2(action_pipe[1], 1);
-        close(input_pipe[0]);
-        close(input_pipe[1]);
-        close(action_pipe[0]);
-        close(action_pipe[1]);
-        execvp(lemon[0], lemon);
-        _exit(127);
-    }
-    close(input_pipe[0]);
-    close(action_pipe[1]);
-    bar.pid = bp;
-    bar.write_fd = input_pipe[1];
-    bar.read_fd = -1;
     char *bsp_argv[] = {"bspc", "subscribe", "report", NULL};
     child bsp = {.read_fd = -1, .write_fd = -1};
     if (child_pipe(bsp_argv, false, &bsp)) {
-        stop_child(&bar);
+        native_panel_destroy(panel);
+        xcb_disconnect(x);
         return 1;
     }
     child network_events = {.read_fd = -1, .write_fd = -1};
@@ -633,12 +648,8 @@ int main(int argc, char **argv) {
     module_brightness(&cfg, &state);
     module_tray(&cfg, &state);
     module_weather(&cfg, &state);
-#ifdef HAVE_XCB
     update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
-#else
-    update_title_fallback(cfg.title_max, &state, &cfg);
-#endif
-    char report[PANEL_TEXT_MAX] = "", actions[2048] = "";
+    char report[PANEL_TEXT_MAX] = "", action[1024] = "";
     size_t report_used = 0;
     unsigned ticks = 0;
     bool running = true, dirty = true, vd = false, wd = false;
@@ -646,7 +657,7 @@ int main(int argc, char **argv) {
         struct pollfd fds[] = {{tfd, POLLIN, 0},
                                {sfd, POLLIN, 0},
                                {bsp.read_fd, POLLIN, 0},
-                               {action_pipe[0], POLLIN, 0},
+                               {-1, 0, 0},
                                {xfd, POLLIN, 0},
                                {network_events.read_fd, POLLIN, 0},
                                {title_root.read_fd, POLLIN, 0},
@@ -654,6 +665,7 @@ int main(int argc, char **argv) {
         if (poll(fds, 8, -1) < 0) {
             if (errno == EINTR)
                 continue;
+            log_message("ERROR", "poll failed: %s", strerror(errno));
             break;
         }
         if (fds[0].revents & POLLIN) {
@@ -694,16 +706,18 @@ int main(int argc, char **argv) {
                     running = false;
                 else if (si.ssi_signo == SIGCHLD) {
                     pid_t reaped;
-                    while ((reaped = waitpid(-1, NULL, WNOHANG)) > 0) {
+                    int status;
+                    while ((reaped = waitpid(-1, &status, WNOHANG)) > 0) {
                         if (reaped == weather_pid) {
                             weather_pid = 0;
                             module_weather(&cfg, &state);
                             dirty = true;
-                        } else if (reaped == bar.pid)
-                            bar.pid = 0;
-                        else if (reaped == bsp.pid)
+                        } else if (reaped == bsp.pid) {
+                            log_message("ERROR",
+                                        "bspc report subscription exited: status=%d",
+                                        WIFEXITED(status) ? WEXITSTATUS(status) : -1);
                             bsp.pid = 0;
-                        else if (reaped == network_events.pid) {
+                        } else if (reaped == network_events.pid) {
                             network_events.pid = 0;
                             if (network_events.read_fd >= 0)
                                 close(network_events.read_fd);
@@ -749,38 +763,33 @@ int main(int argc, char **argv) {
                 report[0] = '\0';
             }
         }
-        if (fds[3].revents & POLLIN) {
-            ssize_t n = read(action_pipe[0], actions, sizeof(actions) - 1);
-            if (n > 0) {
-                actions[n] = '\0';
-                char *save = NULL;
-                for (char *line = strtok_r(actions, "\n", &save); line;
-                     line = strtok_r(NULL, "\n", &save))
-                    do_action(&cfg, line, &vd, &wd);
-                if (vd) {
-                    module_volume(&cfg, &state);
-                    vd = false;
-                    dirty = true;
-                }
-                if (wd) {
-                    module_brightness(&cfg, &state);
-                    wd = false;
-                    dirty = true;
-                }
-            }
-        }
-#ifdef HAVE_XCB
         if (fds[4].revents & POLLIN) {
             xcb_generic_event_t *ev;
             while ((ev = xcb_poll_for_event(x))) {
-                if ((ev->response_type & 0x7f) == XCB_PROPERTY_NOTIFY) {
+                bool redraw = false;
+                if (native_panel_handle_event(panel, ev, action, sizeof(action), &redraw)) {
+                    do_action(&cfg, action, &vd, &wd);
+                    dirty = true;
+                }
+                if ((ev->response_type & 0x7fU) == XCB_PROPERTY_NOTIFY) {
                     update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
                     dirty = true;
                 }
+                if (redraw)
+                    dirty = true;
                 free(ev);
             }
+            if (vd) {
+                module_volume(&cfg, &state);
+                vd = false;
+                dirty = true;
+            }
+            if (wd) {
+                module_brightness(&cfg, &state);
+                wd = false;
+                dirty = true;
+            }
         }
-#endif
         if (fds[5].revents & POLLIN) {
             char discard[2048];
             while (read(network_events.read_fd, discard, sizeof(discard)) > 0) {
@@ -816,24 +825,21 @@ int main(int argc, char **argv) {
         }
 #endif
         if (dirty) {
-            char line[32768];
-            render_panel(&state, line, sizeof(line));
-            size_t len = strlen(line), off = 0;
-            while (off < len) {
-                ssize_t n = write(bar.write_fd, line + off, len - off);
-                if (n > 0)
-                    off += (size_t)n;
-                else if (errno != EINTR) {
-                    running = false;
-                    break;
-                }
+            if (native_panel_draw(panel, &state)) {
+                log_message("ERROR", "native panel rendering failed");
+                running = false;
             }
             dirty = false;
         }
-        if (bar.pid <= 0 || bsp.pid <= 0 || kill(bar.pid, 0) || kill(bsp.pid, 0))
+        if (bsp.pid <= 0 || kill(bsp.pid, 0)) {
+            log_message("ERROR", "bspc report subscription is unavailable");
             running = false;
+        }
+        if (xcb_connection_has_error(x)) {
+            log_message("ERROR", "X11 connection failed");
+            running = false;
+        }
     }
-    close(action_pipe[0]);
     close(tfd);
     close(sfd);
     if (weather_pid > 0) {
@@ -844,10 +850,9 @@ int main(int argc, char **argv) {
     stop_child(&title_window);
     stop_child(&title_root);
     stop_child(&bsp);
-    stop_child(&bar);
-#ifdef HAVE_XCB
+    native_panel_destroy(panel);
     xcb_disconnect(x);
-#endif
     close(lock);
     return 0;
+#endif
 }
