@@ -84,6 +84,17 @@ static void stop_child(child *c) {
     c->read_fd = c->write_fd = -1;
 }
 
+static void retire_child(child *c) {
+    if (c->pid > 0)
+        kill(c->pid, SIGTERM);
+    if (c->read_fd >= 0)
+        close(c->read_fd);
+    if (c->write_fd >= 0)
+        close(c->write_fd);
+    c->pid = 0;
+    c->read_fd = c->write_fd = -1;
+}
+
 static void store_title(const char *title, unsigned max, panel_state *s, const panel_config *c) {
     char clipped[512], safe[512];
     snprintf(clipped, sizeof(clipped), "%.*s", (int)max, title ? title : "");
@@ -139,26 +150,26 @@ static void update_title_xcb(xcb_connection_t *x,
     store_title(title, max, s, c);
 }
 #else
-static void update_title_fallback(unsigned max, panel_state *s, const panel_config *c) {
+static int active_window_id(char *id, size_t size) {
     char out[2048];
     char *active[] = {"xprop", "-root", "_NET_ACTIVE_WINDOW", NULL};
     if (run_capture(active, out, sizeof(out), 500))
-        return;
+        return -1;
     char *hash = strchr(out, '#');
     if (!hash)
-        return;
+        return -1;
     hash++;
     while (isspace((unsigned char)*hash))
         hash++;
-    char id[32];
-    snprintf(id, sizeof(id), "%.24s", hash);
+    snprintf(id, size, "%.24s", hash);
     char *space = strpbrk(id, " \t\r\n");
     if (space)
         *space = '\0';
-    if (!*id || !strcmp(id, "0x0")) {
-        store_title("", max, s, c);
-        return;
-    }
+    return !*id || !strcmp(id, "0x0") ? -1 : 0;
+}
+
+static void update_title_for_id(char *id, unsigned max, panel_state *s, const panel_config *c) {
+    char out[2048];
     char *name[] = {"xprop", "-id", id, "_NET_WM_NAME", "WM_NAME", NULL};
     if (run_capture(name, out, sizeof(out), 500))
         return;
@@ -172,6 +183,73 @@ static void update_title_fallback(unsigned max, panel_state *s, const panel_conf
         }
     }
     store_title("", max, s, c);
+}
+
+static void update_title_fallback(unsigned max, panel_state *s, const panel_config *c) {
+    char id[32];
+    if (active_window_id(id, sizeof(id))) {
+        store_title("", max, s, c);
+        return;
+    }
+    update_title_for_id(id, max, s, c);
+}
+
+static int start_window_title_watcher_for_id(child *watcher, char *id) {
+    if (command_exists("stdbuf")) {
+        char *args[] = {
+            "stdbuf", "-oL", "xprop", "-spy", "-id", id, "_NET_WM_NAME", "WM_NAME", NULL};
+        return child_pipe(args, false, watcher);
+    }
+    char *args[] = {"xprop", "-spy", "-id", id, "_NET_WM_NAME", "WM_NAME", NULL};
+    return child_pipe(args, false, watcher);
+}
+
+static int start_window_title_watcher(child *watcher) {
+    char id[32];
+    return active_window_id(id, sizeof(id)) ? -1 : start_window_title_watcher_for_id(watcher, id);
+}
+
+static int start_active_window_watcher(child *watcher) {
+    if (command_exists("stdbuf")) {
+        char *args[] = {"stdbuf", "-oL", "xprop", "-spy", "-root", "_NET_ACTIVE_WINDOW", NULL};
+        return child_pipe(args, false, watcher);
+    }
+    char *args[] = {"xprop", "-spy", "-root", "_NET_ACTIVE_WINDOW", NULL};
+    return child_pipe(args, false, watcher);
+}
+
+static int active_id_from_event(char *event, char *id, size_t size) {
+    char *hash = strrchr(event, '#');
+    if (!hash)
+        return -1;
+    hash++;
+    while (isspace((unsigned char)*hash))
+        hash++;
+    snprintf(id, size, "%.24s", hash);
+    char *space = strpbrk(id, " \t\r\n");
+    if (space)
+        *space = '\0';
+    return !*id || !strcmp(id, "0x0") ? -1 : 0;
+}
+
+static void title_from_event(char *event, unsigned max, panel_state *s, const panel_config *c) {
+    char *property = NULL;
+    for (char *next = event; (next = strstr(next, "_NET_WM_NAME")); next++)
+        property = next;
+    if (!property)
+        property = event;
+    char *first = strchr(property, '\"');
+    if (!first) {
+        store_title("", max, s, c);
+        return;
+    }
+    char *last = strchr(first + 1, '\"');
+    if (!last) {
+        store_title("", max, s, c);
+        return;
+    }
+    *last = '\0';
+    store_title(first + 1, max, s, c);
 }
 #endif
 
@@ -532,6 +610,14 @@ int main(int argc, char **argv) {
         if (child_pipe(nm, false, &network_events))
             log_message("ERROR", "cannot start nmcli monitor");
     }
+    child title_root = {.read_fd = -1, .write_fd = -1};
+    child title_window = {.read_fd = -1, .write_fd = -1};
+#ifndef HAVE_XCB
+    if (start_active_window_watcher(&title_root))
+        log_message("ERROR", "cannot start active-window watcher");
+    if (start_window_title_watcher(&title_window))
+        log_message("ERROR", "cannot start window-title watcher");
+#endif
     panel_state state = {0};
     pid_t weather_pid = start_weather_refresh(&cfg);
     module_static(&cfg, &state);
@@ -558,8 +644,10 @@ int main(int argc, char **argv) {
                                {bsp.read_fd, POLLIN, 0},
                                {action_pipe[0], POLLIN, 0},
                                {xfd, POLLIN, 0},
-                               {network_events.read_fd, POLLIN, 0}};
-        if (poll(fds, 6, -1) < 0) {
+                               {network_events.read_fd, POLLIN, 0},
+                               {title_root.read_fd, POLLIN, 0},
+                               {title_window.read_fd, POLLIN, 0}};
+        if (poll(fds, 8, -1) < 0) {
             if (errno == EINTR)
                 continue;
             break;
@@ -586,7 +674,12 @@ int main(int argc, char **argv) {
                     log_message("ERROR", "cannot restart nmcli monitor");
             }
 #ifndef HAVE_XCB
-            update_title_fallback(cfg.title_max, &state, &cfg);
+            if (title_root.pid <= 0) {
+                if (start_active_window_watcher(&title_root))
+                    log_message("ERROR", "cannot restart active-window watcher");
+            }
+            if (title_window.pid <= 0 && start_window_title_watcher(&title_window))
+                log_message("ERROR", "cannot restart window-title watcher");
 #endif
             dirty = true;
         }
@@ -611,6 +704,16 @@ int main(int argc, char **argv) {
                             if (network_events.read_fd >= 0)
                                 close(network_events.read_fd);
                             network_events.read_fd = -1;
+                        } else if (reaped == title_root.pid) {
+                            title_root.pid = 0;
+                            if (title_root.read_fd >= 0)
+                                close(title_root.read_fd);
+                            title_root.read_fd = -1;
+                        } else if (reaped == title_window.pid) {
+                            title_window.pid = 0;
+                            if (title_window.read_fd >= 0)
+                                close(title_window.read_fd);
+                            title_window.read_fd = -1;
                         }
                     }
                 }
@@ -668,6 +771,33 @@ int main(int argc, char **argv) {
             module_network(&cfg, &state);
             dirty = true;
         }
+#ifndef HAVE_XCB
+        if (fds[6].revents & POLLIN) {
+            char event[2048];
+            size_t used = 0;
+            ssize_t count;
+            while (used < sizeof(event) - 1 &&
+                   (count = read(title_root.read_fd, event + used, sizeof(event) - used - 1)) > 0)
+                used += (size_t)count;
+            event[used] = '\0';
+            retire_child(&title_window);
+            char id[32];
+            if (active_id_from_event(event, id, sizeof(id)) ||
+                start_window_title_watcher_for_id(&title_window, id))
+                log_message("ERROR", "cannot follow the active window title");
+        }
+        if (fds[7].revents & POLLIN) {
+            char event[2048];
+            size_t used = 0;
+            ssize_t count;
+            while (used < sizeof(event) - 1 &&
+                   (count = read(title_window.read_fd, event + used, sizeof(event) - used - 1)) > 0)
+                used += (size_t)count;
+            event[used] = '\0';
+            title_from_event(event, cfg.title_max, &state, &cfg);
+            dirty = true;
+        }
+#endif
         if (dirty) {
             char line[32768];
             render_panel(&state, line, sizeof(line));
@@ -694,6 +824,8 @@ int main(int argc, char **argv) {
         waitpid(weather_pid, NULL, 0);
     }
     stop_child(&network_events);
+    stop_child(&title_window);
+    stop_child(&title_root);
     stop_child(&bsp);
     stop_child(&bar);
 #ifdef HAVE_XCB

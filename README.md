@@ -53,7 +53,8 @@ testing. `autostart` is intentionally not changed by this project.
 - Lemonbar actions use a private `|`-separated protocol and are never evaluated
   by a shell;
 - CPU, battery, clock, screencast, network state and cache parsing are native C;
-- XCB is preferred for active-window events, with a portable `xprop` fallback;
+- XCB is preferred for active-window events, with persistent `xprop -spy`
+  watchers as a portable, event-driven fallback;
 - weather downloads run in a supervised child and are atomically published;
 - optional programs are detected at runtime and executed with explicit argv.
 
@@ -70,7 +71,7 @@ and `XDG_RUNTIME_DIR` unless explicitly configured. Run
 | --- | --- |
 | `start.sh`, `sighandler.sh` | supervisor, `poll`, `timerfd`, `signalfd` |
 | `events.sh`, workspace block | persistent `bspc subscribe report` parser |
-| `xtmon.sh`, `title_server.sh` | XCB property events or `xprop` polling |
+| `xtmon.sh`, `title_server.sh` | XCB property events or persistent `xprop -spy` watchers |
 | clock, CPU, battery, screencast | native `/proc`, `/sys`, time and XDG logic |
 | volume and brightness | backend detection plus validated action protocol |
 | network worker | `/sys/class/net`, optional nmcli query and monitor |
