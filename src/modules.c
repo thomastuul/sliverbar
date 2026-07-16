@@ -3,6 +3,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -58,7 +59,7 @@ void module_cpu(const panel_config *c, panel_state *s) {
     s->cpu_idle = idle;
     s->cpu_initialized = true;
     char text[64], body[256];
-    snprintf(text, sizeof(text), " %.1f%%", use);
+    snprintf(text, sizeof(text), " %5.1f%%", use);
     block(body, sizeof(body), c->color_bg, c->color_system, text);
     action(s->cpu, sizeof(s->cpu), 1, "terminal|btop", body);
 }
@@ -103,7 +104,7 @@ void module_battery(const panel_config *c, panel_state *s) {
                            : p >= 50 ? ""
                            : p >= 25 ? ""
                                      : "";
-        snprintf(text, sizeof(text), "%s %d%% %s", icon, p, charging ? "" : full ? "" : "");
+        snprintf(text, sizeof(text), "%s %3d%% %s", icon, p, charging ? "" : full ? "" : " ");
     }
     const char *fg = charging                       ? c->color_focus
                      : (count && sum / count <= 10) ? c->color_critical
@@ -137,7 +138,7 @@ void module_volume(const panel_config *c, panel_state *s) {
         level = atoi(q);
     }
     char text[64], body[256], tmp[512];
-    snprintf(text, sizeof(text), "%s %d%%", muted ? "" : "", level);
+    snprintf(text, sizeof(text), "%s %3d%%", muted ? "" : "", level);
     block(body, sizeof(body), c->color_bg, muted ? c->color_muted : c->color_volume, text);
     action(tmp, sizeof(tmp), 3, "volume|toggle", body);
     char a[768];
@@ -258,7 +259,7 @@ void module_network(const panel_config *c, panel_state *s) {
     char text[256], body[512], safe[128];
     shell_quote_action(ssid, safe, sizeof(safe));
     if (wifi && strength >= 0)
-        snprintf(text, sizeof(text), "%s %s %d%%", eth ? "" : "", "說", strength);
+        snprintf(text, sizeof(text), "%s %s %3d%%", eth ? "" : "", "說", strength);
     else
         snprintf(text, sizeof(text), "%s %s", eth ? "" : "", wifi ? "說" : "");
     block(body, sizeof(body), c->color_bg, c->color_network, text);
@@ -297,10 +298,27 @@ void module_brightness(const panel_config *c, panel_state *s) {
             pct = (int)(strtod(p + 11, NULL) * 100.0 + 0.5);
     }
     char text[64], body[256], tmp[512];
-    snprintf(text, sizeof(text), " %d%%", pct);
+    snprintf(text, sizeof(text), " %3d%%", pct);
     block(body, sizeof(body), c->color_bg, c->color_brightness, text);
     action(tmp, sizeof(tmp), 5, "brightness|down", body);
     action(s->brightness, sizeof(s->brightness), 4, "brightness|up", tmp);
+}
+
+int parse_xdotool_width(const char *output) {
+    int largest = 0;
+    const char *line = output;
+    while (line && *line) {
+        if (!strncmp(line, "WIDTH=", 6)) {
+            char *end;
+            long width = strtol(line + 6, &end, 10);
+            if (end != line + 6 && width > largest && width <= INT_MAX)
+                largest = (int)width;
+        }
+        line = strchr(line, '\n');
+        if (line)
+            line++;
+    }
+    return largest;
 }
 
 void module_tray(const panel_config *c, panel_state *s) {
@@ -309,21 +327,18 @@ void module_tray(const panel_config *c, panel_state *s) {
     if (command_exists("xdotool")) {
         char *raise[] = {"xdotool", "search", "--class", "trayer", "windowraise", NULL};
         run_capture(raise, out, sizeof(out), 800);
+    }
+    char *hints[] = {"xprop", "-name", "panel", "WM_NORMAL_HINTS", NULL};
+    if (!run_capture(hints, out, sizeof(out), 800)) {
+        char *minimum = strstr(out, "minimum size:");
+        if (minimum)
+            w = atoi(minimum + 13);
+    }
+    if (w <= 0 && command_exists("xdotool")) {
         char *geometry[] = {
             "xdotool", "search", "--class", "trayer", "getwindowgeometry", "--shell", NULL};
-        if (!run_capture(geometry, out, sizeof(out), 800)) {
-            char *width = strstr(out, "WIDTH=");
-            if (width)
-                w = atoi(width + 6);
-        }
-    }
-    if (w <= 0) {
-        char *av[] = {"xprop", "-name", "panel", "WM_NORMAL_HINTS", NULL};
-        if (!run_capture(av, out, sizeof(out), 800)) {
-            char *p = strstr(out, "minimum size:");
-            if (p)
-                w = atoi(p + 13);
-        }
+        if (!run_capture(geometry, out, sizeof(out), 800))
+            w = parse_xdotool_width(out);
     }
     if (w <= 0 && s->tray[0])
         return;
@@ -364,7 +379,7 @@ void module_weather(const panel_config *c, panel_state *s) {
     p = strstr(data, "\"maxtempC\"");
     max = json_integer(p);
     char text[96], body[256], tmp[512];
-    snprintf(text, sizeof(text), "爫%d%% %d° %d°", rain, min, max);
+    snprintf(text, sizeof(text), "爫%3d%% %3d° %3d°", rain, min, max);
     block(body, sizeof(body), c->color_bg, c->color_weather, text);
     action(tmp, sizeof(tmp), 3, "weather|notify", body);
     action(s->weather, sizeof(s->weather), 1, "weather|open", tmp);
