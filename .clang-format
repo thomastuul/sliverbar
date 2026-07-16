@@ -1,0 +1,14 @@
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: Latest
+ColumnLimit: 100
+IndentWidth: 4
+ContinuationIndentWidth: 4
+BreakBeforeBraces: Attach
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+BinPackArguments: false
+BinPackParameters: false
+SortIncludes: CaseSensitive

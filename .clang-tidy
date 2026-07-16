@@ -1,0 +1,12 @@
+Checks: >
+  -*,
+  clang-analyzer-*,
+  bugprone-*,
+  performance-*,
+  portability-*,
+  -clang-analyzer-security.insecureAPI.DeprecatedOrUnsafeBufferHandling,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-not-null-terminated-result
+WarningsAsErrors: ''
+HeaderFilterRegex: 'lemonbar_c/(include|src)/.*'
+FormatStyle: file

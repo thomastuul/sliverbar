@@ -6,12 +6,13 @@
 #include <string.h>
 #include <unistd.h>
 
-#define CHECK(condition) do { \
-    if (!(condition)) { \
-        fprintf(stderr, "check failed at %s:%d: %s\n", __FILE__, __LINE__, #condition); \
-        return 1; \
-    } \
-} while (0)
+#define CHECK(condition)                                                                           \
+    do {                                                                                           \
+        if (!(condition)) {                                                                        \
+            fprintf(stderr, "check failed at %s:%d: %s\n", __FILE__, __LINE__, #condition);        \
+            return 1;                                                                              \
+        }                                                                                          \
+    } while (0)
 
 int main(int argc, char **argv) {
     if (argc == 3 && strcmp(argv[1], "--signal-probe") == 0) {
@@ -20,7 +21,8 @@ int main(int argc, char **argv) {
         sigprocmask(SIG_SETMASK, NULL, &mask);
         sigaction(SIGPIPE, NULL, &action);
         FILE *probe = fopen(argv[2], "w");
-        if (!probe) return 2;
+        if (!probe)
+            return 2;
         fputs(!sigismember(&mask, SIGCHLD) && action.sa_handler == SIG_DFL ? "ok" : "bad", probe);
         return fclose(probe) == 0 ? 0 : 2;
     }
@@ -65,7 +67,8 @@ int main(int argc, char **argv) {
     CHECK(spawn_detached(probe_argv) == 0);
     CHECK(sigprocmask(SIG_SETMASK, &old_mask, NULL) == 0);
     CHECK(sigaction(SIGPIPE, &old_pipe, NULL) == 0);
-    for (int i = 0; i < 100 && access(signal_path, F_OK) != 0; i++) usleep(10000);
+    for (int i = 0; i < 100 && access(signal_path, F_OK) != 0; i++)
+        usleep(10000);
     char signal_result[16];
     CHECK(read_text_file(signal_path, signal_result, sizeof(signal_result)) == 0);
     CHECK(strcmp(signal_result, "ok") == 0);

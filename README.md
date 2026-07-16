@@ -22,6 +22,16 @@ ctest --test-dir build/lemonbar_c --output-on-failure
 Sanitizers can be enabled with `-DLEMONBAR_C_SANITIZERS=ON`. Install with
 `cmake --install build/lemonbar_c`.
 
+## Development checks
+
+The repository contains project-local `clang-format` and `clang-tidy`
+configuration files. Run the checks from the repository root:
+
+```sh
+clang-format --dry-run --Werror lemonbar_c/{include,src,tests}/*.[ch]
+clang-tidy -quiet -p build/lemonbar_c lemonbar_c/src/*.c lemonbar_c/tests/*.c
+```
+
 ## Run
 
 ```sh

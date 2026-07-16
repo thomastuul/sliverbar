@@ -1,0 +1,5 @@
+- Use C17.
+- Format changed C files with clang-format.
+- Run clang-tidy on changed translation units.
+- Run CTest after every code change.
+- Keep the project buildable without XCB development headers.
