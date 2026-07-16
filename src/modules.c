@@ -222,17 +222,30 @@ void module_brightness(const panel_config *c, panel_state *s) {
 
 void module_tray(const panel_config *c, panel_state *s) {
     char out[2048];
+    int w = 0;
     if (command_exists("xdotool")) {
         char *raise[] = {"xdotool", "search", "--class", "trayer", "windowraise", NULL};
         run_capture(raise, out, sizeof(out), 800);
+        char *geometry[] = {
+            "xdotool", "search", "--class", "trayer", "getwindowgeometry", "--shell", NULL};
+        if (!run_capture(geometry, out, sizeof(out), 800)) {
+            char *width = strstr(out, "WIDTH=");
+            if (width)
+                w = atoi(width + 6);
+        }
     }
-    char *av[] = {"xprop", "-name", "panel", "WM_NORMAL_HINTS", NULL};
-    int w = 1;
-    if (!run_capture(av, out, sizeof(out), 800)) {
-        char *p = strstr(out, "minimum size:");
-        if (p)
-            w = atoi(p + 13);
+    if (w <= 0) {
+        char *av[] = {"xprop", "-name", "panel", "WM_NORMAL_HINTS", NULL};
+        if (!run_capture(av, out, sizeof(out), 800)) {
+            char *p = strstr(out, "minimum size:");
+            if (p)
+                w = atoi(p + 13);
+        }
     }
+    if (w <= 0 && s->tray[0])
+        return;
+    if (w <= 0)
+        w = 1;
     snprintf(s->tray,
              sizeof(s->tray),
              "%%{F%s}%%{B%s}%%{O%d}%%{B-}%%{F-}",

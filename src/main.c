@@ -134,10 +134,15 @@ static void update_title_xcb(xcb_connection_t *x,
         x, xcb_get_property(x, 0, root, active, XCB_ATOM_WINDOW, 0, 1), NULL);
     if (!ar || xcb_get_property_value_length(ar) < 4) {
         free(ar);
+        store_title("", max, s, c);
         return;
     }
     xcb_window_t win = *(xcb_window_t *)xcb_get_property_value(ar);
     free(ar);
+    if (win == XCB_WINDOW_NONE) {
+        store_title("", max, s, c);
+        return;
+    }
     uint32_t events = XCB_EVENT_MASK_PROPERTY_CHANGE;
     xcb_change_window_attributes(x, win, XCB_CW_EVENT_MASK, &events);
     xcb_flush(x);
@@ -150,6 +155,7 @@ static void update_title_xcb(xcb_connection_t *x,
     }
     if (!r || xcb_get_property_value_length(r) <= 0) {
         free(r);
+        store_title("", max, s, c);
         return;
     }
     int len = xcb_get_property_value_length(r);
@@ -673,6 +679,7 @@ int main(int argc, char **argv) {
             read(tfd, &n, sizeof(n));
             ticks += (unsigned)n;
             module_clock(&cfg, &state);
+            update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
             module_screencast(&cfg, &state, runtime);
             if (ticks % 2 == 0)
                 module_tray(&cfg, &state);
@@ -749,6 +756,8 @@ int main(int argc, char **argv) {
                     *newline = '\0';
                     if (*line) {
                         module_workspace(&cfg, &state, line);
+                        update_title_xcb(
+                            x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
                         dirty = true;
                     }
                     line = newline + 1;

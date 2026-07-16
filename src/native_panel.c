@@ -51,6 +51,7 @@ struct native_panel {
     cairo_t *cairo;
     PangoLayout *layout;
     PangoFontDescription *font;
+    PangoFontDescription *icon_font;
     panel_config config;
     bool mapped;
     action_region regions[MAX_REGIONS];
@@ -210,6 +211,8 @@ native_panel *native_panel_create(xcb_connection_t *connection,
     char description[256];
     font_name(config->font, description, sizeof(description));
     panel->font = pango_font_description_from_string(description);
+    font_name(config->icon_font, description, sizeof(description));
+    panel->icon_font = pango_font_description_from_string(description);
     pango_layout_set_font_description(panel->layout, panel->font);
     xcb_flush(connection);
     if (cairo_surface_status(panel->surface) != CAIRO_STATUS_SUCCESS) {
@@ -227,6 +230,8 @@ void native_panel_destroy(native_panel *panel) {
         g_object_unref(panel->layout);
     if (panel->font)
         pango_font_description_free(panel->font);
+    if (panel->icon_font)
+        pango_font_description_free(panel->icon_font);
     if (panel->cairo)
         cairo_destroy(panel->cairo);
     if (panel->surface)
@@ -355,8 +360,30 @@ static size_t parse_markup(native_panel *panel, const char *markup, segment *seg
     return count;
 }
 
-static int text_width(native_panel *panel, const char *text) {
+static bool icon_codepoint(gunichar codepoint) {
+    return codepoint >= 0xe000U && codepoint <= 0xf8ffU;
+}
+
+static void prepare_layout(native_panel *panel, const char *text) {
     pango_layout_set_text(panel->layout, text, -1);
+    PangoAttrList *attributes = pango_attr_list_new();
+    const char *cursor = text;
+    while (*cursor) {
+        const char *next = g_utf8_next_char(cursor);
+        if (icon_codepoint(g_utf8_get_char(cursor))) {
+            PangoAttribute *attribute = pango_attr_font_desc_new(panel->icon_font);
+            attribute->start_index = (guint)(cursor - text);
+            attribute->end_index = (guint)(next - text);
+            pango_attr_list_insert(attributes, attribute);
+        }
+        cursor = next;
+    }
+    pango_layout_set_attributes(panel->layout, attributes);
+    pango_attr_list_unref(attributes);
+}
+
+static int text_width(native_panel *panel, const char *text) {
+    prepare_layout(panel, text);
     int width = 0;
     pango_layout_get_pixel_size(panel->layout, &width, NULL);
     return width;
@@ -380,7 +407,7 @@ static void draw_segment(native_panel *panel, const segment *item, int x) {
     cairo_fill(panel->cairo);
     if (!item->text[0])
         return;
-    pango_layout_set_text(panel->layout, item->text, -1);
+    prepare_layout(panel, item->text);
     int text_height = 0;
     pango_layout_get_pixel_size(panel->layout, NULL, &text_height);
     set_color(panel->cairo, item->style.foreground, panel->config.color_fg);
