@@ -102,7 +102,8 @@ static void retire_child(child *c) {
 
 static void store_title(const char *title, unsigned max, panel_state *s, const panel_config *c) {
     char clipped[512], safe[512];
-    snprintf(clipped, sizeof(clipped), "%.*s", (int)max, title ? title : "");
+    const char *display = title && *title ? title : "Desktop";
+    snprintf(clipped, sizeof(clipped), "%.*s", (int)max, display);
     shell_quote_action(clipped, safe, sizeof(safe));
     snprintf(s->title,
              sizeof(s->title),

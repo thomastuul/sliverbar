@@ -57,8 +57,12 @@ void module_cpu(const panel_config *c, panel_state *s) {
     s->cpu_total = total;
     s->cpu_idle = idle;
     s->cpu_initialized = true;
-    char text[64], body[256];
-    snprintf(text, sizeof(text), " %5.1f%%", use);
+    char text[64], body[256], usage[16];
+    snprintf(usage, sizeof(usage), "%.1f", use);
+    int padding = 5 - (int)strlen(usage);
+    if (padding < 0)
+        padding = 0;
+    snprintf(text, sizeof(text), "%s%%%*s", usage, padding, "");
     block(body, sizeof(body), c->color_bg, c->color_system, text);
     action(s->cpu, sizeof(s->cpu), 1, "terminal|btop", body);
 }
@@ -137,12 +141,19 @@ void module_volume(const panel_config *c, panel_state *s) {
         level = atoi(q);
     }
     char text[64], body[256], tmp[512];
-    snprintf(text, sizeof(text), "%s %3d%%", muted ? "" : "", level);
+    char level_text[8];
+    snprintf(level_text, sizeof(level_text), "%d", level);
+    int padding = 3 - (int)strlen(level_text);
+    if (padding < 0)
+        padding = 0;
+    snprintf(text, sizeof(text), "%s%s%%%*s", muted ? "" : "", level_text, padding, "");
     block(body, sizeof(body), c->color_bg, muted ? c->color_muted : c->color_volume, text);
-    action(tmp, sizeof(tmp), 3, "volume|toggle", body);
-    char a[768];
-    action(a, sizeof(a), 5, "volume|down", tmp);
-    action(s->volume, sizeof(s->volume), 4, "volume|up", a);
+    action(tmp, sizeof(tmp), 1, "terminal|pulsemixer", body);
+    char middle[768];
+    action(middle, sizeof(middle), 3, "volume|toggle", tmp);
+    char down[1024];
+    action(down, sizeof(down), 5, "volume|down", middle);
+    action(s->volume, sizeof(s->volume), 4, "volume|up", down);
 }
 
 int parse_nmcli_wifi(const char *output, char *ssid, size_t ssid_size, int *strength) {
@@ -228,8 +239,11 @@ void module_network(const panel_config *c, panel_state *s) {
                 wifi = true;
                 if (!wifi_interface[0])
                     snprintf(wifi_interface, sizeof(wifi_interface), "%s", e->d_name);
-            } else
-                eth = true;
+            } else {
+                snprintf(p, sizeof(p), "/sys/class/net/%s/device", e->d_name);
+                if (!access(p, F_OK))
+                    eth = true;
+            }
         }
         closedir(d);
     }
@@ -255,12 +269,21 @@ void module_network(const panel_config *c, panel_state *s) {
     } else if (wifi) {
         strength = wireless_strength(wifi_interface);
     }
-    char text[256], body[512], safe[128];
+    char text[256], body[512], safe[128], wifi_text[64] = "";
     shell_quote_action(ssid, safe, sizeof(safe));
-    if (wifi && strength >= 0)
-        snprintf(text, sizeof(text), "%s %s %3d%%", eth ? "" : "", "說", strength);
+    if (wifi && strength >= 0) {
+        char strength_text[16];
+        snprintf(strength_text, sizeof(strength_text), "%d", strength);
+        int padding = 3 - (int)strlen(strength_text);
+        if (padding < 0)
+            padding = 0;
+        snprintf(wifi_text, sizeof(wifi_text), "說%s%%%*s", strength_text, padding, "");
+    } else if (wifi)
+        snprintf(wifi_text, sizeof(wifi_text), "說");
+    if (eth && wifi_text[0])
+        snprintf(text, sizeof(text), " %s", wifi_text);
     else
-        snprintf(text, sizeof(text), "%s %s", eth ? "" : "", wifi ? "說" : "");
+        snprintf(text, sizeof(text), "%s", eth ? "" : wifi_text);
     block(body, sizeof(body), c->color_bg, c->color_network, text);
     char tmp[768];
     char cmd[180];
