@@ -636,6 +636,7 @@ int main(int argc, char **argv) {
     update_title_fallback(cfg.title_max, &state, &cfg);
 #endif
     char report[PANEL_TEXT_MAX] = "", actions[2048] = "";
+    size_t report_used = 0;
     unsigned ticks = 0;
     bool running = true, dirty = true, vd = false, wd = false;
     while (running) {
@@ -720,16 +721,29 @@ int main(int argc, char **argv) {
             }
         }
         if (fds[2].revents & POLLIN) {
-            ssize_t n = read(bsp.read_fd, report, sizeof(report) - 1);
+            ssize_t n = read(bsp.read_fd, report + report_used, sizeof(report) - report_used - 1);
             if (n > 0) {
-                report[n] = '\0';
-                char *last = strrchr(report, '\n');
-                if (last && last[1])
-                    memmove(report, last + 1, strlen(last + 1) + 1);
-                else if (last)
-                    *last = '\0';
-                module_workspace(&cfg, &state, report);
-                dirty = true;
+                report_used += (size_t)n;
+                report[report_used] = '\0';
+                char *line = report;
+                char *end = report + report_used;
+                char *newline;
+                while ((newline = memchr(line, '\n', (size_t)(end - line)))) {
+                    *newline = '\0';
+                    if (*line) {
+                        module_workspace(&cfg, &state, line);
+                        dirty = true;
+                    }
+                    line = newline + 1;
+                }
+                report_used = (size_t)(end - line);
+                memmove(report, line, report_used);
+                report[report_used] = '\0';
+            }
+            if (report_used == sizeof(report) - 1) {
+                log_message("ERROR", "discarding oversized bspwm report");
+                report_used = 0;
+                report[0] = '\0';
             }
         }
         if (fds[3].revents & POLLIN) {
