@@ -1,0 +1,6 @@
+#ifndef LEMONBAR_C_VERSION_H
+#define LEMONBAR_C_VERSION_H
+
+#define LEMONBAR_C_VERSION "@PROJECT_VERSION@"
+
+#endif

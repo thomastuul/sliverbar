@@ -13,6 +13,23 @@ optional desktop applications configured by the user.
 
 ## Build
 
+The reproducible development build runs in Docker (or rootless Podman) and
+keeps compilers, development headers, XCB, and analysis tools out of the host:
+
+```sh
+./lemonbar_c/scripts/container-build.sh
+```
+
+Set `CONTAINER_ENGINE=podman` to use Podman. The script builds and tests three
+presets: an XCB release, an explicit non-XCB fallback, and an ASan/UBSan build.
+The host-owned release binary is written to:
+
+```text
+lemonbar_c/build/container-release/lemonbar-panel
+```
+
+For a local build without the container:
+
 ```sh
 cmake -S lemonbar_c -B build/lemonbar_c -DCMAKE_BUILD_TYPE=RelWithDebInfo
 cmake --build build/lemonbar_c --parallel
@@ -21,6 +38,10 @@ ctest --test-dir build/lemonbar_c --output-on-failure
 
 Sanitizers can be enabled with `-DLEMONBAR_C_SANITIZERS=ON`. Install with
 `cmake --install build/lemonbar_c`.
+
+The XCB release links dynamically to libc and libxcb on the target host. The
+fallback can be built with `-DLEMONBAR_C_WITH_XCB=OFF` and does not link to
+libxcb. Inspect a release with `ldd` before distributing it to another system.
 
 ## Development checks
 
@@ -37,6 +58,12 @@ clang-tidy -quiet -p build/lemonbar_c lemonbar_c/src/*.c lemonbar_c/tests/*.c
 ```sh
 build/lemonbar_c/lemonbar-panel \
   --config build/lemonbar_c/panel.conf
+```
+
+Print the centrally managed project version with:
+
+```sh
+build/lemonbar_c/lemonbar-panel --version
 ```
 
 The program owns Lemonbar, subscribes to bspwm and X11 events, handles clicks

@@ -1,4 +1,5 @@
 #include "panel.h"
+#include "version.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -84,6 +85,7 @@ static void stop_child(child *c) {
     c->read_fd = c->write_fd = -1;
 }
 
+#ifndef HAVE_XCB
 static void retire_child(child *c) {
     if (c->pid > 0)
         kill(c->pid, SIGTERM);
@@ -94,6 +96,7 @@ static void retire_child(child *c) {
     c->pid = 0;
     c->read_fd = c->write_fd = -1;
 }
+#endif
 
 static void store_title(const char *title, unsigned max, panel_state *s, const panel_config *c) {
     char clipped[512], safe[512];
@@ -442,7 +445,7 @@ int main(int argc, char **argv) {
         else if (!strcmp(argv[i], "--check-config"))
             check = true;
         else if (!strcmp(argv[i], "--version")) {
-            puts("lemonbar-panel 0.1.0");
+            puts("lemonbar-panel " LEMONBAR_C_VERSION);
             return 0;
         } else {
             usage(stderr, argv[0]);

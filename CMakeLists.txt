@@ -1,5 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
-project(lemonbar_c VERSION 0.1.0 LANGUAGES C)
+
+file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" LEMONBAR_C_VERSION LIMIT_COUNT 1)
+if(NOT LEMONBAR_C_VERSION MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "VERSION must contain one Semantic Versioning number")
+endif()
+
+project(lemonbar_c VERSION "${LEMONBAR_C_VERSION}" LANGUAGES C)
 
 include(GNUInstallDirs)
 include(CTest)
@@ -9,6 +15,7 @@ if(PkgConfig_FOUND)
 endif()
 
 option(LEMONBAR_C_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
+option(LEMONBAR_C_WITH_XCB "Build the native XCB event backend when available" ON)
 
 add_library(lemonbar_core
     src/config.c
@@ -23,11 +30,13 @@ target_compile_options(lemonbar_core PRIVATE -Wall -Wextra -Wpedantic -Wconversi
 add_executable(lemonbar-panel src/main.c)
 target_link_libraries(lemonbar-panel PRIVATE lemonbar_core)
 target_compile_definitions(lemonbar-panel PRIVATE _GNU_SOURCE _POSIX_C_SOURCE=200809L)
-if(XCB_FOUND)
+configure_file(include/version.h.in generated/version.h @ONLY)
+target_include_directories(lemonbar-panel PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
+if(LEMONBAR_C_WITH_XCB AND XCB_FOUND)
     target_link_libraries(lemonbar-panel PRIVATE PkgConfig::XCB)
     target_compile_definitions(lemonbar-panel PRIVATE HAVE_XCB=1)
 else()
-    message(STATUS "XCB development files not found; using the xprop fallback")
+    message(STATUS "XCB backend unavailable or disabled; using the xprop fallback")
 endif()
 target_compile_options(lemonbar-panel PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
 
@@ -56,4 +65,7 @@ if(BUILD_TESTING)
     add_test(NAME core COMMAND test_core)
     add_test(NAME check_config COMMAND lemonbar-panel --config ${CMAKE_CURRENT_BINARY_DIR}/panel.conf --check-config)
     add_test(NAME version COMMAND lemonbar-panel --version)
+    set_tests_properties(version PROPERTIES
+        PASS_REGULAR_EXPRESSION "^lemonbar-panel ${PROJECT_VERSION}"
+    )
 endif()

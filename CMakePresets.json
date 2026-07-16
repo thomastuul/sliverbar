@@ -1,0 +1,70 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 20,
+    "patch": 0
+  },
+  "configurePresets": [
+    {
+      "name": "container-base",
+      "hidden": true,
+      "generator": "Ninja",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "container-release",
+      "inherits": "container-base",
+      "binaryDir": "${sourceDir}/build/container-release",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LEMONBAR_C_WITH_XCB": "ON"
+      }
+    },
+    {
+      "name": "container-fallback",
+      "inherits": "container-base",
+      "binaryDir": "${sourceDir}/build/container-fallback",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "LEMONBAR_C_WITH_XCB": "OFF"
+      }
+    },
+    {
+      "name": "container-sanitizers",
+      "inherits": "container-base",
+      "binaryDir": "${sourceDir}/build/container-sanitizers",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "LEMONBAR_C_SANITIZERS": "ON",
+        "LEMONBAR_C_WITH_XCB": "ON"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "container-release", "configurePreset": "container-release" },
+    { "name": "container-fallback", "configurePreset": "container-fallback" },
+    { "name": "container-sanitizers", "configurePreset": "container-sanitizers" }
+  ],
+  "testPresets": [
+    {
+      "name": "container-release",
+      "configurePreset": "container-release",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "container-fallback",
+      "configurePreset": "container-fallback",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "container-sanitizers",
+      "configurePreset": "container-sanitizers",
+      "environment": { "ASAN_OPTIONS": "detect_leaks=0" },
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
