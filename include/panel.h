@@ -54,6 +54,7 @@ void module_cpu(const panel_config *cfg, panel_state *state);
 void module_battery(const panel_config *cfg, panel_state *state);
 void module_screencast(const panel_config *cfg, panel_state *state, const char *runtime_dir);
 void module_volume(const panel_config *cfg, panel_state *state);
+int parse_nmcli_wifi(const char *output, char *ssid, size_t ssid_size, int *strength);
 void module_network(const panel_config *cfg, panel_state *state);
 void module_brightness(const panel_config *cfg, panel_state *state);
 void module_tray(const panel_config *cfg, panel_state *state);

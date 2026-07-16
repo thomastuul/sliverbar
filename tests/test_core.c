@@ -87,6 +87,16 @@ int main(int argc, char **argv) {
     render_panel(&state, rendered, sizeof(rendered));
     CHECK(strcmp(rendered, "%{l}LW%{c}T%{r}C\n") == 0);
 
+    char ssid[128];
+    int strength;
+    CHECK(parse_nmcli_wifi(" :guest:20\n*:Home WiFi:73\n", ssid, sizeof(ssid), &strength) == 0);
+    CHECK(strcmp(ssid, "Home WiFi") == 0);
+    CHECK(strength == 73);
+    CHECK(parse_nmcli_wifi("yes:SSID:with:colons:88\n", ssid, sizeof(ssid), &strength) == 0);
+    CHECK(strcmp(ssid, "SSID:with:colons") == 0);
+    CHECK(strength == 88);
+    CHECK(parse_nmcli_wifi("*:broken:unknown\n", ssid, sizeof(ssid), &strength) != 0);
+
     module_workspace(&cfg, &state, "WMDP-3:O1:o2:f3:LT:TT:G");
     CHECK(strstr(state.workspace, "%{F#69FF94}%{B#191A21}") != NULL);
     CHECK(strstr(state.workspace, "%{F#ff5555}%{B#191A21}") != NULL);

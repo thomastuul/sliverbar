@@ -145,10 +145,73 @@ void module_volume(const panel_config *c, panel_state *s) {
     action(s->volume, sizeof(s->volume), 4, "volume|up", a);
 }
 
+int parse_nmcli_wifi(const char *output, char *ssid, size_t ssid_size, int *strength) {
+    const char *line = output;
+    while (line && *line) {
+        const char *end = strchr(line, '\n');
+        size_t length = end ? (size_t)(end - line) : strlen(line);
+        const char *payload = NULL;
+        if (length >= 2 && line[0] == '*' && line[1] == ':')
+            payload = line + 2;
+        else if (length >= 4 && !strncmp(line, "yes:", 4))
+            payload = line + 4;
+        if (payload) {
+            const char *last = line + length;
+            while (last > payload && last[-1] != ':')
+                last--;
+            if (last > payload) {
+                char number[16];
+                size_t number_length = (size_t)(line + length - last);
+                if (number_length < sizeof(number)) {
+                    memcpy(number, last, number_length);
+                    number[number_length] = '\0';
+                    char *number_end;
+                    long value = strtol(number, &number_end, 10);
+                    if (*number && !*number_end && value >= 0 && value <= 100) {
+                        size_t name_length = (size_t)(last - payload - 1);
+                        if (name_length >= ssid_size)
+                            name_length = ssid_size - 1;
+                        memcpy(ssid, payload, name_length);
+                        ssid[name_length] = '\0';
+                        if (!ssid[0])
+                            snprintf(ssid, ssid_size, "-");
+                        *strength = (int)value;
+                        return 0;
+                    }
+                }
+            }
+        }
+        line = end ? end + 1 : NULL;
+    }
+    return -1;
+}
+
+static int wireless_strength(const char *interface) {
+    FILE *file = fopen("/proc/net/wireless", "r");
+    if (!file)
+        return -1;
+    char line[512], name[128];
+    double quality;
+    int strength = -1;
+    while (fgets(line, sizeof(line), file)) {
+        if (sscanf(line, " %127[^:]: %*s %lf", name, &quality) == 2 && !strcmp(name, interface)) {
+            strength = (int)(quality * 100.0 / 70.0);
+            if (strength > 100)
+                strength = 100;
+            if (strength < 0)
+                strength = 0;
+            break;
+        }
+    }
+    fclose(file);
+    return strength;
+}
+
 void module_network(const panel_config *c, panel_state *s) {
     DIR *d = opendir("/sys/class/net");
     bool eth = false, wifi = false;
-    char ssid[128] = "-";
+    char ssid[128] = "-", wifi_interface[256] = "";
+    int strength = -1;
     if (d) {
         struct dirent *e;
         while ((e = readdir(d))) {
@@ -159,25 +222,45 @@ void module_network(const panel_config *c, panel_state *s) {
             if (read_text_file(p, v, sizeof(v)) || strcmp(v, "up") != 0)
                 continue;
             snprintf(p, sizeof(p), "/sys/class/net/%s/wireless", e->d_name);
-            if (!access(p, F_OK))
+            char phy[PANEL_PATH_MAX];
+            snprintf(phy, sizeof(phy), "/sys/class/net/%s/phy80211", e->d_name);
+            if (!access(p, F_OK) || !access(phy, F_OK)) {
                 wifi = true;
-            else
+                if (!wifi_interface[0])
+                    snprintf(wifi_interface, sizeof(wifi_interface), "%s", e->d_name);
+            } else
                 eth = true;
         }
         closedir(d);
     }
     if (wifi && command_exists("nmcli")) {
-        char out[512];
-        char *av[] = {"nmcli", "-t", "-f", "active,ssid", "dev", "wifi", NULL};
-        if (!run_capture(av, out, sizeof(out), 1500)) {
-            char *p = strstr(out, "yes:");
-            if (p)
-                snprintf(ssid, sizeof(ssid), "%.120s", p + 4);
-        }
+        char out[2048];
+        char *av[] = {"nmcli",
+                      "--terse",
+                      "--escape",
+                      "no",
+                      "--fields",
+                      "IN-USE,SSID,SIGNAL",
+                      "device",
+                      "wifi",
+                      "list",
+                      "--rescan",
+                      "no",
+                      "ifname",
+                      wifi_interface,
+                      NULL};
+        if (run_capture(av, out, sizeof(out), 1500) ||
+            parse_nmcli_wifi(out, ssid, sizeof(ssid), &strength))
+            strength = wireless_strength(wifi_interface);
+    } else if (wifi) {
+        strength = wireless_strength(wifi_interface);
     }
     char text[256], body[512], safe[128];
     shell_quote_action(ssid, safe, sizeof(safe));
-    snprintf(text, sizeof(text), "%s %s", eth ? "" : "", wifi ? "說" : "");
+    if (wifi && strength >= 0)
+        snprintf(text, sizeof(text), "%s %s %d%%", eth ? "" : "", "說", strength);
+    else
+        snprintf(text, sizeof(text), "%s %s", eth ? "" : "", wifi ? "說" : "");
     block(body, sizeof(body), c->color_bg, c->color_network, text);
     char tmp[768];
     char cmd[180];
