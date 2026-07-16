@@ -3,7 +3,6 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
-#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -302,54 +301,6 @@ void module_brightness(const panel_config *c, panel_state *s) {
     block(body, sizeof(body), c->color_bg, c->color_brightness, text);
     action(tmp, sizeof(tmp), 5, "brightness|down", body);
     action(s->brightness, sizeof(s->brightness), 4, "brightness|up", tmp);
-}
-
-int parse_xdotool_width(const char *output) {
-    int largest = 0;
-    const char *line = output;
-    while (line && *line) {
-        if (!strncmp(line, "WIDTH=", 6)) {
-            char *end;
-            long width = strtol(line + 6, &end, 10);
-            if (end != line + 6 && width > largest && width <= INT_MAX)
-                largest = (int)width;
-        }
-        line = strchr(line, '\n');
-        if (line)
-            line++;
-    }
-    return largest;
-}
-
-void module_tray(const panel_config *c, panel_state *s) {
-    char out[2048];
-    int w = 0;
-    if (command_exists("xdotool")) {
-        char *raise[] = {"xdotool", "search", "--class", "trayer", "windowraise", NULL};
-        run_capture(raise, out, sizeof(out), 800);
-    }
-    char *hints[] = {"xprop", "-name", "panel", "WM_NORMAL_HINTS", NULL};
-    if (!run_capture(hints, out, sizeof(out), 800)) {
-        char *minimum = strstr(out, "minimum size:");
-        if (minimum)
-            w = atoi(minimum + 13);
-    }
-    if (w <= 0 && command_exists("xdotool")) {
-        char *geometry[] = {
-            "xdotool", "search", "--class", "trayer", "getwindowgeometry", "--shell", NULL};
-        if (!run_capture(geometry, out, sizeof(out), 800))
-            w = parse_xdotool_width(out);
-    }
-    if (w <= 0 && s->tray[0])
-        return;
-    if (w <= 0)
-        w = 1;
-    snprintf(s->tray,
-             sizeof(s->tray),
-             "%%{F%s}%%{B%s}%%{O%d}%%{B-}%%{F-}",
-             c->color_fg,
-             c->color_bg,
-             w + 4);
 }
 
 static int json_integer(char *p) {

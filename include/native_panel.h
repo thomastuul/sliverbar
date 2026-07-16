@@ -24,6 +24,9 @@ bool native_panel_handle_event(native_panel *panel,
                                size_t action_size,
                                bool *redraw);
 xcb_window_t native_panel_window(const native_panel *panel);
+bool native_panel_owns_tray(const native_panel *panel);
+size_t native_panel_tray_icon_count(const native_panel *panel);
+xcb_atom_t native_panel_tray_opcode(const native_panel *panel);
 
 #endif
 

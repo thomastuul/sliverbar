@@ -449,6 +449,64 @@ static void usage(FILE *f, const char *name) {
     fprintf(f, "Usage: %s [--config PATH] [--check-config] [--smoke-test] [--version]\n", name);
 }
 
+#ifdef HAVE_NATIVE_PANEL
+static int
+smoke_test_native_tray(native_panel *panel, xcb_connection_t *connection, xcb_screen_t *screen) {
+    if (!native_panel_owns_tray(panel)) {
+        log_message("ERROR", "native smoke-test could not own the system tray selection");
+        return -1;
+    }
+    xcb_window_t icon = xcb_generate_id(connection);
+    uint32_t values[] = {screen->black_pixel, XCB_EVENT_MASK_STRUCTURE_NOTIFY};
+    xcb_create_window(connection,
+                      screen->root_depth,
+                      icon,
+                      screen->root,
+                      0,
+                      0,
+                      16,
+                      16,
+                      0,
+                      XCB_WINDOW_CLASS_INPUT_OUTPUT,
+                      screen->root_visual,
+                      XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK,
+                      values);
+    xcb_client_message_event_t dock = {0};
+    dock.response_type = XCB_CLIENT_MESSAGE;
+    dock.format = 32;
+    dock.window = native_panel_window(panel);
+    dock.type = native_panel_tray_opcode(panel);
+    dock.data.data32[1] = 0;
+    dock.data.data32[2] = icon;
+    char action[16] = "";
+    bool redraw = false;
+    native_panel_handle_event(
+        panel, (const xcb_generic_event_t *)&dock, action, sizeof(action), &redraw);
+    xcb_query_tree_reply_t *tree =
+        xcb_query_tree_reply(connection, xcb_query_tree(connection, icon), NULL);
+    bool embedded = tree && tree->parent == native_panel_window(panel) &&
+                    native_panel_tray_icon_count(panel) == 1 && redraw;
+    free(tree);
+    if (!embedded) {
+        log_message("ERROR", "native smoke-test tray docking failed");
+        xcb_destroy_window(connection, icon);
+        return -1;
+    }
+    xcb_destroy_notify_event_t destroyed = {0};
+    destroyed.response_type = XCB_DESTROY_NOTIFY;
+    destroyed.window = icon;
+    native_panel_handle_event(
+        panel, (const xcb_generic_event_t *)&destroyed, action, sizeof(action), &redraw);
+    xcb_destroy_window(connection, icon);
+    xcb_flush(connection);
+    if (native_panel_tray_icon_count(panel) != 0) {
+        log_message("ERROR", "native smoke-test tray cleanup failed");
+        return -1;
+    }
+    return 0;
+}
+#endif
+
 int main(int argc, char **argv) {
     panel_config cfg;
     config_defaults(&cfg);
@@ -581,6 +639,12 @@ int main(int argc, char **argv) {
             close(lock);
             return 1;
         }
+        if (smoke_test_native_tray(panel, x, screen)) {
+            native_panel_destroy(panel);
+            xcb_disconnect(x);
+            close(lock);
+            return 1;
+        }
         const char *expected_actions[] = {
             "workspace|I", "notify|Native panel|space preserved", "volume|up"};
         const uint8_t buttons[] = {1, 3, 4};
@@ -652,7 +716,6 @@ int main(int argc, char **argv) {
     module_volume(&cfg, &state);
     module_network(&cfg, &state);
     module_brightness(&cfg, &state);
-    module_tray(&cfg, &state);
     module_weather(&cfg, &state);
     update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
     char report[PANEL_TEXT_MAX] = "", action[1024] = "";
@@ -681,8 +744,6 @@ int main(int argc, char **argv) {
             module_clock(&cfg, &state);
             update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
             module_screencast(&cfg, &state, runtime);
-            if (ticks % 2 == 0)
-                module_tray(&cfg, &state);
             if (ticks % 5 == 0)
                 module_cpu(&cfg, &state);
             if (ticks % 10 == 0)

@@ -35,7 +35,7 @@ target_compile_definitions(lemonbar-panel PRIVATE _GNU_SOURCE _POSIX_C_SOURCE=20
 configure_file(include/version.h.in generated/version.h @ONLY)
 target_include_directories(lemonbar-panel PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 if(LEMONBAR_C_WITH_XCB AND XCB_FOUND AND CAIRO_XCB_FOUND AND PANGOCAIRO_FOUND)
-    target_sources(lemonbar-panel PRIVATE src/native_panel.c)
+    target_sources(lemonbar-panel PRIVATE src/native_panel.c src/native_tray.c)
     target_link_libraries(
         lemonbar-panel PRIVATE PkgConfig::XCB PkgConfig::CAIRO_XCB PkgConfig::PANGOCAIRO
     )

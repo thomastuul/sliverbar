@@ -79,17 +79,21 @@ Print the centrally managed project version with:
 lemonbar_c/build/container-release/lemonbar-panel --version
 ```
 
-The program owns its X11 dock window, subscribes to bspwm and X11 events,
-handles clicks through a private action protocol, and shuts down all direct
-children. It uses `$XDG_RUNTIME_DIR/lemonbar-c` for its lock. It does not
-evaluate shell code.
+The program owns its X11 dock window and the `_NET_SYSTEM_TRAY_S0` selection,
+subscribes to bspwm and X11 events, embeds tray clients through XEmbed, handles
+clicks through a private action protocol, and shuts down all direct children.
+It uses `$XDG_RUNTIME_DIR/lemonbar-c` for its lock. It does not evaluate shell
+code.
 
 The Bash panel and C panel must not be displayed simultaneously during visual
-testing. `autostart` is intentionally not changed by this project.
+testing. The external `trayer` process must also be stopped before starting the
+C panel because X11 permits only one system-tray manager per screen. `autostart`
+is intentionally not changed by this project.
 
 `super + b` continues to work because the native window publishes the
-`lemonbar-c` application name. Trayer remains a separate X11 dock and is raised
-above the panel in the reserved tray area.
+`lemonbar-c` application name. Tray icons are direct children of that window,
+so they follow its visibility and occupy space calculated by the native
+renderer. The C panel does not require the external `trayer` package.
 
 ## Architecture
 
@@ -123,7 +127,7 @@ and `XDG_RUNTIME_DIR` unless explicitly configured. Run
 | volume and brightness | backend detection plus validated action protocol |
 | network worker | `/sys/class/net`, optional nmcli query and monitor |
 | weather worker | non-blocking child, atomic JSON/PNG caches |
-| trayer block | X11 hints query and periodic offset refresh |
+| trayer block | native XEmbed tray manager and direct child-window layout |
 | launcher, power and terminal clicks | detached, argument-based exec |
 
 The Bash directory is not read or executed by `lemonbar-panel`.

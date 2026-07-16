@@ -1,4 +1,5 @@
 #include "native_panel.h"
+#include "native_tray.h"
 
 #ifdef HAVE_NATIVE_PANEL
 
@@ -52,6 +53,7 @@ struct native_panel {
     PangoLayout *layout;
     PangoFontDescription *font;
     PangoFontDescription *icon_font;
+    native_tray *tray;
     panel_config config;
     bool mapped;
     action_region regions[MAX_REGIONS];
@@ -204,6 +206,12 @@ native_panel *native_panel_create(xcb_connection_t *connection,
                       XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK,
                       values);
     configure_ewmh(panel);
+    panel->tray = native_tray_create(connection, screen, panel->window, config->height);
+    if (!panel->tray) {
+        snprintf(error, error_size, "cannot allocate the native system tray");
+        native_panel_destroy(panel);
+        return NULL;
+    }
     panel->surface = cairo_xcb_surface_create(
         connection, panel->window, visual, screen->width_in_pixels, config->height);
     panel->cairo = cairo_create(panel->surface);
@@ -226,6 +234,7 @@ native_panel *native_panel_create(xcb_connection_t *connection,
 void native_panel_destroy(native_panel *panel) {
     if (!panel)
         return;
+    native_tray_destroy(panel->tray);
     if (panel->layout)
         g_object_unref(panel->layout);
     if (panel->font)
@@ -442,6 +451,9 @@ static int draw_markup(native_panel *panel, const char *markup) {
     for (size_t i = 0; i < count; i++) {
         int *x = &positions[segments[i].align];
         draw_segment(panel, &segments[i], *x);
+        if (segments[i].align == ALIGN_RIGHT && segments[i].offset &&
+            native_tray_owns_selection(panel->tray))
+            native_tray_layout(panel->tray, *x + 4);
         add_regions(panel, &segments[i], *x);
         *x += segments[i].width;
     }
@@ -451,7 +463,20 @@ static int draw_markup(native_panel *panel, const char *markup) {
 }
 
 int native_panel_draw(native_panel *panel, const panel_state *state) {
-    render_panel(state, panel->last_markup, sizeof(panel->last_markup));
+    panel_state rendered = *state;
+    if (native_tray_owns_selection(panel->tray)) {
+        int width = native_tray_width(panel->tray);
+        if (width > 0)
+            snprintf(rendered.tray,
+                     sizeof(rendered.tray),
+                     "%%{F%s}%%{B%s}%%{O%d}%%{B-}%%{F-}",
+                     panel->config.color_fg,
+                     panel->config.color_bg,
+                     width + 4);
+        else
+            rendered.tray[0] = '\0';
+    }
+    render_panel(&rendered, panel->last_markup, sizeof(panel->last_markup));
     int result = draw_markup(panel, panel->last_markup);
     if (!result && !panel->mapped) {
         xcb_map_window(panel->connection, panel->window);
@@ -467,6 +492,10 @@ bool native_panel_handle_event(native_panel *panel,
                                size_t action_size,
                                bool *redraw) {
     uint8_t type = event->response_type & 0x7fU;
+    if (native_tray_handle_event(panel->tray, event)) {
+        *redraw = true;
+        return false;
+    }
     if (type == XCB_EXPOSE) {
         *redraw = true;
         return false;
@@ -489,6 +518,18 @@ bool native_panel_handle_event(native_panel *panel,
 
 xcb_window_t native_panel_window(const native_panel *panel) {
     return panel->window;
+}
+
+bool native_panel_owns_tray(const native_panel *panel) {
+    return panel && native_tray_owns_selection(panel->tray);
+}
+
+size_t native_panel_tray_icon_count(const native_panel *panel) {
+    return panel ? native_tray_icon_count(panel->tray) : 0;
+}
+
+xcb_atom_t native_panel_tray_opcode(const native_panel *panel) {
+    return panel ? native_tray_opcode(panel->tray) : XCB_ATOM_NONE;
 }
 
 #endif
