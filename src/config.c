@@ -13,7 +13,7 @@ static void copy(char *dst, size_t size, const char *src) {
 
 void config_defaults(panel_config *c) {
     memset(c, 0, sizeof(*c));
-    copy(c->font, sizeof(c->font), "JetBrainsMono:style=Regular:size=9");
+    copy(c->font, sizeof(c->font), "JetBrainsMono:style=Regular:size=11");
     copy(c->icon_font, sizeof(c->icon_font), "Hack Nerd Font Mono:style=Regular:size=11");
     copy(c->wm_name, sizeof(c->wm_name), "lemonbar-c");
     copy(c->terminal, sizeof(c->terminal), "alacritty");
