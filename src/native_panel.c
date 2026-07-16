@@ -452,7 +452,7 @@ static int draw_markup(native_panel *panel, const char *markup) {
         int *x = &positions[segments[i].align];
         draw_segment(panel, &segments[i], *x);
         if (segments[i].align == ALIGN_RIGHT && segments[i].offset &&
-            native_tray_owns_selection(panel->tray))
+            native_tray_available(panel->tray))
             native_tray_layout(panel->tray, *x + 4);
         add_regions(panel, &segments[i], *x);
         *x += segments[i].width;
@@ -464,20 +464,19 @@ static int draw_markup(native_panel *panel, const char *markup) {
 
 int native_panel_draw(native_panel *panel, const panel_state *state) {
     panel_state rendered = *state;
-    if (native_tray_owns_selection(panel->tray)) {
+    if (native_tray_available(panel->tray)) {
         int width = native_tray_width(panel->tray);
-        if (width > 0)
-            snprintf(rendered.tray,
-                     sizeof(rendered.tray),
-                     "%%{F%s}%%{B%s}%%{O%d}%%{B-}%%{F-}",
-                     panel->config.color_fg,
-                     panel->config.color_bg,
-                     width + 4);
-        else
-            rendered.tray[0] = '\0';
+        snprintf(rendered.tray,
+                 sizeof(rendered.tray),
+                 "%%{F%s}%%{B%s}%%{O%d}%%{B-}%%{F-}",
+                 panel->config.color_fg,
+                 panel->config.color_bg,
+                 width + 4);
     }
     render_panel(&rendered, panel->last_markup, sizeof(panel->last_markup));
     int result = draw_markup(panel, panel->last_markup);
+    if (!result && native_tray_available(panel->tray))
+        native_tray_acquire(panel->tray);
     if (!result && !panel->mapped) {
         xcb_map_window(panel->connection, panel->window);
         xcb_flush(panel->connection);
@@ -498,6 +497,16 @@ bool native_panel_handle_event(native_panel *panel,
     }
     if (type == XCB_EXPOSE) {
         *redraw = true;
+        return false;
+    }
+    if (type == XCB_MAP_NOTIFY &&
+        ((const xcb_map_notify_event_t *)event)->window == panel->window) {
+        native_tray_set_visible(panel->tray, true);
+        return false;
+    }
+    if (type == XCB_UNMAP_NOTIFY &&
+        ((const xcb_unmap_notify_event_t *)event)->window == panel->window) {
+        native_tray_set_visible(panel->tray, false);
         return false;
     }
     if (type != XCB_BUTTON_PRESS)

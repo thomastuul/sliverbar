@@ -90,10 +90,11 @@ testing. The external `trayer` process must also be stopped before starting the
 C panel because X11 permits only one system-tray manager per screen. `autostart`
 is intentionally not changed by this project.
 
-`super + b` continues to work because the native window publishes the
-`lemonbar-c` application name. Tray icons are direct children of that window,
-so they follow its visibility and occupy space calculated by the native
-renderer. The C panel does not require the external `trayer` package.
+`super + b` continues to work because the native panel publishes the
+`lemonbar-c` application name. A dedicated top-level tray host gives XEmbed
+clients correct screen coordinates for their popups and follows the panel's
+visibility internally. The renderer reserves the host's measured width. The C
+panel does not require the external `trayer` package.
 
 ## Architecture
 

@@ -484,11 +484,44 @@ smoke_test_native_tray(native_panel *panel, xcb_connection_t *connection, xcb_sc
         panel, (const xcb_generic_event_t *)&dock, action, sizeof(action), &redraw);
     xcb_query_tree_reply_t *tree =
         xcb_query_tree_reply(connection, xcb_query_tree(connection, icon), NULL);
-    bool embedded = tree && tree->parent == native_panel_window(panel) &&
-                    native_panel_tray_icon_count(panel) == 1 && redraw;
+    xcb_window_t container = tree ? tree->parent : XCB_WINDOW_NONE;
+    free(tree);
+    tree = container == XCB_WINDOW_NONE
+               ? NULL
+               : xcb_query_tree_reply(connection, xcb_query_tree(connection, container), NULL);
+    xcb_window_t host = tree ? tree->parent : XCB_WINDOW_NONE;
+    free(tree);
+    tree = host == XCB_WINDOW_NONE
+               ? NULL
+               : xcb_query_tree_reply(connection, xcb_query_tree(connection, host), NULL);
+    bool embedded =
+        tree && tree->parent == screen->root && native_panel_tray_icon_count(panel) == 1 && redraw;
     free(tree);
     if (!embedded) {
         log_message("ERROR", "native smoke-test tray docking failed");
+        xcb_destroy_window(connection, icon);
+        return -1;
+    }
+    panel_state state = {0};
+    if (native_panel_draw(panel, &state)) {
+        log_message("ERROR", "native smoke-test tray layout failed");
+        xcb_destroy_window(connection, icon);
+        return -1;
+    }
+    xcb_get_input_focus_reply_t *sync =
+        xcb_get_input_focus_reply(connection, xcb_get_input_focus(connection), NULL);
+    free(sync);
+    bool configured = false;
+    xcb_generic_event_t *event;
+    while ((event = xcb_poll_for_event(connection))) {
+        if ((event->response_type & 0x7fU) == XCB_CONFIGURE_NOTIFY &&
+            (event->response_type & 0x80U) != 0 &&
+            ((xcb_configure_notify_event_t *)event)->window == icon)
+            configured = true;
+        free(event);
+    }
+    if (!configured) {
+        log_message("ERROR", "native smoke-test tray configure notification failed");
         xcb_destroy_window(connection, icon);
         return -1;
     }
@@ -639,12 +672,6 @@ int main(int argc, char **argv) {
             close(lock);
             return 1;
         }
-        if (smoke_test_native_tray(panel, x, screen)) {
-            native_panel_destroy(panel);
-            xcb_disconnect(x);
-            close(lock);
-            return 1;
-        }
         const char *expected_actions[] = {
             "workspace|I", "notify|Native panel|space preserved", "volume|up"};
         const uint8_t buttons[] = {1, 3, 4};
@@ -668,6 +695,12 @@ int main(int argc, char **argv) {
                 close(lock);
                 return 1;
             }
+        }
+        if (smoke_test_native_tray(panel, x, screen)) {
+            native_panel_destroy(panel);
+            xcb_disconnect(x);
+            close(lock);
+            return 1;
         }
         usleep(100000);
         native_panel_destroy(panel);
