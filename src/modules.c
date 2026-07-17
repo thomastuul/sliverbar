@@ -62,7 +62,7 @@ void module_cpu(const panel_config *c, panel_state *s) {
     int padding = 5 - (int)strlen(usage);
     if (padding < 0)
         padding = 0;
-    snprintf(text, sizeof(text), "%s%%%*s", usage, padding, "");
+    snprintf(text, sizeof(text), " %s%%%*s", usage, padding, "");
     block(body, sizeof(body), c->color_bg, c->color_system, text);
     action(s->cpu, sizeof(s->cpu), 1, "terminal|btop", body);
 }
@@ -146,7 +146,7 @@ void module_volume(const panel_config *c, panel_state *s) {
     int padding = 3 - (int)strlen(level_text);
     if (padding < 0)
         padding = 0;
-    snprintf(text, sizeof(text), "%s%s%%%*s", muted ? "" : "", level_text, padding, "");
+    snprintf(text, sizeof(text), "%s %s%%%*s", muted ? "" : "", level_text, padding, "");
     block(body, sizeof(body), c->color_bg, muted ? c->color_muted : c->color_volume, text);
     action(tmp, sizeof(tmp), 1, "terminal|pulsemixer", body);
     char middle[768];
@@ -277,7 +277,7 @@ void module_network(const panel_config *c, panel_state *s) {
         int padding = 3 - (int)strlen(strength_text);
         if (padding < 0)
             padding = 0;
-        snprintf(wifi_text, sizeof(wifi_text), "說%s%%%*s", strength_text, padding, "");
+        snprintf(wifi_text, sizeof(wifi_text), "說 %s%%%*s", strength_text, padding, "");
     } else if (wifi)
         snprintf(wifi_text, sizeof(wifi_text), "說");
     if (eth && wifi_text[0])
