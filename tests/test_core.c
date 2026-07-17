@@ -78,6 +78,10 @@ int main(int argc, char **argv) {
     CHECK(strcmp(signal_result, "ok") == 0);
     CHECK(unlink(signal_path) == 0);
 
+    panel_state brightness_state = {0};
+    module_brightness_value(&cfg, &brightness_state, 42);
+    CHECK(strstr(brightness_state.brightness, "  42%") != NULL);
+
     panel_state state = {0};
     strcpy(state.launcher, "L");
     strcpy(state.workspace, "W");

@@ -299,40 +299,24 @@ static int set_volume(const panel_config *c, const char *op) {
     return run_capture(av, ignored, sizeof(ignored), 1500);
 }
 
-static int set_brightness(const panel_config *c, const char *op) {
-    char query[8192];
-    char *qv[] = {"xrandr", "--query", NULL};
-    if (run_capture(qv, query, sizeof(query), 1200))
+static int set_brightness(const panel_config *c, panel_state *s, const char *op) {
+    if (!s->brightness_initialized || !*s->brightness_output)
         return -1;
-    char output[64] = "";
-    char *save = NULL;
-    for (char *line = strtok_r(query, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
-        char state[32], geometry[64];
-        if (sscanf(line, "%63s %31s %63s", output, state, geometry) == 3 &&
-            !strcmp(state, "connected") && strchr(geometry, '+'))
-            break;
-        output[0] = '\0';
-    }
-    if (!*output)
-        return -1;
-    char verbose[16384];
-    char *vv[] = {"xrandr", "--verbose", "--current", NULL};
-    if (run_capture(vv, verbose, sizeof(verbose), 1500))
-        return -1;
-    char *section = strstr(verbose, output), *p = section ? strstr(section, "Brightness:") : NULL;
-    if (!p)
-        return -1;
-    double current = strtod(p + 11, NULL), delta = (double)c->brightness_step / 100.0,
-           target = current + (!strcmp(op, "up") ? delta : -delta);
-    if (target < 0.05)
-        target = 0.05;
-    if (target > 1.0)
-        target = 1.0;
+    int target =
+        s->brightness_percent + (!strcmp(op, "up") ? c->brightness_step : -c->brightness_step);
+    if (target < 5)
+        target = 5;
+    if (target > 100)
+        target = 100;
     char value[32];
-    snprintf(value, sizeof(value), "%.2f", target);
-    char *outv[] = {"xrandr", "--output", output, "--brightness", value, NULL};
+    snprintf(value, sizeof(value), "%.2f", (double)target / 100.0);
+    char *outv[] = {"xrandr", "--output", s->brightness_output, "--brightness", value, NULL};
     char ignored[128];
-    return run_capture(outv, ignored, sizeof(ignored), 1500);
+    if (run_capture(outv, ignored, sizeof(ignored), 1500))
+        return -1;
+    s->brightness_percent = target;
+    module_brightness_value(c, s, target);
+    return 0;
 }
 
 static void refresh_weather(const panel_config *c) {
@@ -398,8 +382,7 @@ static pid_t start_weather_refresh(const panel_config *c) {
     return pid;
 }
 
-static void
-do_action(const panel_config *c, const char *line, bool *volume_dirty, bool *workspace_dirty) {
+static void do_action(const panel_config *c, panel_state *s, const char *line, bool *volume_dirty) {
     char copybuf[1024];
     snprintf(copybuf, sizeof(copybuf), "%s", line);
     char *nl = strpbrk(copybuf, "\r\n");
@@ -417,7 +400,6 @@ do_action(const panel_config *c, const char *line, bool *volume_dirty, bool *wor
         char *av[] = {"bspc", "desktop", "-f", arg, NULL};
         char out[64];
         run_capture(av, out, sizeof(out), 1000);
-        *workspace_dirty = true;
     } else if (!strcmp(kind, "terminal") && arg) {
         char *av[] = {(char *)c->terminal, "-e", arg, NULL};
         spawn_detached(av);
@@ -440,8 +422,7 @@ do_action(const panel_config *c, const char *line, bool *volume_dirty, bool *wor
         char *av[] = {"notify-send", summary, "Left-click opens the three-day forecast.", NULL};
         spawn_detached(av);
     } else if (!strcmp(kind, "brightness") && arg) {
-        if (!set_brightness(c, arg))
-            *workspace_dirty = true;
+        set_brightness(c, s, arg);
     }
 }
 #endif
@@ -755,7 +736,7 @@ int main(int argc, char **argv) {
     char report[PANEL_TEXT_MAX] = "", action[1024] = "";
     size_t report_used = 0;
     unsigned ticks = 0;
-    bool running = true, dirty = true, vd = false, wd = false;
+    bool running = true, dirty = true, vd = false;
     while (running) {
         struct pollfd fds[] = {{tfd, POLLIN, 0},
                                {sfd, POLLIN, 0},
@@ -872,7 +853,7 @@ int main(int argc, char **argv) {
             while ((ev = xcb_poll_for_event(x))) {
                 bool redraw = false;
                 if (native_panel_handle_event(panel, ev, action, sizeof(action), &redraw)) {
-                    do_action(&cfg, action, &vd, &wd);
+                    do_action(&cfg, &state, action, &vd);
                     dirty = true;
                 }
                 if ((ev->response_type & 0x7fU) == XCB_PROPERTY_NOTIFY) {
@@ -886,11 +867,6 @@ int main(int argc, char **argv) {
             if (vd) {
                 module_volume(&cfg, &state);
                 vd = false;
-                dirty = true;
-            }
-            if (wd) {
-                module_brightness(&cfg, &state);
-                wd = false;
                 dirty = true;
             }
         }

@@ -31,6 +31,9 @@ typedef struct {
 typedef struct {
     uint64_t cpu_total, cpu_idle;
     bool cpu_initialized;
+    int brightness_percent;
+    bool brightness_initialized;
+    char brightness_output[64];
     char workspace[PANEL_TEXT_MAX], title[PANEL_TEXT_MAX];
     char launcher[PANEL_TEXT_MAX], weather[PANEL_TEXT_MAX], battery[PANEL_TEXT_MAX];
     char network[PANEL_TEXT_MAX], brightness[PANEL_TEXT_MAX], volume[PANEL_TEXT_MAX];
@@ -57,6 +60,7 @@ void module_volume(const panel_config *cfg, panel_state *state);
 int parse_nmcli_wifi(const char *output, char *ssid, size_t ssid_size, int *strength);
 void module_network(const panel_config *cfg, panel_state *state);
 void module_brightness(const panel_config *cfg, panel_state *state);
+void module_brightness_value(const panel_config *cfg, panel_state *state, int percent);
 void module_weather(const panel_config *cfg, panel_state *state);
 void module_workspace(const panel_config *cfg, panel_state *state, const char *report);
 void module_static(const panel_config *cfg, panel_state *state);

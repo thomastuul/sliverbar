@@ -292,6 +292,14 @@ void module_network(const panel_config *c, panel_state *s) {
     action(s->network, sizeof(s->network), 1, "terminal|nmtui", tmp);
 }
 
+void module_brightness_value(const panel_config *c, panel_state *s, int pct) {
+    char text[64], body[256], tmp[512];
+    snprintf(text, sizeof(text), " %3d%%", pct);
+    block(body, sizeof(body), c->color_bg, c->color_brightness, text);
+    action(tmp, sizeof(tmp), 5, "brightness|down", body);
+    action(s->brightness, sizeof(s->brightness), 4, "brightness|up", tmp);
+}
+
 void module_brightness(const panel_config *c, panel_state *s) {
     char query[16384], output[64] = "";
     char *qv[] = {"xrandr", "--query", NULL};
@@ -319,11 +327,12 @@ void module_brightness(const panel_config *c, panel_state *s) {
         if (p)
             pct = (int)(strtod(p + 11, NULL) * 100.0 + 0.5);
     }
-    char text[64], body[256], tmp[512];
-    snprintf(text, sizeof(text), " %3d%%", pct);
-    block(body, sizeof(body), c->color_bg, c->color_brightness, text);
-    action(tmp, sizeof(tmp), 5, "brightness|down", body);
-    action(s->brightness, sizeof(s->brightness), 4, "brightness|up", tmp);
+    if (*output) {
+        snprintf(s->brightness_output, sizeof(s->brightness_output), "%s", output);
+        s->brightness_percent = pct;
+        s->brightness_initialized = true;
+    }
+    module_brightness_value(c, s, pct);
 }
 
 static int json_integer(char *p) {
