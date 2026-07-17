@@ -1,6 +1,4 @@
-## Requirements
-
-# Code
+## Code
 
 - Use C17.
 - Format changed C files with clang-format.
@@ -8,7 +6,33 @@
 - Run CTest after every code change.
 - Keep the project buildable without XCB development headers.
 
-# Containerized Development
+## Standard validation
+
+For normal C changes, use the reproducible container workflow from the
+repository root:
+
+    ./lemonbar_c/scripts/container-build.sh
+
+This is the authoritative validation before committing C changes. It must run:
+
+- clang-format validation
+- clang-tidy
+- native release compilation
+- CLI-only compilation without XCB
+- CTest
+- ASan/UBSan tests
+- automated X11 tests under Xvfb
+
+Set `CONTAINER_ENGINE=podman` to use rootless Podman instead of Docker.
+
+A local build may be used for quick iteration:
+
+    cmake -S lemonbar_c -B build/lemonbar_c \
+      -DCMAKE_BUILD_TYPE=RelWithDebInfo
+    cmake --build build/lemonbar_c --parallel
+    ctest --test-dir build/lemonbar_c --output-on-failure
+
+## Containerized development
 
 - Use Docker or rootless Podman for reproducible compilation, static analysis,
   sanitizer builds, and automated tests.
@@ -44,7 +68,13 @@
   explicit packaging solution instead of assuming that containerized builds
   remove runtime dependencies.
 
-# Versioning
+## Runtime and integration tests
+
+- Use host runtime tools such as `xprop`, `xrandr`, `xdotool`, `xwininfo`,
+  `bspc`, `pactl`, `nmcli`, `ps`, and `strace` only when relevant to integration
+  testing or runtime diagnosis.
+
+## Versioning
 
 The project must have a centrally managed version number.
 
@@ -66,7 +96,7 @@ The project must have a centrally managed version number.
 - Tests for the `--version` option must be added or updated.
 - The documentation must mention the `--version` option.
 
-## Implementation
+### Implementation
 
 Before making changes:
 
