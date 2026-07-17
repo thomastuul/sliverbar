@@ -761,6 +761,8 @@ int main(int argc, char **argv) {
             module_screencast(&cfg, &state, runtime);
             if (ticks % 5 == 0)
                 module_cpu(&cfg, &state);
+            if (ticks % 5 == 0)
+                module_volume(&cfg, &state);
             if (ticks % 10 == 0)
                 module_battery(&cfg, &state);
             if (ticks % cfg.network_interval == 0)
