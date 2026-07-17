@@ -116,6 +116,11 @@ static void store_title(const char *title, unsigned max, panel_state *s, const p
 }
 
 #ifdef HAVE_XCB
+typedef struct {
+    struct timespec missing_since;
+    bool missing;
+} title_tracker;
+
 static xcb_atom_t atom(xcb_connection_t *x, const char *name) {
     xcb_intern_atom_cookie_t ck = xcb_intern_atom(x, 0, (uint16_t)strlen(name), name);
     xcb_intern_atom_reply_t *r = xcb_intern_atom_reply(x, ck, NULL);
@@ -147,6 +152,23 @@ window_name(xcb_connection_t *x, xcb_window_t window, xcb_atom_t net_name, xcb_a
         NULL);
 }
 
+static void title_unavailable(unsigned max,
+                              panel_state *state,
+                              const panel_config *config,
+                              title_tracker *tracker) {
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    if (!tracker->missing) {
+        tracker->missing = true;
+        tracker->missing_since = now;
+        return;
+    }
+    long elapsed_ms = (now.tv_sec - tracker->missing_since.tv_sec) * 1000L +
+                      (now.tv_nsec - tracker->missing_since.tv_nsec) / 1000000L;
+    if (elapsed_ms >= 250L)
+        store_title("", max, state, config);
+}
+
 static void update_title_xcb(xcb_connection_t *x,
                              xcb_window_t root,
                              xcb_atom_t active,
@@ -154,13 +176,14 @@ static void update_title_xcb(xcb_connection_t *x,
                              xcb_atom_t net_name,
                              unsigned max,
                              panel_state *s,
-                             const panel_config *c) {
+                             const panel_config *c,
+                             title_tracker *tracker) {
     xcb_window_t win = active_window(x, root, active);
     if (win == XCB_WINDOW_NONE) {
         usleep(10000);
         win = active_window(x, root, active);
         if (win == XCB_WINDOW_NONE) {
-            store_title("", max, s, c);
+            title_unavailable(max, s, c, tracker);
             return;
         }
     }
@@ -181,7 +204,7 @@ static void update_title_xcb(xcb_connection_t *x,
     }
     if (!r || xcb_get_property_value_length(r) <= 0) {
         free(r);
-        store_title("", max, s, c);
+        title_unavailable(max, s, c, tracker);
         return;
     }
     int len = xcb_get_property_value_length(r);
@@ -191,6 +214,7 @@ static void update_title_xcb(xcb_connection_t *x,
     memcpy(title, xcb_get_property_value(r), (size_t)len);
     title[len] = '\0';
     free(r);
+    tracker->missing = false;
     store_title(title, max, s, c);
 }
 #else
@@ -656,6 +680,7 @@ int main(int argc, char **argv) {
     }
     if (smoke_test) {
         panel_state smoke = {0};
+        title_tracker smoke_title = {0};
         xcb_window_t title_window = xcb_generate_id(x);
         xcb_create_window(x,
                           XCB_COPY_FROM_PARENT,
@@ -681,9 +706,21 @@ int main(int argc, char **argv) {
                             synthetic_title);
         xcb_change_property(
             x, XCB_PROP_MODE_REPLACE, root, active, XCB_ATOM_WINDOW, 32, 1, &title_window);
-        update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &smoke, &cfg);
+        update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &smoke, &cfg, &smoke_title);
         if (!strstr(smoke.title, synthetic_title)) {
             log_message("ERROR", "active-window title lookup failed");
+            xcb_destroy_window(x, title_window);
+            native_panel_destroy(panel);
+            xcb_disconnect(x);
+            close(lock);
+            return 1;
+        }
+        xcb_window_t no_active_window = XCB_WINDOW_NONE;
+        xcb_change_property(
+            x, XCB_PROP_MODE_REPLACE, root, active, XCB_ATOM_WINDOW, 32, 1, &no_active_window);
+        update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &smoke, &cfg, &smoke_title);
+        if (!strstr(smoke.title, synthetic_title)) {
+            log_message("ERROR", "transient missing active window replaced the current title");
             xcb_destroy_window(x, title_window);
             native_panel_destroy(panel);
             xcb_disconnect(x);
@@ -782,6 +819,7 @@ int main(int argc, char **argv) {
         log_message("ERROR", "cannot start window-title watcher");
 #endif
     panel_state state = {0};
+    title_tracker title = {0};
     pid_t weather_pid = start_weather_refresh(&cfg);
     module_static(&cfg, &state);
     module_clock(&cfg, &state);
@@ -792,7 +830,7 @@ int main(int argc, char **argv) {
     module_network(&cfg, &state);
     module_brightness(&cfg, &state);
     module_weather(&cfg, &state);
-    update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
+    update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg, &title);
     char report[PANEL_TEXT_MAX] = "", action[1024] = "";
     size_t report_used = 0;
     unsigned ticks = 0;
@@ -817,7 +855,7 @@ int main(int argc, char **argv) {
             read(tfd, &n, sizeof(n));
             ticks += (unsigned)n;
             module_clock(&cfg, &state);
-            update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
+            update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg, &title);
             module_screencast(&cfg, &state, runtime);
             if (ticks % 5 == 0)
                 module_cpu(&cfg, &state);
@@ -895,7 +933,7 @@ int main(int argc, char **argv) {
                     if (*line) {
                         module_workspace(&cfg, &state, line);
                         update_title_xcb(
-                            x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
+                            x, root, active, utf8, netname, cfg.title_max, &state, &cfg, &title);
                         dirty = true;
                     }
                     line = newline + 1;
@@ -919,7 +957,8 @@ int main(int argc, char **argv) {
                     dirty = true;
                 }
                 if ((ev->response_type & 0x7fU) == XCB_PROPERTY_NOTIFY) {
-                    update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &state, &cfg);
+                    update_title_xcb(
+                        x, root, active, utf8, netname, cfg.title_max, &state, &cfg, &title);
                     dirty = true;
                 }
                 if (redraw)
