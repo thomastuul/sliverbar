@@ -123,6 +123,30 @@ static xcb_atom_t atom(xcb_connection_t *x, const char *name) {
     free(r);
     return a;
 }
+
+static xcb_window_t active_window(xcb_connection_t *x, xcb_window_t root, xcb_atom_t active) {
+    xcb_get_property_reply_t *reply = xcb_get_property_reply(
+        x, xcb_get_property(x, 0, root, active, XCB_ATOM_WINDOW, 0, 1), NULL);
+    xcb_window_t window = XCB_WINDOW_NONE;
+    if (reply && reply->format == 32 && xcb_get_property_value_length(reply) >= 4)
+        memcpy(&window, xcb_get_property_value(reply), sizeof(window));
+    free(reply);
+    return window;
+}
+
+static xcb_get_property_reply_t *
+window_name(xcb_connection_t *x, xcb_window_t window, xcb_atom_t net_name, xcb_atom_t utf8) {
+    xcb_get_property_reply_t *reply =
+        xcb_get_property_reply(x, xcb_get_property(x, 0, window, net_name, utf8, 0, 1024), NULL);
+    if (reply && xcb_get_property_value_length(reply) > 0)
+        return reply;
+    free(reply);
+    return xcb_get_property_reply(
+        x,
+        xcb_get_property(x, 0, window, XCB_ATOM_WM_NAME, XCB_GET_PROPERTY_TYPE_ANY, 0, 1024),
+        NULL);
+}
+
 static void update_title_xcb(xcb_connection_t *x,
                              xcb_window_t root,
                              xcb_atom_t active,
@@ -131,28 +155,29 @@ static void update_title_xcb(xcb_connection_t *x,
                              unsigned max,
                              panel_state *s,
                              const panel_config *c) {
-    xcb_get_property_reply_t *ar = xcb_get_property_reply(
-        x, xcb_get_property(x, 0, root, active, XCB_ATOM_WINDOW, 0, 1), NULL);
-    if (!ar || xcb_get_property_value_length(ar) < 4) {
-        free(ar);
-        store_title("", max, s, c);
-        return;
-    }
-    xcb_window_t win = *(xcb_window_t *)xcb_get_property_value(ar);
-    free(ar);
+    xcb_window_t win = active_window(x, root, active);
     if (win == XCB_WINDOW_NONE) {
-        store_title("", max, s, c);
-        return;
+        usleep(10000);
+        win = active_window(x, root, active);
+        if (win == XCB_WINDOW_NONE) {
+            store_title("", max, s, c);
+            return;
+        }
     }
     uint32_t events = XCB_EVENT_MASK_PROPERTY_CHANGE;
     xcb_change_window_attributes(x, win, XCB_CW_EVENT_MASK, &events);
     xcb_flush(x);
-    xcb_get_property_reply_t *r =
-        xcb_get_property_reply(x, xcb_get_property(x, 0, win, net_name, utf8, 0, 1024), NULL);
+    xcb_get_property_reply_t *r = window_name(x, win, net_name, utf8);
     if (!r || xcb_get_property_value_length(r) <= 0) {
         free(r);
-        r = xcb_get_property_reply(
-            x, xcb_get_property(x, 0, win, XCB_ATOM_WM_NAME, XCB_ATOM_STRING, 0, 1024), NULL);
+        r = NULL;
+        usleep(10000);
+        win = active_window(x, root, active);
+        if (win != XCB_WINDOW_NONE) {
+            xcb_change_window_attributes(x, win, XCB_CW_EVENT_MASK, &events);
+            xcb_flush(x);
+            r = window_name(x, win, net_name, utf8);
+        }
     }
     if (!r || xcb_get_property_value_length(r) <= 0) {
         free(r);
@@ -631,6 +656,41 @@ int main(int argc, char **argv) {
     }
     if (smoke_test) {
         panel_state smoke = {0};
+        xcb_window_t title_window = xcb_generate_id(x);
+        xcb_create_window(x,
+                          XCB_COPY_FROM_PARENT,
+                          title_window,
+                          root,
+                          0,
+                          0,
+                          1,
+                          1,
+                          0,
+                          XCB_WINDOW_CLASS_INPUT_OUTPUT,
+                          screen->root_visual,
+                          0,
+                          NULL);
+        const char synthetic_title[] = "Synthetic title";
+        xcb_change_property(x,
+                            XCB_PROP_MODE_REPLACE,
+                            title_window,
+                            XCB_ATOM_WM_NAME,
+                            utf8,
+                            8,
+                            sizeof(synthetic_title) - 1,
+                            synthetic_title);
+        xcb_change_property(
+            x, XCB_PROP_MODE_REPLACE, root, active, XCB_ATOM_WINDOW, 32, 1, &title_window);
+        update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &smoke, &cfg);
+        if (!strstr(smoke.title, synthetic_title)) {
+            log_message("ERROR", "active-window title lookup failed");
+            xcb_destroy_window(x, title_window);
+            native_panel_destroy(panel);
+            xcb_disconnect(x);
+            close(lock);
+            return 1;
+        }
+        xcb_destroy_window(x, title_window);
         snprintf(smoke.workspace,
                  sizeof(smoke.workspace),
                  "%%{F%s}%%{B%s}%%{A3:notify|Native panel|space preserved:}"
