@@ -371,6 +371,8 @@ void module_weather(const panel_config *c, panel_state *s) {
 void module_workspace(const panel_config *c, panel_state *s, const char *report) {
     static const char *icons[] = {"", "", "", "", "", "", "", "", ""};
     s->workspace[0] = '\0';
+    s->focused_workspace_known = false;
+    s->focused_workspace_occupied = false;
     if (!report)
         return;
     char copybuf[PANEL_TEXT_MAX];
@@ -386,6 +388,10 @@ void module_workspace(const panel_config *c, panel_state *s, const char *report)
             focused = type == 'M';
             idx = 0;
         } else if (strchr("OoFfUu", type) && focused) {
+            if (isupper((unsigned char)type)) {
+                s->focused_workspace_known = true;
+                s->focused_workspace_occupied = type != 'F';
+            }
             const char *fg = c->color_free, *bg = c->color_free_bg;
             if (type == 'O' || type == 'U') {
                 fg = c->color_focused_occupied;

@@ -102,14 +102,22 @@ int main(int argc, char **argv) {
     CHECK(parse_nmcli_wifi("*:broken:unknown\n", ssid, sizeof(ssid), &strength) != 0);
 
     module_workspace(&cfg, &state, "WMDP-3:O1:o2:f3:LT:TT:G");
+    CHECK(state.focused_workspace_known);
+    CHECK(state.focused_workspace_occupied);
     CHECK(strstr(state.workspace, "%{F#69FF94}%{B#191A21}") != NULL);
     CHECK(strstr(state.workspace, "%{F#ff5555}%{B#191A21}") != NULL);
     CHECK(strstr(state.workspace, "[TILED]") != NULL);
 
     module_workspace(&cfg, &state, "WMDP-3:U1:u2:f3:LT:TT:G");
+    CHECK(state.focused_workspace_known);
+    CHECK(state.focused_workspace_occupied);
     CHECK(strstr(state.workspace, "%{F#69FF94}%{B#191A21}") != NULL);
     CHECK(strstr(state.workspace, "%{F#FF6E6E}%{B#343746}") != NULL);
     CHECK(strstr(state.workspace, "%{F#343746}%{B#FF6E6E}") == NULL);
+
+    module_workspace(&cfg, &state, "WMDP-3:F1:o2:f3:LT:TT:G");
+    CHECK(state.focused_workspace_known);
+    CHECK(!state.focused_workspace_occupied);
 
     char invalid_path[] = "/tmp/lemonbar-c-invalid-XXXXXX";
     fd = mkstemp(invalid_path);

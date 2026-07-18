@@ -33,6 +33,8 @@ typedef struct {
     bool cpu_initialized;
     int brightness_percent;
     bool brightness_initialized;
+    bool focused_workspace_known;
+    bool focused_workspace_occupied;
     char brightness_output[64];
     char workspace[PANEL_TEXT_MAX], title[PANEL_TEXT_MAX];
     char launcher[PANEL_TEXT_MAX], weather[PANEL_TEXT_MAX], battery[PANEL_TEXT_MAX];
