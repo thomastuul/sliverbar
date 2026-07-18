@@ -106,6 +106,11 @@ int main(int argc, char **argv) {
     CHECK(strstr(state.workspace, "%{F#ff5555}%{B#191A21}") != NULL);
     CHECK(strstr(state.workspace, "[TILED]") != NULL);
 
+    module_workspace(&cfg, &state, "WMDP-3:U1:u2:f3:LT:TT:G");
+    CHECK(strstr(state.workspace, "%{F#69FF94}%{B#191A21}") != NULL);
+    CHECK(strstr(state.workspace, "%{F#FF6E6E}%{B#343746}") != NULL);
+    CHECK(strstr(state.workspace, "%{F#343746}%{B#FF6E6E}") == NULL);
+
     char invalid_path[] = "/tmp/lemonbar-c-invalid-XXXXXX";
     fd = mkstemp(invalid_path);
     CHECK(fd >= 0);

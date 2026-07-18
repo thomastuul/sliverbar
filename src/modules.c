@@ -387,7 +387,7 @@ void module_workspace(const panel_config *c, panel_state *s, const char *report)
             idx = 0;
         } else if (strchr("OoFfUu", type) && focused) {
             const char *fg = c->color_free, *bg = c->color_free_bg;
-            if (type == 'O') {
+            if (type == 'O' || type == 'U') {
                 fg = c->color_focused_occupied;
                 bg = c->color_focused_occupied_bg;
             } else if (type == 'o') {
@@ -396,9 +396,6 @@ void module_workspace(const panel_config *c, panel_state *s, const char *report)
             } else if (type == 'F') {
                 fg = c->color_focused_free;
                 bg = c->color_focused_free_bg;
-            } else if (type == 'U') {
-                fg = c->color_focused_urgent;
-                bg = c->color_focused_urgent_bg;
             } else if (type == 'u') {
                 fg = c->color_urgent;
                 bg = c->color_urgent_bg;
