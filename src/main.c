@@ -147,6 +147,40 @@ window_name(xcb_connection_t *x, xcb_window_t window, xcb_atom_t net_name, xcb_a
         NULL);
 }
 
+static bool window_class_name(xcb_connection_t *x, xcb_window_t window, char *output, size_t size) {
+    xcb_get_property_reply_t *reply = xcb_get_property_reply(
+        x,
+        xcb_get_property(x, 0, window, XCB_ATOM_WM_CLASS, XCB_GET_PROPERTY_TYPE_ANY, 0, 1024),
+        NULL);
+    int length = reply ? xcb_get_property_value_length(reply) : 0;
+    const char *value = reply ? xcb_get_property_value(reply) : NULL;
+    if (!reply || !value || length <= 0 || size == 0) {
+        free(reply);
+        return false;
+    }
+    size_t first_length = strnlen(value, (size_t)length);
+    const char *label = value;
+    size_t label_length = first_length;
+    if (first_length + 1 < (size_t)length) {
+        const char *class_name = value + first_length + 1;
+        size_t class_length = strnlen(class_name, (size_t)length - first_length - 1);
+        if (class_length > 0) {
+            label = class_name;
+            label_length = class_length;
+        }
+    }
+    if (label_length == 0) {
+        free(reply);
+        return false;
+    }
+    if (label_length >= size)
+        label_length = size - 1;
+    memcpy(output, label, label_length);
+    output[label_length] = '\0';
+    free(reply);
+    return true;
+}
+
 static void title_unavailable(unsigned max, panel_state *state, const panel_config *config) {
     if (state->focused_workspace_known && !state->focused_workspace_occupied)
         store_title("", max, state, config);
@@ -186,6 +220,11 @@ static void update_title_xcb(xcb_connection_t *x,
     }
     if (!r || xcb_get_property_value_length(r) <= 0) {
         free(r);
+        char class_name[512];
+        if (win != XCB_WINDOW_NONE && window_class_name(x, win, class_name, sizeof(class_name))) {
+            store_title(class_name, max, s, c);
+            return;
+        }
         title_unavailable(max, s, c);
         return;
     }
@@ -684,11 +723,30 @@ int main(int argc, char **argv) {
                             8,
                             sizeof(synthetic_title) - 1,
                             synthetic_title);
+        const char synthetic_class[] = "synthetic\0SyntheticApp\0";
+        xcb_change_property(x,
+                            XCB_PROP_MODE_REPLACE,
+                            title_window,
+                            XCB_ATOM_WM_CLASS,
+                            XCB_ATOM_STRING,
+                            8,
+                            sizeof(synthetic_class) - 1,
+                            synthetic_class);
         xcb_change_property(
             x, XCB_PROP_MODE_REPLACE, root, active, XCB_ATOM_WINDOW, 32, 1, &title_window);
         update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &smoke, &cfg);
         if (!strstr(smoke.title, synthetic_title)) {
             log_message("ERROR", "active-window title lookup failed");
+            xcb_destroy_window(x, title_window);
+            native_panel_destroy(panel);
+            xcb_disconnect(x);
+            close(lock);
+            return 1;
+        }
+        xcb_delete_property(x, title_window, XCB_ATOM_WM_NAME);
+        update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &smoke, &cfg);
+        if (!strstr(smoke.title, "SyntheticApp")) {
+            log_message("ERROR", "window class title fallback failed");
             xcb_destroy_window(x, title_window);
             native_panel_destroy(panel);
             xcb_disconnect(x);
@@ -701,7 +759,7 @@ int main(int argc, char **argv) {
         xcb_change_property(
             x, XCB_PROP_MODE_REPLACE, root, active, XCB_ATOM_WINDOW, 32, 1, &no_active_window);
         update_title_xcb(x, root, active, utf8, netname, cfg.title_max, &smoke, &cfg);
-        if (!strstr(smoke.title, synthetic_title)) {
+        if (!strstr(smoke.title, "SyntheticApp")) {
             log_message("ERROR", "transient missing active window replaced the current title");
             xcb_destroy_window(x, title_window);
             native_panel_destroy(panel);
