@@ -1,14 +1,16 @@
 # Sliverbar
 
-Sliverbar is a lightweight C17 panel for Linux desktops running X11 and bspwm.
+Sliverbar is a lightweight C17 panel for Linux desktops running X11 and an
+EWMH-compatible window manager. bspwm has an optional enhanced backend.
 It creates, draws, and controls its dock window directly. The existing Bash
 panel remains an independent reference and fallback.
 
 ## Supported platform
 
-Linux with X11 and bspwm. The native window uses XCB, Cairo, Pango, Fontconfig,
-and the standard EWMH dock properties. Runtime backends are detected
-dynamically and executed without a shell: `bspc`, `amixer` or `pactl`,
+Linux with X11 and an EWMH-compatible window manager. The native window uses
+XCB, Cairo, Pango, Fontconfig, and standard EWMH properties. Runtime backends
+are detected dynamically and executed without a shell: optional `bspc`,
+`amixer` or `pactl`,
 `xrandr`, optional `nmcli`, and optional desktop applications configured by the
 user.
 
@@ -78,7 +80,7 @@ build/container-release/sliverbar --version
 ```
 
 The program owns its X11 dock window and the `_NET_SYSTEM_TRAY_S0` selection,
-subscribes to bspwm and X11 events, embeds tray clients through XEmbed, handles
+subscribes to workspace and X11 events, embeds tray clients through XEmbed, handles
 clicks through a private action protocol, and shuts down all direct children.
 It uses `$XDG_RUNTIME_DIR/sliverbar` for its lock. It does not evaluate shell
 code.
@@ -96,8 +98,8 @@ reserves the host's measured width. Sliverbar does not require the external
 
 ## Architecture
 
-- one `poll(2)` loop handles `timerfd`, `signalfd`, native mouse actions, bspwm,
-  NetworkManager and X11;
+- one `poll(2)` loop handles `timerfd`, `signalfd`, native mouse actions,
+  optional bspwm reports, NetworkManager and X11;
 - an XCB window with EWMH dock and strut properties provides the panel surface;
 - Cairo and Pango render the existing block model with measured left, centered,
   and right-aligned regions;
@@ -115,12 +117,18 @@ invalid keys fail validation. Paths are derived from `HOME`, `XDG_CACHE_HOME`
 and `XDG_RUNTIME_DIR` unless explicitly configured. Run
 `sliverbar --check-config --config PATH` before starting a panel.
 
+`workspace_backend=auto` prefers bspwm's report stream when a reachable `bspc`
+is available and otherwise uses EWMH. `ewmh` forces the portable backend,
+`bspwm` requests bspwm with an automatic EWMH fallback, and `none` hides the
+workspace block. The panel remains operational if no workspace properties are
+published.
+
 ## Feature mapping
 
 | Bash component | C implementation |
 | --- | --- |
 | `start.sh`, `sighandler.sh` | supervisor, `poll`, `timerfd`, `signalfd` |
-| `events.sh`, workspace block | persistent `bspc subscribe report` parser |
+| `events.sh`, workspace block | EWMH backend with optional persistent `bspc subscribe report` backend |
 | `xtmon.sh`, `title_server.sh` | native XCB property events |
 | clock, CPU, battery, screencast | native `/proc`, `/sys`, time and XDG logic |
 | volume and brightness | backend detection plus validated action protocol |

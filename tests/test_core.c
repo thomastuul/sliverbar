@@ -40,6 +40,7 @@ int main(int argc, char **argv) {
   CHECK(strcmp(cfg.colorPanelBg, "#191A21") == 0);
   CHECK(strcmp(cfg.colorBg, "#282A36") == 0);
   CHECK(strcmp(cfg.wmName, "sliverbar") == 0);
+  CHECK(strcmp(cfg.workspaceBackend, "auto") == 0);
   CHECK(strstr(cfg.font, "size=13") != NULL);
   CHECK(strstr(cfg.iconFont, "size=13") != NULL);
 
@@ -129,6 +130,26 @@ int main(int argc, char **argv) {
                                    routeInterface,
                                    sizeof(routeInterface)) != 0);
 
+  WorkspaceSnapshot snapshot = {.count = 3, .current = 1};
+  snapshot.occupied[0] = true;
+  snapshot.occupied[1] = true;
+  snapshot.urgent[2] = true;
+  strcpy(snapshot.names[0], "web");
+  strcpy(snapshot.names[1], "code");
+  strcpy(snapshot.names[2], "chat");
+  moduleWorkspaceEwmh(&cfg, &state, &snapshot);
+  CHECK(state.focusedWorkspaceKnown);
+  CHECK(state.focusedWorkspaceOccupied);
+  CHECK(strstr(state.workspace, "workspace|0") != NULL);
+  CHECK(strstr(state.workspace, "workspace|1") != NULL);
+  CHECK(strstr(state.workspace, cfg.colorFocusedOccupied) != NULL);
+  CHECK(strstr(state.workspace, cfg.colorUrgent) != NULL);
+
+  snapshot.occupied[1] = false;
+  moduleWorkspaceEwmh(&cfg, &state, &snapshot);
+  CHECK(state.focusedWorkspaceKnown);
+  CHECK(!state.focusedWorkspaceOccupied);
+
   moduleWorkspace(&cfg, &state, "WMDP-3:O1:o2:f3:LT:TT:G");
   CHECK(state.focusedWorkspaceKnown);
   CHECK(state.focusedWorkspaceOccupied);
@@ -156,6 +177,16 @@ int main(int argc, char **argv) {
   CHECK(close(fd) == 0);
   CHECK(configLoad(&cfg, invalidPath, error, sizeof(error)) != 0);
   CHECK(unlink(invalidPath) == 0);
+
+  char invalidBackendPath[] = "/tmp/sliverbar-invalid-backend-XXXXXX";
+  fd = mkstemp(invalidBackendPath);
+  CHECK(fd >= 0);
+  const char INVALID_BACKEND[] = "workspace_backend=invalid\n";
+  CHECK(write(fd, INVALID_BACKEND, sizeof(INVALID_BACKEND) - 1) ==
+        (ssize_t)(sizeof(INVALID_BACKEND) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&cfg, invalidBackendPath, error, sizeof(error)) != 0);
+  CHECK(unlink(invalidBackendPath) == 0);
   puts("ok");
   return 0;
 }

@@ -18,6 +18,7 @@ void configDefaults(PanelConfig *c) {
        sizeof(c->iconFont),
        "Hack Nerd Font Mono:style=Regular:size=13");
   copy(c->wmName, sizeof(c->wmName), "sliverbar");
+  copy(c->workspaceBackend, sizeof(c->workspaceBackend), "auto");
   copy(c->terminal, sizeof(c->terminal), "alacritty");
   copy(c->location, sizeof(c->location), "München");
   copy(c->language, sizeof(c->language), "de");
@@ -86,6 +87,13 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   STR("font", font);
   STR("icon_font", iconFont);
   STR("wm_name", wmName);
+  if (!strcmp(k, "workspace_backend")) {
+    if (strcmp(v, "auto") != 0 && strcmp(v, "bspwm") != 0 &&
+        strcmp(v, "ewmh") != 0 && strcmp(v, "none") != 0)
+      return -1;
+    copy(c->workspaceBackend, sizeof(c->workspaceBackend), v);
+    return 0;
+  }
   STR("terminal", terminal);
   STR("location", location);
   STR("language", language);

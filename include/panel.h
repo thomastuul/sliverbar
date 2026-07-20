@@ -9,9 +9,11 @@
 #define PANEL_TEXT_MAX 4096
 #define PANEL_PATH_MAX 4096
 #define PANEL_ARG_MAX 16
+#define PANEL_WORKSPACE_MAX 32
 
 typedef struct {
   char font[128], iconFont[128], geometry[64], wmName[64];
+  char workspaceBackend[16];
   char terminal[64], location[128], language[16];
   char launcher[PANEL_PATH_MAX], powerMenu[PANEL_PATH_MAX];
   char weatherCache[PANEL_PATH_MAX], weatherImage[PANEL_PATH_MAX];
@@ -45,6 +47,14 @@ typedef struct {
   char cpu[PANEL_TEXT_MAX], clock[PANEL_TEXT_MAX], tray[PANEL_TEXT_MAX];
   char power[PANEL_TEXT_MAX], screencast[PANEL_TEXT_MAX];
 } PanelState;
+
+typedef struct {
+  size_t count;
+  size_t current;
+  bool occupied[PANEL_WORKSPACE_MAX];
+  bool urgent[PANEL_WORKSPACE_MAX];
+  char names[PANEL_WORKSPACE_MAX][64];
+} WorkspaceSnapshot;
 
 void configDefaults(PanelConfig *cfg);
 int configLoad(PanelConfig *cfg,
@@ -84,6 +94,9 @@ void moduleWeather(const PanelConfig *cfg, PanelState *state);
 void moduleWorkspace(const PanelConfig *cfg,
                      PanelState *state,
                      const char *report);
+void moduleWorkspaceEwmh(const PanelConfig *cfg,
+                         PanelState *state,
+                         const WorkspaceSnapshot *snapshot);
 void moduleStatic(const PanelConfig *cfg, PanelState *state);
 void renderPanel(const PanelState *state, char *output, size_t size);
 

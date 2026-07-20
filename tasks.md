@@ -63,16 +63,16 @@ Quelle. Auf dem reproduzierenden System entspricht die Anzeige bei 51/70 rund
   - aktive Arbeitsflaeche wechseln;
   - belegte, fokussierte und dringende Arbeitsflaechen darstellen;
   - Titel des aktiven Fensters verfolgen.
-- [ ] Ein generisches EWMH-Backend als Standard implementieren.
+- [x] Ein generisches EWMH-Backend als Standard implementieren.
   - Relevante Eigenschaften sind mindestens `_NET_CURRENT_DESKTOP`,
     `_NET_NUMBER_OF_DESKTOPS`, `_NET_DESKTOP_NAMES`, `_NET_WM_DESKTOP`,
     `_NET_ACTIVE_WINDOW` und die Dringlichkeitsinformationen der Fenster.
-- [ ] Die bestehende `bspc subscribe report`-Integration in ein optionales
+- [x] Die bestehende `bspc subscribe report`-Integration in ein optionales
   bspwm-Backend verschieben.
-- [ ] Backend-Auswahl ueber automatische Erkennung und eine explizite
+- [x] Backend-Auswahl ueber automatische Erkennung und eine explizite
   Konfigurationsoption erlauben.
-- [ ] Sliverbar ohne `bspc` starten und dauerhaft betreiben koennen.
-- [ ] Einen eingeschraenkten Betrieb ohne verfuegbares Workspace-Backend
+- [x] Sliverbar ohne `bspc` starten und dauerhaft betreiben koennen.
+- [x] Einen eingeschraenkten Betrieb ohne verfuegbares Workspace-Backend
   ermoeglichen; das Workspace-Modul wird dann ausgeblendet, statt das Panel zu
   beenden.
 - [ ] Tests fuer das EWMH-Backend, das bspwm-Backend und den Betrieb ohne

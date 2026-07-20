@@ -1,6 +1,7 @@
 #include "native_panel.h"
 #include "panel.h"
 #include "version.h"
+#include "workspace_backend.h"
 
 #include <ctype.h>
 #include <errno.h>
@@ -504,7 +505,8 @@ static pid_t startWeatherRefresh(const PanelConfig *c) {
 static void doAction(const PanelConfig *c,
                      PanelState *s,
                      const char *line,
-                     bool *volumeDirty) {
+                     bool *volumeDirty,
+                     WorkspaceBackend *workspaceBackend) {
   char copybuf[1024];
   snprintf(copybuf, sizeof(copybuf), "%s", line);
   char *nl = strpbrk(copybuf, "\r\n");
@@ -520,9 +522,7 @@ static void doAction(const PanelConfig *c,
     setVolume(c, arg);
     *volumeDirty = true;
   } else if (!strcmp(kind, "workspace") && arg) {
-    char *av[] = {"bspc", "desktop", "-f", arg, NULL};
-    char out[64];
-    runCapture(av, out, sizeof(out), 1000);
+    workspaceBackendSwitch(workspaceBackend, arg);
   } else if (!strcmp(kind, "terminal") && arg) {
     char *av[] = {(char *)c->terminal, "-e", arg, NULL};
     spawnDetached(av);
@@ -869,6 +869,68 @@ int main(int argc, char **argv) {
       close(lock);
       return 1;
     }
+    uint32_t desktopCount = 3, currentDesktop = 1, windowDesktop = 1;
+    xcb_atom_t numberOfDesktops = atom(x, "_NET_NUMBER_OF_DESKTOPS");
+    xcb_atom_t currentDesktopAtom = atom(x, "_NET_CURRENT_DESKTOP");
+    xcb_atom_t desktopNames = atom(x, "_NET_DESKTOP_NAMES");
+    xcb_atom_t clientList = atom(x, "_NET_CLIENT_LIST");
+    xcb_atom_t windowDesktopAtom = atom(x, "_NET_WM_DESKTOP");
+    const char DESKTOP_NAMES[] = "web\0code\0chat\0";
+    xcb_change_property(x,
+                        XCB_PROP_MODE_REPLACE,
+                        root,
+                        numberOfDesktops,
+                        XCB_ATOM_CARDINAL,
+                        32,
+                        1,
+                        &desktopCount);
+    xcb_change_property(x,
+                        XCB_PROP_MODE_REPLACE,
+                        root,
+                        currentDesktopAtom,
+                        XCB_ATOM_CARDINAL,
+                        32,
+                        1,
+                        &currentDesktop);
+    xcb_change_property(x,
+                        XCB_PROP_MODE_REPLACE,
+                        root,
+                        desktopNames,
+                        utf8,
+                        8,
+                        sizeof(DESKTOP_NAMES) - 1,
+                        DESKTOP_NAMES);
+    xcb_change_property(x,
+                        XCB_PROP_MODE_REPLACE,
+                        root,
+                        clientList,
+                        XCB_ATOM_WINDOW,
+                        32,
+                        1,
+                        &titleWindow);
+    xcb_change_property(x,
+                        XCB_PROP_MODE_REPLACE,
+                        titleWindow,
+                        windowDesktopAtom,
+                        XCB_ATOM_CARDINAL,
+                        32,
+                        1,
+                        &windowDesktop);
+    WorkspaceBackend *smokeWorkspace = workspaceBackendCreate(x, root, &cfg);
+    if (!smokeWorkspace || !workspaceBackendRefresh(smokeWorkspace, &smoke) ||
+        strcmp(workspaceBackendName(smokeWorkspace), "ewmh") != 0 ||
+        !smoke.focusedWorkspaceKnown || !smoke.focusedWorkspaceOccupied ||
+        !strstr(smoke.workspace, "workspace|1") ||
+        workspaceBackendSwitch(smokeWorkspace, "2")) {
+      logMessage("ERROR", "EWMH workspace backend smoke-test failed");
+      workspaceBackendDestroy(smokeWorkspace);
+      xcb_destroy_window(x, titleWindow);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    workspaceBackendDestroy(smokeWorkspace);
     xcb_destroy_window(x, titleWindow);
     snprintf(smoke.workspace,
              sizeof(smoke.workspace),
@@ -940,9 +1002,8 @@ int main(int argc, char **argv) {
   int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
   struct itimerspec tick = {{1, 0}, {0, 1}};
   timerfd_settime(tfd, 0, &tick, NULL);
-  char *bspArgv[] = {"bspc", "subscribe", "report", NULL};
-  Child bsp = {.readFd = -1, .writeFd = -1};
-  if (childPipe(bspArgv, false, &bsp)) {
+  WorkspaceBackend *workspaceBackend = workspaceBackendCreate(x, root, &cfg);
+  if (!workspaceBackend) {
     nativePanelDestroy(panel);
     xcb_disconnect(x);
     return 1;
@@ -972,20 +1033,21 @@ int main(int argc, char **argv) {
   moduleNetwork(&cfg, &state);
   moduleBrightness(&cfg, &state);
   moduleWeather(&cfg, &state);
+  workspaceBackendRefresh(workspaceBackend, &state);
   updateTitleXcb(x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
-  char report[PANEL_TEXT_MAX] = "", action[1024] = "";
-  size_t reportUsed = 0;
+  char action[1024] = "";
   unsigned ticks = 0;
   bool running = true, dirty = true, vd = false;
   while (running) {
-    struct pollfd fds[] = {{tfd, POLLIN, 0},
-                           {sfd, POLLIN, 0},
-                           {bsp.readFd, POLLIN, 0},
-                           {-1, 0, 0},
-                           {xfd, POLLIN, 0},
-                           {networkEvents.readFd, POLLIN, 0},
-                           {titleRoot.readFd, POLLIN, 0},
-                           {titleWindow.readFd, POLLIN, 0}};
+    struct pollfd fds[] = {
+        {tfd, POLLIN, 0},
+        {sfd, POLLIN, 0},
+        {workspaceBackendPollFd(workspaceBackend), POLLIN, 0},
+        {-1, 0, 0},
+        {xfd, POLLIN, 0},
+        {networkEvents.readFd, POLLIN, 0},
+        {titleRoot.readFd, POLLIN, 0},
+        {titleWindow.readFd, POLLIN, 0}};
     if (poll(fds, 8, -1) < 0) {
       if (errno == EINTR)
         continue;
@@ -997,6 +1059,7 @@ int main(int argc, char **argv) {
       read(tfd, &n, sizeof(n));
       ticks += (unsigned)n;
       moduleClock(&cfg, &state);
+      workspaceBackendRefresh(workspaceBackend, &state);
       updateTitleXcb(
           x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
       moduleScreencast(&cfg, &state, runtime);
@@ -1038,11 +1101,9 @@ int main(int argc, char **argv) {
               weatherPid = 0;
               moduleWeather(&cfg, &state);
               dirty = true;
-            } else if (reaped == bsp.pid) {
-              logMessage("ERROR",
-                         "bspc report subscription exited: status=%d",
-                         WIFEXITED(status) ? WEXITSTATUS(status) : -1);
-              bsp.pid = 0;
+            } else if (workspaceBackendChildExited(
+                           workspaceBackend, reaped, status, &state)) {
+              dirty = true;
             } else if (reaped == networkEvents.pid) {
               networkEvents.pid = 0;
               if (networkEvents.readFd >= 0)
@@ -1063,33 +1124,11 @@ int main(int argc, char **argv) {
         }
       }
     }
-    if (fds[2].revents & POLLIN) {
-      ssize_t n = read(
-          bsp.readFd, report + reportUsed, sizeof(report) - reportUsed - 1);
-      if (n > 0) {
-        reportUsed += (size_t)n;
-        report[reportUsed] = '\0';
-        char *line = report;
-        char *end = report + reportUsed;
-        char *newline;
-        while ((newline = memchr(line, '\n', (size_t)(end - line)))) {
-          *newline = '\0';
-          if (*line) {
-            moduleWorkspace(&cfg, &state, line);
-            updateTitleXcb(
-                x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
-            dirty = true;
-          }
-          line = newline + 1;
-        }
-        reportUsed = (size_t)(end - line);
-        memmove(report, line, reportUsed);
-        report[reportUsed] = '\0';
-      }
-      if (reportUsed == sizeof(report) - 1) {
-        logMessage("ERROR", "discarding oversized bspwm report");
-        reportUsed = 0;
-        report[0] = '\0';
+    if (fds[2].revents & (POLLIN | POLLHUP)) {
+      if (workspaceBackendRead(workspaceBackend, &state)) {
+        updateTitleXcb(
+            x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
+        dirty = true;
       }
     }
     if (fds[4].revents & POLLIN) {
@@ -1098,10 +1137,11 @@ int main(int argc, char **argv) {
         bool redraw = false;
         if (nativePanelHandleEvent(
                 panel, ev, action, sizeof(action), &redraw)) {
-          doAction(&cfg, &state, action, &vd);
+          doAction(&cfg, &state, action, &vd, workspaceBackend);
           dirty = true;
         }
         if ((ev->response_type & 0x7fU) == XCB_PROPERTY_NOTIFY) {
+          workspaceBackendRefresh(workspaceBackend, &state);
           updateTitleXcb(
               x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
           dirty = true;
@@ -1161,10 +1201,6 @@ int main(int argc, char **argv) {
       }
       dirty = false;
     }
-    if (bsp.pid <= 0 || kill(bsp.pid, 0)) {
-      logMessage("ERROR", "bspc report subscription is unavailable");
-      running = false;
-    }
     if (xcb_connection_has_error(x)) {
       logMessage("ERROR", "X11 connection failed");
       running = false;
@@ -1179,7 +1215,7 @@ int main(int argc, char **argv) {
   stopChild(&networkEvents);
   stopChild(&titleWindow);
   stopChild(&titleRoot);
-  stopChild(&bsp);
+  workspaceBackendDestroy(workspaceBackend);
   nativePanelDestroy(panel);
   xcb_disconnect(x);
   close(lock);

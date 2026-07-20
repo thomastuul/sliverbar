@@ -35,7 +35,12 @@ target_compile_definitions(sliverbar PRIVATE _GNU_SOURCE _POSIX_C_SOURCE=200809L
 configure_file(include/version.h.in generated/version.h @ONLY)
 target_include_directories(sliverbar PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 if(SLIVERBAR_WITH_XCB AND XCB_FOUND AND CAIRO_XCB_FOUND AND PANGOCAIRO_FOUND)
-    target_sources(sliverbar PRIVATE src/native_panel.c src/native_tray.c)
+    target_sources(
+        sliverbar PRIVATE
+        src/native_panel.c
+        src/native_tray.c
+        src/workspace_backend.c
+    )
     target_link_libraries(
         sliverbar PRIVATE PkgConfig::XCB PkgConfig::CAIRO_XCB PkgConfig::PANGOCAIRO
     )

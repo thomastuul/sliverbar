@@ -507,6 +507,57 @@ void moduleWorkspace(const PanelConfig *c, PanelState *s, const char *report) {
   strncat(s->workspace, tail, sizeof(s->workspace) - strlen(s->workspace) - 1);
 }
 
+void moduleWorkspaceEwmh(const PanelConfig *c,
+                         PanelState *s,
+                         const WorkspaceSnapshot *snapshot) {
+  s->workspace[0] = '\0';
+  s->focusedWorkspaceKnown = false;
+  s->focusedWorkspaceOccupied = false;
+  if (!snapshot || snapshot->count == 0 ||
+      snapshot->count > PANEL_WORKSPACE_MAX ||
+      snapshot->current >= snapshot->count)
+    return;
+  s->focusedWorkspaceKnown = true;
+  s->focusedWorkspaceOccupied = snapshot->occupied[snapshot->current];
+  for (size_t i = 0; i < snapshot->count; i++) {
+    bool focused = i == snapshot->current;
+    const char *fg = c->colorFree;
+    const char *bg = c->colorFreeBg;
+    if (focused && snapshot->urgent[i]) {
+      fg = c->colorFocusedUrgent;
+      bg = c->colorFocusedUrgentBg;
+    } else if (focused && snapshot->occupied[i]) {
+      fg = c->colorFocusedOccupied;
+      bg = c->colorFocusedOccupiedBg;
+    } else if (focused) {
+      fg = c->colorFocusedFree;
+      bg = c->colorFocusedFreeBg;
+    } else if (snapshot->urgent[i]) {
+      fg = c->colorUrgent;
+      bg = c->colorUrgentBg;
+    } else if (snapshot->occupied[i]) {
+      fg = c->colorOccupied;
+      bg = c->colorOccupiedBg;
+    }
+    char fallback[16], label[128], part[512];
+    snprintf(fallback, sizeof(fallback), "%u", (unsigned)i + 1U);
+    shellQuoteAction(snapshot->names[i][0] ? snapshot->names[i] : fallback,
+                     label,
+                     sizeof(label));
+    snprintf(part,
+             sizeof(part),
+             "%%{F%s}%%{B%s}%%{U%s}%%{+u}%%{A1:workspace|%zu:} %s "
+             "%%{A}%%{B-}%%{F-}%%{-u}",
+             fg,
+             bg,
+             c->colorNetwork,
+             i,
+             label);
+    strncat(
+        s->workspace, part, sizeof(s->workspace) - strlen(s->workspace) - 1);
+  }
+}
+
 void moduleStatic(const PanelConfig *c, PanelState *s) {
   char body[128];
   block(body, sizeof(body), c->colorBg, c->colorFg, "");
