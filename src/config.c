@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 static void copy(char *dst, size_t size, const char *src) {
   if (size > 0)
@@ -31,7 +32,7 @@ void configDefaults(PanelConfig *c) {
   copy(c->networkSettings, sizeof(c->networkSettings), "auto");
   copy(c->volumeSettings, sizeof(c->volumeSettings), "auto");
   copy(c->calendar, sizeof(c->calendar), "auto");
-  copy(c->language, sizeof(c->language), "en");
+  copy(c->language, sizeof(c->language), "auto");
   copy(c->colorPanelBg, 16, "#191A21");
   copy(c->colorBg, 16, "#282A36");
   copy(c->colorFg, 16, "#ff5555");
@@ -69,6 +70,34 @@ void configDefaults(PanelConfig *c) {
 
 bool moduleModeActive(ModuleMode mode, bool available) {
   return mode == MODULE_ENABLED || (mode == MODULE_AUTO && available);
+}
+
+static int localeLanguage(const char *locale) {
+  if (!locale || !*locale || !strcmp(locale, "C") ||
+      !strncasecmp(locale, "C.", 2) || !strcmp(locale, "POSIX"))
+    return -1;
+  return !strncasecmp(locale, "de", 2) &&
+                 (!locale[2] || strchr("_.@:-", locale[2]))
+             ? 1
+             : 0;
+}
+
+const char *panelLanguage(const PanelConfig *c) {
+  if (c && !strcmp(c->language, "de"))
+    return "de";
+  if (c && !strcmp(c->language, "en"))
+    return "en";
+  const char *const VARIABLES[] = {"LANGUAGE", "LC_MESSAGES", "LC_ALL", "LANG"};
+  for (size_t i = 0; i < sizeof(VARIABLES) / sizeof(VARIABLES[0]); i++) {
+    int language = localeLanguage(getenv(VARIABLES[i]));
+    if (language >= 0)
+      return language ? "de" : "en";
+  }
+  return "en";
+}
+
+bool panelLanguageIsGerman(const PanelConfig *c) {
+  return !strcmp(panelLanguage(c), "de");
 }
 
 static char *trim(char *s) {
@@ -167,7 +196,12 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   if (!strcmp(k, "weather_location"))
     return addWeatherLocation(c, v);
   STR("weather_default", defaultWeatherLocation);
-  STR("language", language);
+  if (!strcmp(k, "language")) {
+    if (strcmp(v, "auto") != 0 && strcmp(v, "de") != 0 && strcmp(v, "en") != 0)
+      return -1;
+    copy(c->language, sizeof(c->language), v);
+    return 0;
+  }
   STR("launcher", launcher);
   STR("power_menu", powerMenu);
   STR("weather_cache", weatherCache);

@@ -9,6 +9,7 @@ project(sliverbar VERSION "${SLIVERBAR_VERSION}" LANGUAGES C)
 
 include(GNUInstallDirs)
 include(CTest)
+set(SLIVERBAR_SYSTEM_CONFIG_DIR "/etc/sliverbar")
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(XCB QUIET IMPORTED_TARGET xcb)
@@ -44,7 +45,7 @@ target_link_libraries(sliverbar PRIVATE sliverbar_core)
 target_compile_definitions(sliverbar PRIVATE _GNU_SOURCE _POSIX_C_SOURCE=200809L)
 target_compile_definitions(
     sliverbar PRIVATE
-    SLIVERBAR_SYSTEM_CONFIG="${CMAKE_INSTALL_FULL_SYSCONFDIR}/sliverbar/panel.conf"
+    SLIVERBAR_SYSTEM_CONFIG="${SLIVERBAR_SYSTEM_CONFIG_DIR}/panel.conf"
 )
 configure_file(include/version.h.in generated/version.h @ONLY)
 target_include_directories(sliverbar PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
@@ -91,7 +92,7 @@ string(REPLACE "monitor=primary" "monitor=RIGHT"
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/panel-multi-monitor.conf"
      "${SLIVERBAR_MULTI_MONITOR_CONFIG}")
 install(TARGETS sliverbar RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
-install(FILES config/panel.conf DESTINATION ${CMAKE_INSTALL_SYSCONFDIR}/sliverbar)
+install(FILES config/panel.conf DESTINATION ${SLIVERBAR_SYSTEM_CONFIG_DIR})
 
 set(CPACK_PACKAGE_NAME "sliverbar")
 set(CPACK_PACKAGE_VENDOR "Sliverbar contributors")
@@ -99,17 +100,32 @@ set(CPACK_PACKAGE_CONTACT "Sliverbar contributors")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Lightweight native X11 panel with EWMH and optional bspwm support")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_SET_DESTDIR ON)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_SECTION "x11")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(CPACK_DEBIAN_PACKAGE_DEPENDS
-    "libc6, libxcb1, libcairo2, libpango-1.0-0, libpangocairo-1.0-0, libglib2.0-0, libfontconfig1")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "shared-mime-info")
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/conffiles"
+     "/etc/sliverbar/panel.conf\n")
+set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
+    "${CMAKE_CURRENT_BINARY_DIR}/conffiles")
 include(CPack)
 
 if(BUILD_TESTING)
     add_executable(test_core tests/test_core.c)
     target_link_libraries(test_core PRIVATE sliverbar_core)
     target_compile_options(test_core PRIVATE -Wall -Wextra -Wpedantic)
+    if(GIO_FOUND)
+        add_executable(test_app_defaults tests/test_app_defaults.c)
+        target_link_libraries(test_app_defaults PRIVATE sliverbar_core)
+        target_compile_options(test_app_defaults PRIVATE -Wall -Wextra -Wpedantic)
+        if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(test_app_defaults PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(test_app_defaults PRIVATE -fsanitize=address,undefined)
+        endif()
+        add_test(NAME app_defaults COMMAND test_app_defaults)
+        set_tests_properties(app_defaults PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
     if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(test_core PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(test_core PRIVATE -fsanitize=address,undefined)

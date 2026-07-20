@@ -47,6 +47,9 @@ struct NativePopup {
   int anchorY;
   int anchorWidth;
   int panelHeight;
+  xcb_window_t previousFocus;
+  uint8_t previousRevertTo;
+  bool focusSaved;
   bool open;
   bool searchable;
   char query[256];
@@ -159,7 +162,11 @@ static void drawPopup(NativePopup *popup) {
     cairo_rectangle(popup->cairo, 0, 0, popup->width, popup->rowHeight);
     cairo_fill(popup->cairo);
     char prompt[320];
-    snprintf(prompt, sizeof(prompt), "Search: %s", popup->query);
+    snprintf(prompt,
+             sizeof(prompt),
+             "%s: %s",
+             panelLanguageIsGerman(&popup->config) ? "Suche" : "Search",
+             popup->query);
     drawText(popup, prompt, 10, 5, popup->config.colorClock);
     y += popup->rowHeight;
   }
@@ -185,7 +192,12 @@ static void drawPopup(NativePopup *popup) {
                                          : popup->config.colorFree);
   }
   if (popup->matchCount == 0)
-    drawText(popup, "No matches", 10, y + 5, popup->config.colorMuted);
+    drawText(popup,
+             panelLanguageIsGerman(&popup->config) ? "Keine Treffer"
+                                                   : "No matches",
+             10,
+             y + 5,
+             popup->config.colorMuted);
   cairo_surface_flush(popup->surface);
   xcb_flush(popup->connection);
 }
@@ -318,6 +330,14 @@ bool nativePopupIsOpen(const NativePopup *popup) {
   return popup && popup->open;
 }
 
+static bool nativePopupHasFocus(const NativePopup *popup) {
+  xcb_get_input_focus_reply_t *focusReply = xcb_get_input_focus_reply(
+      popup->connection, xcb_get_input_focus(popup->connection), NULL);
+  bool focused = focusReply && focusReply->focus == popup->window;
+  free(focusReply);
+  return focused;
+}
+
 void nativePopupSetBounds(
     NativePopup *popup, int x, int y, int width, int panelHeight) {
   if (!popup || width <= 0)
@@ -364,52 +384,18 @@ int nativePopupOpen(NativePopup *popup,
                        geometry);
   cairo_xcb_surface_set_size(popup->surface, popup->width, popup->height);
   xcb_map_window(popup->connection, popup->window);
-  xcb_flush(popup->connection);
   xcb_get_input_focus_reply_t *focusReply = xcb_get_input_focus_reply(
       popup->connection, xcb_get_input_focus(popup->connection), NULL);
+  popup->focusSaved = focusReply != NULL;
+  if (focusReply) {
+    popup->previousFocus = focusReply->focus;
+    popup->previousRevertTo = focusReply->revert_to;
+  }
   free(focusReply);
   xcb_set_input_focus(popup->connection,
                       XCB_INPUT_FOCUS_POINTER_ROOT,
                       popup->window,
                       XCB_CURRENT_TIME);
-  xcb_grab_keyboard_cookie_t keyboardCookie =
-      xcb_grab_keyboard(popup->connection,
-                        0,
-                        popup->window,
-                        XCB_CURRENT_TIME,
-                        XCB_GRAB_MODE_ASYNC,
-                        XCB_GRAB_MODE_ASYNC);
-  xcb_grab_keyboard_reply_t *keyboardReply =
-      xcb_grab_keyboard_reply(popup->connection, keyboardCookie, NULL);
-  xcb_grab_pointer_cookie_t pointerCookie =
-      xcb_grab_pointer(popup->connection,
-                       0,
-                       popup->window,
-                       XCB_EVENT_MASK_BUTTON_PRESS,
-                       XCB_GRAB_MODE_ASYNC,
-                       XCB_GRAB_MODE_ASYNC,
-                       XCB_WINDOW_NONE,
-                       XCB_CURSOR_NONE,
-                       XCB_CURRENT_TIME);
-  xcb_grab_pointer_reply_t *pointerReply =
-      xcb_grab_pointer_reply(popup->connection, pointerCookie, NULL);
-  bool grabbed = keyboardReply && pointerReply &&
-                 keyboardReply->status == XCB_GRAB_STATUS_SUCCESS &&
-                 pointerReply->status == XCB_GRAB_STATUS_SUCCESS;
-  if (!grabbed)
-    logMessage("ERROR",
-               "popup input grab failed (keyboard=%d pointer=%d)",
-               keyboardReply ? keyboardReply->status : -1,
-               pointerReply ? pointerReply->status : -1);
-  free(pointerReply);
-  free(keyboardReply);
-  if (!grabbed) {
-    xcb_ungrab_keyboard(popup->connection, XCB_CURRENT_TIME);
-    xcb_ungrab_pointer(popup->connection, XCB_CURRENT_TIME);
-    xcb_unmap_window(popup->connection, popup->window);
-    xcb_flush(popup->connection);
-    return -1;
-  }
   popup->open = true;
   drawPopup(popup);
   return 0;
@@ -418,10 +404,20 @@ int nativePopupOpen(NativePopup *popup,
 void nativePopupClose(NativePopup *popup) {
   if (!popup || !popup->open)
     return;
-  xcb_ungrab_keyboard(popup->connection, XCB_CURRENT_TIME);
-  xcb_ungrab_pointer(popup->connection, XCB_CURRENT_TIME);
+  xcb_get_input_focus_reply_t *focusReply = xcb_get_input_focus_reply(
+      popup->connection, xcb_get_input_focus(popup->connection), NULL);
+  bool restoreFocus = focusReply && focusReply->focus == popup->window &&
+                      popup->focusSaved &&
+                      popup->previousFocus != XCB_INPUT_FOCUS_NONE;
+  free(focusReply);
   xcb_unmap_window(popup->connection, popup->window);
+  if (restoreFocus)
+    xcb_set_input_focus(popup->connection,
+                        popup->previousRevertTo,
+                        popup->previousFocus,
+                        XCB_CURRENT_TIME);
   xcb_flush(popup->connection);
+  popup->focusSaved = false;
   popup->open = false;
 }
 
@@ -575,7 +571,8 @@ bool nativePopupHandleEvent(NativePopup *popup,
   }
 #endif
   if (type == XCB_FOCUS_OUT) {
-    nativePopupClose(popup);
+    if (!nativePopupHasFocus(popup))
+      nativePopupClose(popup);
     return true;
   }
   return false;

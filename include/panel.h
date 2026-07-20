@@ -91,6 +91,8 @@ typedef struct {
 } WifiDiagnostic;
 
 void configDefaults(PanelConfig *cfg);
+const char *panelLanguage(const PanelConfig *cfg);
+bool panelLanguageIsGerman(const PanelConfig *cfg);
 bool moduleModeActive(ModuleMode mode, bool available);
 int configLoad(PanelConfig *cfg,
                const char *path,
@@ -127,6 +129,9 @@ int parseDefaultRouteInterface(const char *routes,
 int wifiDiagnostic(WifiDiagnostic *diagnostic);
 void moduleNetwork(const PanelConfig *cfg, PanelState *state);
 void moduleBrightness(const PanelConfig *cfg, PanelState *state);
+bool moduleBrightnessAdjust(const PanelConfig *cfg,
+                            PanelState *state,
+                            const char *operation);
 void moduleBrightnessValue(const PanelConfig *cfg,
                            PanelState *state,
                            int percent);

@@ -293,6 +293,14 @@ nicht Teil des ersten Umfangs.
   reine Logiktests abdecken.
 - [ ] Unter Xvfb Oeffnen, Texteingabe, Tastaturnavigation, Mauswahl, Scrollen,
   Abbruch, Fokusverlust und erfolgreichen Start einer Testanwendung pruefen.
+- [x] Native Popups duerfen Tastatur und Maus nicht serverweit exklusiv
+  greifen. Unter Xvfb pruefen, dass ein zweiter X11-Client waehrend des offenen
+  Menues weiterhin Eingaben erhalten kann und der vorherige Fokus beim
+  Schliessen wiederhergestellt wird.
+- [x] Ueber GIO gestartete Desktop-Anwendungen duerfen Sliverbars fuer die
+  Ereignisschleife blockierte Signalmaske nicht erben. Insbesondere muss ein
+  Terminal nach dem Ende von Vim, Neovim oder einer anderen Terminalanwendung
+  selbststaendig schliessen.
 - [ ] Sicherstellen, dass der Suchtext niemals als Befehl ausgefuehrt wird und
   nur ein ausgewaehlter registrierter Desktop-Eintrag gestartet werden kann.
 - [x] Internen und externen Launcher-Modus sowie Konfigurationsbeispiele in der
@@ -426,6 +434,10 @@ Hibernate und Suspend-then-Hibernate getrennte, korrekt benannte Aktionen sein.
   ohne den Testrechner herunterzufahren oder schlafen zu legen.
 - [ ] Unter Xvfb Menueposition, Glyphs und Beschriftungen, Tastatur- und
   Mauswahl, sichere Vorbelegung, Abbruch und Bestaetigung testen.
+- [x] Beim direkten Wiederverwenden des Popup-Fensters fuer die
+  Power-Bestaetigung ein verspaetetes `FocusOut` des vorherigen Menues
+  ignorieren, solange das neu geoeffnete Popup bereits wieder fokussiert ist.
+  Einen echten Fokusverlust weiterhin als Abbruch behandeln.
 - [ ] Sicherstellen, dass eine nicht angebotene Aktion weder sichtbar noch ueber
   manipulierte interne Action-Strings ausloesbar ist.
 - [ ] Inhibitor-Konflikt, Freigabe, fehlgeschlagene Schlafanforderung und
@@ -471,6 +483,10 @@ Rofi- oder `systemctl`-Aufrufe ausgefuehrt.
   als Pfadbestandteil.
 - [x] Beim Wechsel sofort vorhandene Cache-Daten des neuen Orts anzeigen und
   anschliessend eine Aktualisierung im Hintergrund anstossen.
+- [x] Laufzeitsignale vor der Initialisierung von GIO-/D-Bus-Hilfsthreads
+  blockieren, damit das Ende des Wetter-Workers sicher ueber `signalfd`
+  verarbeitet, der neue Cache eingelesen und der Wetterblock neu gezeichnet
+  wird.
 - [x] Sicherstellen, dass eine noch laufende Anfrage fuer den vorherigen Ort
   nach einem Wechsel nicht die Anzeige oder den Cache des neuen Orts
   ueberschreibt.
@@ -491,7 +507,7 @@ Rofi- oder `systemctl`-Aufrufe ausgefuehrt.
 - [x] Das Vorhersagebild weiterhin ueber `xdg-open` oeffnen, damit die fuer den
   MIME-Typ `image/png` konfigurierte Standardanwendung verwendet wird. Keinen
   Bildbetrachter wie `sxiv` direkt in Sliverbar fest eintragen.
-- [ ] Einen Test ergaenzen, der fuer die Vorschau den Aufruf des
+- [x] Einen Test ergaenzen, der fuer die Vorschau den Aufruf des
   Standardprogramm-Dispatchers prueft, ohne eine konkrete Desktop-Anwendung
   vorauszusetzen.
 - [x] Festlegen, ob der Mittelklick weiterhin eine Wetterbenachrichtigung zeigt
@@ -516,8 +532,8 @@ asynchron und stellt die Auswahl beim naechsten Start optional wieder her.
 
 ## Feature: Standby- und Hibernation-Inhibitor
 
-- [x] Einen eigenen Inhibitor-Block rechts vom Wetterblock und links vom
-  Batterie- beziehungsweise AC-Block einfuegen.
+- [x] Einen eigenen Inhibitor-Block links vom Wetterblock einfuegen; Wetter und
+  Batterie- beziehungsweise AC-Anzeige folgen rechts davon.
 - [x] Als Glyph die Kaffeetasse `` (Font Awesome/Nerd Font, U+F0F4)
   verwenden. Fuer Installationen ohne Icon-Schrift einen darstellbaren
   Text- oder Unicode-Fallback vorsehen.
@@ -526,6 +542,8 @@ asynchron und stellt die Auswahl beim naechsten Start optional wieder her.
   `color_inhibit_inactive` und `color_inhibit_active` anbieten.
 - [x] Linksklick schaltet die Inhibition fuer Standby und Hibernation ein
   beziehungsweise aus.
+- [x] Nach erfolgreichem Umschalten per Desktop-Notification erklaeren, ob
+  automatischer Standby und Hibernation blockiert oder wieder erlaubt sind.
 - [x] Den Zustand aus dem tatsaechlichen Inhibitor-Prozess beziehungsweise
   dessen gehaltenem Lock ableiten, nicht nur aus einem internen booleschen
   Schalter.
@@ -589,7 +607,7 @@ Block unsichtbar und der restliche Panelbetrieb bleibt unbeeintraechtigt.
   Datum und Uhrzeit weiterhin normal anzeigen. Ein Klick darf weder den
   Panelbetrieb beeintraechtigen noch ein beliebiges Ersatzprogramm starten.
 - [x] Den erkannten Kalenderhandler in `sliverbar --diagnose` ausgeben.
-- [ ] Tests fuer Standardhandler, konfigurierten Fallback, fehlenden Handler,
+- [x] Tests fuer Standardhandler, konfigurierten Fallback, fehlenden Handler,
   fehlerhaften Start und korrekt gerouteten Linksklick hinzufuegen.
 - [x] Klickfunktion und Konfigurationsalternative in der README dokumentieren.
 
@@ -613,6 +631,38 @@ Zeitblock sichtbar und Sliverbar laeuft unveraendert weiter.
 
 Akzeptanzkriterium: Ein ueber CMake installiertes Sliverbar kann ohne Wechsel in
 das Quell- oder Buildverzeichnis gestartet werden.
+
+## Feature: Automatische Systemsprache Deutsch/Englisch
+
+- [x] Mit `language=auto` die bevorzugte Systemsprache aus `LANGUAGE`,
+  `LC_MESSAGES`, `LC_ALL` und `LANG` bestimmen. Technische Werte wie `C` und
+  `POSIX` duerfen eine darunter konfigurierte Sprache nicht verdecken.
+- [x] Bei einer deutschen Locale deutsche Texte verwenden; fuer jede andere
+  Locale aus Platz- und Wartungsgruenden auf Englisch zurueckfallen.
+- [x] Die Sprachwahl auf Launcher-Suche, leere Trefferlisten, Power-Aktionen,
+  Bestaetigungen, Inhibitor-Benachrichtigungen, Datumsabkuerzungen und
+  Wetterdienst anwenden.
+- [x] Explizite Overrides `language=de` und `language=en` weiterhin erlauben
+  und andere Werte bei `--check-config` ablehnen.
+- [x] Automatische Erkennung sowie deutsche und englische Power-Texte testen
+  und das Verhalten in der README dokumentieren.
+
+Akzeptanzkriterium: Auf einem deutsch konfigurierten System verwendet Sliverbar
+deutsche Oberflaechentexte. Auf allen anderen Systemsprachen erscheinen
+englische Texte, ohne dass weitere Uebersetzungen eingebaut werden muessen.
+
+## Bugfix: Battery-Block ohne erkannte Batterie
+
+- [x] Im automatischen Modus den Battery-Block anzeigen, sobald das Linux-
+  Power-Supply-Subsystem vorhanden ist.
+- [x] Ohne `BAT*`-Eintrag den vorhandenen AC-Zustand anzeigen, statt den
+  gesamten Block auszublenden.
+- [x] Den Block nur dann automatisch ausblenden, wenn das Power-Supply-
+  Subsystem auf dem System nicht verfuegbar ist.
+- [x] Das Verhalten mit und ohne lesbares Power-Supply-Subsystem testen.
+
+Akzeptanzkriterium: Auf einem Desktop ohne Batterie steht `AC` im Battery-
+Block; auf einem Notebook werden Ladezustand und Ladestatus angezeigt.
 
 ## Prioritaet 4: Mehrmonitor- und Multi-Screen-Unterstuetzung
 
@@ -642,15 +692,42 @@ erscheinen und reserviert nur dort den korrekten Bildschirmbereich.
   portabel bezeichnen, wenn sie nur fuer x86-64 erzeugt wurden.
 - [x] Paketgenerierung ueber bestehende CMake-Installationsmetadaten und CPack
   vorbereiten, zunaechst beispielsweise fuer `.deb` und spaeter optional `.rpm`.
+- [x] Ein Debian-Paket nur dann tatsaechlich erzeugen, wenn der Benutzer den
+  Paketbau ausdruecklich anfordert. Allgemeine Builds, Tests, Deployments oder
+  Release-Vorbereitungen gelten nicht als implizite Anforderung zum Paketbau.
 - [ ] Vor jeder Paketproduktion Binary, Konfigurationsdateien,
   Laufzeitbibliotheken, Paketinhalt und Versionsmetadaten pruefen.
-- [ ] Vor einer tatsaechlichen Paketproduktion die laut Projektanweisung
-  erforderliche Security-Scan-Bestaetigung beim Benutzer einholen.
+- [ ] Vor jeder Paketproduktion die laut Projektanweisung eingeschraenkte,
+  rein statische Sicherheitspruefung ohne Trusted Access durchfuehren.
 
 Akzeptanzkriterium: Ein erzeugtes Paket installiert Binary und
 Beispielkonfiguration an standardkonforme Orte, deklariert alle
 Laufzeitabhaengigkeiten und laesst sich auf einer sauberen Zielinstallation
 starten.
+
+## Verbindliche Funktions- und Produktionsvalidierung
+
+- [ ] Die gesamte sichtbare und klickbare Funktionalitaet gruendlich testen;
+  automatisierte Logik- und Xvfb-Tests durch manuelle Integrationspruefungen
+  ergaenzen, wo Benutzerinteraktion, Desktop-Integration oder Darstellung
+  betroffen sind.
+- [ ] Sliverbar nach Moeglichkeit direkt mit dem bisherigen `lemonbar-panel`
+  vergleichen. Dabei insbesondere Blockreihenfolge, Inhalte, Aktualisierung,
+  Klickaktionen, Menues, Farben, Abstaende, Monitorwahl, Tray und reservierten
+  Bildschirmbereich pruefen.
+- [ ] Fuer Integrations- und Darstellungspruefungen darf das Produktivsystem
+  beziehungsweise die laufende grafische Sitzung verwendet werden, sofern die
+  jeweilige Aktion fuer das System sicher ist.
+- [ ] Vorher-/Nachher-Screenshots oder parallel aufgenommene Referenzbilder von
+  `lemonbar-panel` und Sliverbar vergleichen, um visuelle Abweichungen,
+  Regressionen und noch nicht erkannte Fehler systematisch zu finden.
+- [ ] Gefundene funktionale oder visuelle Abweichungen reproduzierbar
+  dokumentieren und als konkrete offene Punkte in dieser Datei nachtragen.
+
+Akzeptanzkriterium: Die neue Sliverbar ist nicht nur durch automatisierte Tests
+abgedeckt, sondern wurde in einer realen X11-Sitzung funktional und visuell
+gegen das bisherige Panel geprueft. Relevante Abweichungen sind behoben oder als
+offene Aufgaben dokumentiert.
 
 ## Prioritaet 6: Portabilitaets- und Kompatibilitaetsmatrix
 

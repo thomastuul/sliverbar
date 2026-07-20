@@ -28,8 +28,42 @@ void moduleClock(const PanelConfig *c, PanelState *s) {
   time_t now = time(NULL);
   struct tm tm;
   localtime_r(&now, &tm);
+  static const char *const DAYS_EN[] = {
+      "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  static const char *const DAYS_DE[] = {
+      "So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"};
+  static const char *const MONTHS_EN[] = {"Jan",
+                                          "Feb",
+                                          "Mar",
+                                          "Apr",
+                                          "May",
+                                          "Jun",
+                                          "Jul",
+                                          "Aug",
+                                          "Sep",
+                                          "Oct",
+                                          "Nov",
+                                          "Dec"};
+  static const char *const MONTHS_DE[] = {"Jan",
+                                          "Feb",
+                                          "Mär",
+                                          "Apr",
+                                          "Mai",
+                                          "Jun",
+                                          "Jul",
+                                          "Aug",
+                                          "Sep",
+                                          "Okt",
+                                          "Nov",
+                                          "Dez"};
+  bool german = panelLanguageIsGerman(c);
   char d[64], text[160];
-  strftime(d, sizeof(d), "%a %b %d", &tm);
+  snprintf(d,
+           sizeof(d),
+           "%s %s %02d",
+           german ? DAYS_DE[tm.tm_wday] : DAYS_EN[tm.tm_wday],
+           german ? MONTHS_DE[tm.tm_mon] : MONTHS_EN[tm.tm_mon],
+           tm.tm_mday);
   char t[32];
   strftime(t, sizeof(t), "%T", &tm);
   snprintf(text, sizeof(text), " %s  %s", d, t);
@@ -90,6 +124,7 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
   if (c->moduleBattery == MODULE_DISABLED)
     return;
   DIR *d = opendir("/sys/class/power_supply");
+  bool powerSupplyAvailable = d != NULL;
   int sum = 0, count = 0;
   bool charging = false, full = true;
   if (d) {
@@ -118,7 +153,7 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
     }
     closedir(d);
   }
-  if (!moduleModeActive(c->moduleBattery, count > 0))
+  if (!moduleModeActive(c->moduleBattery, powerSupplyAvailable))
     return;
   char text[96];
   if (!count)
@@ -503,6 +538,30 @@ void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
   action(s->brightness, sizeof(s->brightness), 4, "brightness|up", tmp);
 }
 
+bool moduleBrightnessAdjust(const PanelConfig *c,
+                            PanelState *s,
+                            const char *operation) {
+  if (!s->brightnessInitialized || !s->brightnessOutput[0] || !operation)
+    return false;
+  int direction = 0;
+  if (!strcmp(operation, "up"))
+    direction = 1;
+  else if (!strcmp(operation, "down"))
+    direction = -1;
+  else
+    return false;
+  int target = s->brightnessPercent + direction * c->brightnessStep;
+  if (target < 5)
+    target = 5;
+  if (target > 100)
+    target = 100;
+  if (target == s->brightnessPercent)
+    return false;
+  s->brightnessPercent = target;
+  moduleBrightnessValue(c, s, target);
+  return true;
+}
+
 void moduleBrightness(const PanelConfig *c, PanelState *s) {
   s->brightness[0] = '\0';
   s->brightnessInitialized = false;
@@ -761,8 +820,8 @@ void renderPanel(const PanelState *s, char *out, size_t n) {
            s->workspace,
            s->title,
            s->screencast,
-           s->weather,
            s->inhibitor,
+           s->weather,
            s->battery,
            s->network,
            s->brightness,

@@ -10,6 +10,7 @@ RUN apt-get update \
         clang-format \
         clang-tidy \
         cmake \
+        file \
         libcairo2-dev \
         libpango1.0-dev \
         libxkbcommon-x11-dev \
@@ -17,6 +18,7 @@ RUN apt-get update \
         libxcb-randr0-dev \
         ninja-build \
         pkg-config \
+        shared-mime-info \
         xauth \
         x11-xserver-utils \
         xvfb \

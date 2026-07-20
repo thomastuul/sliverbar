@@ -1,6 +1,7 @@
 #include "app_launcher.h"
 
 #include <ctype.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -117,13 +118,31 @@ static bool desktopAvailable(const char *desktopId) {
 #endif
 }
 
+#ifdef HAVE_GIO
+static bool prepareGioLaunch(sigset_t *previousMask) {
+  sigset_t empty;
+  sigemptyset(&empty);
+  return sigprocmask(SIG_SETMASK, &empty, previousMask) == 0;
+}
+
+static void finishGioLaunch(const sigset_t *previousMask) {
+  sigprocmask(SIG_SETMASK, previousMask, NULL);
+}
+#endif
+
 static int launchDesktop(const char *desktopId) {
 #ifdef HAVE_GIO
   GDesktopAppInfo *info = g_desktop_app_info_new(desktopId);
   if (!info)
     return -1;
+  sigset_t previousMask;
+  if (!prepareGioLaunch(&previousMask)) {
+    g_object_unref(info);
+    return -1;
+  }
   GError *error = NULL;
   gboolean launched = g_app_info_launch(G_APP_INFO(info), NULL, NULL, &error);
+  finishGioLaunch(&previousMask);
   if (error) {
     logMessage("ERROR", "cannot launch %s: %s", desktopId, error->message);
     g_error_free(error);
@@ -154,8 +173,14 @@ static int launchDefaultType(const char *contentType) {
   GAppInfo *info = g_app_info_get_default_for_type(contentType, false);
   if (!info)
     return -1;
+  sigset_t previousMask;
+  if (!prepareGioLaunch(&previousMask)) {
+    g_object_unref(info);
+    return -1;
+  }
   GError *error = NULL;
   gboolean launched = g_app_info_launch(info, NULL, NULL, &error);
+  finishGioLaunch(&previousMask);
   if (error) {
     logMessage("ERROR",
                "cannot launch handler for %s: %s",
@@ -488,8 +513,14 @@ int appOpenFile(const char *path) {
   char *uri = g_filename_to_uri(path, NULL, NULL);
   if (!uri)
     return -1;
+  sigset_t previousMask;
+  if (!prepareGioLaunch(&previousMask)) {
+    g_free(uri);
+    return -1;
+  }
   GError *error = NULL;
   gboolean launched = g_app_info_launch_default_for_uri(uri, NULL, &error);
+  finishGioLaunch(&previousMask);
   if (error) {
     logMessage("ERROR", "cannot open %s: %s", path, error->message);
     g_error_free(error);

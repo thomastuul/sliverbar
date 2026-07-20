@@ -58,12 +58,58 @@ int main(int argc, char **argv) {
   CHECK(strstr(cfg.font, "Monospace") != NULL);
   CHECK(cfg.iconFont[0] == '\0');
   CHECK(strcmp(cfg.terminal, "auto") == 0);
+  CHECK(strcmp(cfg.language, "auto") == 0);
   CHECK(cfg.location[0] == '\0');
   CHECK(cfg.moduleClock == MODULE_AUTO);
   CHECK(moduleModeActive(MODULE_AUTO, true));
   CHECK(!moduleModeActive(MODULE_AUTO, false));
   CHECK(moduleModeActive(MODULE_ENABLED, false));
   CHECK(!moduleModeActive(MODULE_DISABLED, true));
+  snprintf(cfg.language, sizeof(cfg.language), "de");
+  CHECK(panelLanguageIsGerman(&cfg));
+  CHECK(strcmp(powerActionLabel(&cfg, "poweroff"), "Ausschalten") == 0);
+  snprintf(cfg.language, sizeof(cfg.language), "en");
+  CHECK(!panelLanguageIsGerman(&cfg));
+  CHECK(strcmp(powerActionLabel(&cfg, "poweroff"), "Power off") == 0);
+  snprintf(cfg.language, sizeof(cfg.language), "auto");
+
+  const char *oldLanguage = getenv("LANGUAGE");
+  const char *oldLcMessages = getenv("LC_MESSAGES");
+  const char *oldLcAll = getenv("LC_ALL");
+  const char *oldLang = getenv("LANG");
+  char oldLanguageCopy[128] = "", oldLcMessagesCopy[128] = "";
+  char oldLcAllCopy[128] = "", oldLangCopy[128] = "";
+  if (oldLanguage)
+    snprintf(oldLanguageCopy, sizeof(oldLanguageCopy), "%s", oldLanguage);
+  if (oldLcMessages)
+    snprintf(oldLcMessagesCopy, sizeof(oldLcMessagesCopy), "%s", oldLcMessages);
+  if (oldLcAll)
+    snprintf(oldLcAllCopy, sizeof(oldLcAllCopy), "%s", oldLcAll);
+  if (oldLang)
+    snprintf(oldLangCopy, sizeof(oldLangCopy), "%s", oldLang);
+  CHECK(unsetenv("LANGUAGE") == 0);
+  CHECK(unsetenv("LC_MESSAGES") == 0);
+  CHECK(setenv("LC_ALL", "C.UTF-8", 1) == 0);
+  CHECK(setenv("LANG", "de_DE.UTF-8", 1) == 0);
+  CHECK(panelLanguageIsGerman(&cfg));
+  CHECK(setenv("LANG", "et_EE.UTF-8", 1) == 0);
+  CHECK(!panelLanguageIsGerman(&cfg));
+  if (oldLanguage)
+    CHECK(setenv("LANGUAGE", oldLanguageCopy, 1) == 0);
+  else
+    CHECK(unsetenv("LANGUAGE") == 0);
+  if (oldLcMessages)
+    CHECK(setenv("LC_MESSAGES", oldLcMessagesCopy, 1) == 0);
+  else
+    CHECK(unsetenv("LC_MESSAGES") == 0);
+  if (oldLcAll)
+    CHECK(setenv("LC_ALL", oldLcAllCopy, 1) == 0);
+  else
+    CHECK(unsetenv("LC_ALL") == 0);
+  if (oldLang)
+    CHECK(setenv("LANG", oldLangCopy, 1) == 0);
+  else
+    CHECK(unsetenv("LANG") == 0);
 
   char path[] = "/tmp/sliverbar-test-XXXXXX";
   int fd = mkstemp(path);
@@ -255,21 +301,42 @@ int main(int argc, char **argv) {
   PanelState brightnessState = {0};
   moduleBrightnessValue(&cfg, &brightnessState, 42);
   CHECK(strstr(brightnessState.brightness, "  42%") != NULL);
+  brightnessState.brightnessInitialized = true;
+  strcpy(brightnessState.brightnessOutput, "DP-3");
+  brightnessState.brightnessPercent = 42;
+  cfg.brightnessStep = 1;
+  CHECK(moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
+  CHECK(moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
+  CHECK(moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
+  CHECK(brightnessState.brightnessPercent == 39);
+  CHECK(strstr(brightnessState.brightness, "  39%") != NULL);
+  CHECK(!moduleBrightnessAdjust(&cfg, &brightnessState, "invalid"));
+  brightnessState.brightnessPercent = 5;
+  CHECK(!moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
+  brightnessState.brightnessPercent = 100;
+  CHECK(!moduleBrightnessAdjust(&cfg, &brightnessState, "up"));
   moduleInhibitor(&cfg, &brightnessState, false, false);
   CHECK(brightnessState.inhibitor[0] == '\0');
   moduleInhibitor(&cfg, &brightnessState, true, false);
   CHECK(strstr(brightnessState.inhibitor, cfg.colorFree) != NULL);
   moduleInhibitor(&cfg, &brightnessState, true, true);
   CHECK(strstr(brightnessState.inhibitor, cfg.colorWarning) != NULL);
+  PanelState batteryState = {0};
+  moduleBattery(&cfg, &batteryState);
+  if (access("/sys/class/power_supply", R_OK) == 0)
+    CHECK(batteryState.battery[0] != '\0');
 
   PanelState state = {0};
   strcpy(state.launcher, "L");
   strcpy(state.workspace, "W");
   strcpy(state.title, "T");
+  strcpy(state.inhibitor, "I");
+  strcpy(state.weather, "R");
+  strcpy(state.battery, "B");
   strcpy(state.clock, "C");
   char rendered[128];
   renderPanel(&state, rendered, sizeof(rendered));
-  CHECK(strcmp(rendered, "%{l}LW%{c}T%{r}C\n") == 0);
+  CHECK(strcmp(rendered, "%{l}LW%{c}T%{r}IRBC\n") == 0);
 
   char ssid[128];
   int strength;

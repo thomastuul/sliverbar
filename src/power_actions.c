@@ -9,29 +9,41 @@
 #include <gio/gio.h>
 #endif
 
-#ifdef HAVE_GIO
 typedef struct {
   const char *id;
   const char *glyph;
-  const char *label;
+  const char *labelEn;
+  const char *labelDe;
   const char *canMethod;
   const char *method;
 } PowerDefinition;
 
 static const PowerDefinition DEFINITIONS[] = {
-    {"lock", "", "Lock screen", NULL, "LockSessions"},
-    {"suspend", "", "Suspend", "CanSuspend", "Suspend"},
-    {"hibernate", "", "Hibernate", "CanHibernate", "Hibernate"},
+    {"lock", "", "Lock screen", "Bildschirm sperren", NULL, "LockSessions"},
+    {"suspend", "", "Suspend", "Standby", "CanSuspend", "Suspend"},
+    {"hibernate",
+     "",
+     "Hibernate",
+     "Ruhezustand",
+     "CanHibernate",
+     "Hibernate"},
     {"suspend_then_hibernate",
      " ",
      "Suspend, then hibernate",
+     "Standby, dann Ruhezustand",
      "CanSuspendThenHibernate",
      "SuspendThenHibernate"},
-    {"hybrid_sleep", "", "Hybrid sleep", "CanHybridSleep", "HybridSleep"},
-    {"reboot", "", "Restart", "CanReboot", "Reboot"},
-    {"poweroff", "", "Power off", "CanPowerOff", "PowerOff"},
+    {"hybrid_sleep",
+     "",
+     "Hybrid sleep",
+     "Hybrider Schlafmodus",
+     "CanHybridSleep",
+     "HybridSleep"},
+    {"reboot", "", "Restart", "Neustart", "CanReboot", "Reboot"},
+    {"poweroff", "", "Power off", "Ausschalten", "CanPowerOff", "PowerOff"},
 };
 
+#ifdef HAVE_GIO
 static GDBusProxy *loginProxy(void) {
   GError *error = NULL;
   GDBusProxy *proxy =
@@ -136,8 +148,18 @@ bool powerActionAllowed(const char *selection, const char *id) {
   return false;
 }
 
-size_t
-powerActionList(const char *selection, PowerAction *actions, size_t capacity) {
+const char *powerActionLabel(const PanelConfig *config, const char *id) {
+  for (size_t i = 0; i < sizeof(DEFINITIONS) / sizeof(DEFINITIONS[0]); i++)
+    if (!strcmp(id, DEFINITIONS[i].id))
+      return panelLanguageIsGerman(config) ? DEFINITIONS[i].labelDe
+                                           : DEFINITIONS[i].labelEn;
+  return id;
+}
+
+size_t powerActionList(const PanelConfig *config,
+                       const char *selection,
+                       PowerAction *actions,
+                       size_t capacity) {
   if (!actions || capacity == 0)
     return 0;
 #ifdef HAVE_GIO
@@ -180,12 +202,14 @@ powerActionList(const char *selection, PowerAction *actions, size_t capacity) {
     snprintf(actions[count].label,
              sizeof(actions[count].label),
              "%s",
-             definition->label);
+             panelLanguageIsGerman(config) ? definition->labelDe
+                                           : definition->labelEn);
     count++;
   }
   g_object_unref(proxy);
   return count;
 #else
+  (void)config;
   (void)selection;
   (void)capacity;
   return 0;

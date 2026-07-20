@@ -15,8 +15,9 @@ are detected dynamically and executed without a shell: optional `bspc`,
 user.
 
 The native binary is dynamically linked and requires glibc plus XCB, Cairo,
-Pango/PangoCairo, GLib/GIO, and Fontconfig. RandR and `xkbcommon-x11` are used
-when present at build time for monitor handling and keyboard-driven popups.
+Pango/PangoCairo, GLib/GIO, Fontconfig, and the shared MIME database provided
+by `shared-mime-info`. RandR and `xkbcommon-x11` are used when present at build
+time for monitor handling and keyboard-driven popups.
 Development headers and analysis tools are needed only in the container. A
 build without native XCB development libraries still provides configuration,
 diagnostic, and version commands, but it cannot start a panel.
@@ -56,7 +57,8 @@ ctest --test-dir build/local --output-on-failure
 Sanitizers can be enabled with `-DSLIVERBAR_SANITIZERS=ON`. Install with
 `cmake --install build/local`. CPack metadata for a Debian package uses those
 same install rules. Package production is deliberately not part of a routine
-build because the project requires an explicitly approved security scan first.
+build because it first requires a restricted, read-only security review. A full
+Codex Security scan remains optional and requires explicit user approval.
 
 The native release is dynamically linked. Inspect it with `ldd` before
 distributing it to another system. `-DSLIVERBAR_WITH_XCB=OFF` intentionally
@@ -261,16 +263,22 @@ single-location form. Empty, duplicate, overlong, or unsafe IDs fail
 JSON and PNG caches are isolated by safe ID below
 `$XDG_CACHE_HOME/sliverbar/weather`.
 
+`language=auto` selects German when the system language is German and English
+for every other system language. The same selection is used for Sliverbar's
+menus, confirmations, notifications, clock abbreviations, and weather service.
+Explicit `language=de` and `language=en` overrides remain available.
+
 Weather mouse bindings are: left opens the native location list when multiple
 locations exist, middle refreshes immediately, and right opens the forecast PNG
 with the registered default image handler. Existing cache data for a newly
 selected location appears before its asynchronous refresh.
 
-The coffee-cup block between weather and battery toggles a real
+The coffee-cup block immediately before weather toggles a real
 `systemd-inhibit --what=sleep` lock. Inactive uses `color_free`, active uses
 `color_warning`, and installations without an icon font use the Unicode coffee
-cup. The block is hidden when `systemd-inhibit` is unavailable. Its state is not
-restored after restarting Sliverbar.
+cup. A desktop notification explains whether automatic standby and hibernation
+are currently blocked or allowed. The block is hidden when `systemd-inhibit`
+is unavailable. Its state is not restored after restarting Sliverbar.
 
 ### Network signal
 

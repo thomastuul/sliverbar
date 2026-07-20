@@ -410,25 +410,25 @@ static int setVolume(const PanelConfig *c, const char *op) {
   return runCapture(av, ignored, sizeof(ignored), 1500);
 }
 
-static int setBrightness(const PanelConfig *c, PanelState *s, const char *op) {
+static int applyBrightness(PanelState *s) {
   if (!s->brightnessInitialized || !*s->brightnessOutput)
     return -1;
-  int target = s->brightnessPercent +
-               (!strcmp(op, "up") ? c->brightnessStep : -c->brightnessStep);
-  if (target < 5)
-    target = 5;
-  if (target > 100)
-    target = 100;
   char value[32];
-  snprintf(value, sizeof(value), "%.2f", (double)target / 100.0);
+  snprintf(value, sizeof(value), "%.2f", (double)s->brightnessPercent / 100.0);
   char *outv[] = {
       "xrandr", "--output", s->brightnessOutput, "--brightness", value, NULL};
   char ignored[128];
-  if (runCapture(outv, ignored, sizeof(ignored), 1500))
-    return -1;
-  s->brightnessPercent = target;
-  moduleBrightnessValue(c, s, target);
-  return 0;
+  return runCapture(outv, ignored, sizeof(ignored), 1500);
+}
+
+static int scheduleBrightness(const PanelConfig *c,
+                              PanelState *s,
+                              const char *operation,
+                              int timerFd) {
+  if (!moduleBrightnessAdjust(c, s, operation))
+    return 0;
+  struct itimerspec debounce = {{0, 0}, {0, 75000000}};
+  return timerfd_settime(timerFd, 0, &debounce, NULL);
 }
 
 static void refreshWeather(const PanelConfig *c) {
@@ -443,7 +443,7 @@ static void refreshWeather(const PanelConfig *c) {
            sizeof(url),
            "https://wttr.in/%s?format=j1&lang=%s",
            location,
-           c->language);
+           panelLanguage(c));
   char data[32768];
   char *av[] = {
       "curl", "-fsSL", "--connect-timeout", "3", "--max-time", "15", url, NULL};
@@ -472,7 +472,7 @@ static void refreshWeatherImage(const PanelConfig *c) {
            sizeof(url),
            "https://v2.wttr.in/%s.png?lang=%s&m&2",
            location,
-           c->language);
+           panelLanguage(c));
   if (joinPath(tmp, sizeof(tmp), c->weatherImage, ".tmp"))
     return;
   snprintf(parent, sizeof(parent), "%s", c->weatherImage);
@@ -575,8 +575,10 @@ static int openApplicationLauncher(NativePopup *popup) {
 static int openPowerMenu(NativePopup *popup, const PanelConfig *config) {
   PowerAction actions[16];
   PopupItem items[16] = {0};
-  size_t count = powerActionList(
-      config->powerActions, actions, sizeof(actions) / sizeof(actions[0]));
+  size_t count = powerActionList(config,
+                                 config->powerActions,
+                                 actions,
+                                 sizeof(actions) / sizeof(actions[0]));
   if (count > sizeof(actions) / sizeof(actions[0]))
     count = sizeof(actions) / sizeof(actions[0]);
   for (size_t i = 0; i < count; i++) {
@@ -604,17 +606,24 @@ static bool sleepPowerAction(const char *id) {
 }
 
 static int openPowerConfirmation(NativePopup *popup,
+                                 const PanelConfig *config,
                                  const char *id,
                                  bool inhibitorConflict) {
   PopupItem items[2] = {0};
-  snprintf(items[0].label, sizeof(items[0].label), "Cancel");
+  bool german = panelLanguageIsGerman(config);
+  snprintf(items[0].label,
+           sizeof(items[0].label),
+           "%s",
+           german ? "Abbrechen" : "Cancel");
   snprintf(items[0].search, sizeof(items[0].search), "cancel no");
   snprintf(items[0].action, sizeof(items[0].action), "power_cancel|cancel");
   snprintf(items[1].label,
            sizeof(items[1].label),
-           "%s%s",
-           inhibitorConflict ? "Release inhibitor and " : "Confirm ",
-           id);
+           german ? "%s%s bestätigen" : "%s%s",
+           inhibitorConflict
+               ? (german ? "Inhibitor lösen und " : "Release inhibitor and ")
+               : (german ? "" : "Confirm "),
+           powerActionLabel(config, id));
   snprintf(items[1].search, sizeof(items[1].search), "confirm yes %s", id);
   snprintf(items[1].action, sizeof(items[1].action), "power_confirm|%.31s", id);
   return nativePopupOpen(popup, items, 2, false, true);
@@ -651,10 +660,35 @@ restartWeather(PanelConfig *config, PanelState *state, pid_t *weatherPid) {
   *weatherPid = startWeatherRefresh(config);
 }
 
+static void notifyInhibitorState(const PanelConfig *config, bool active) {
+  if (!commandExists("notify-send"))
+    return;
+  bool german = panelLanguageIsGerman(config);
+  char *arguments[] = {
+      "notify-send",
+      active
+          ? (german ? "Standby-Sperre aktiviert" : "Sleep inhibition enabled")
+          : (german ? "Standby-Sperre deaktiviert"
+                    : "Sleep inhibition disabled"),
+      active ? (german ? "Automatischer Standby und Ruhezustand "
+                         "sind blockiert, bis die Kaffeetasse "
+                         "deaktiviert oder Sliverbar beendet wird."
+                       : "Automatic standby and hibernation are "
+                         "blocked until the coffee-cup inhibitor "
+                         "is disabled or Sliverbar exits.")
+             : (german ? "Automatischer Standby und Ruhezustand "
+                         "sind wieder erlaubt."
+                       : "Automatic standby and hibernation are "
+                         "allowed again."),
+      NULL};
+  spawnDetached(arguments);
+}
+
 static void doAction(PanelConfig *c,
                      PanelState *s,
                      const char *line,
                      bool *volumeDirty,
+                     int brightnessTimerFd,
                      WorkspaceBackend *workspaceBackend,
                      NativePopup *popup,
                      pid_t *weatherPid,
@@ -676,9 +710,11 @@ static void doAction(PanelConfig *c,
   } else if (!strcmp(kind, "workspace") && arg) {
     workspaceBackendSwitch(workspaceBackend, arg);
   } else if (!strcmp(kind, "inhibitor") && arg && !strcmp(arg, "toggle")) {
-    inhibitorToggle(inhibitor);
-    moduleInhibitor(
-        c, s, inhibitorAvailable(inhibitor), inhibitorActive(inhibitor));
+    if (!inhibitorToggle(inhibitor)) {
+      bool active = inhibitorActive(inhibitor);
+      moduleInhibitor(c, s, inhibitorAvailable(inhibitor), active);
+      notifyInhibitorState(c, active);
+    }
   } else if (!strcmp(kind, "terminal") && arg) {
     char *av[] = {arg, NULL};
     appLaunchTerminal(c, av);
@@ -702,7 +738,7 @@ static void doAction(PanelConfig *c,
       powerActionExecute(arg);
     else
       openPowerConfirmation(
-          popup, arg, sleepPowerAction(arg) && inhibitorActive(inhibitor));
+          popup, c, arg, sleepPowerAction(arg) && inhibitorActive(inhibitor));
   } else if (!strcmp(kind, "power_confirm") && arg) {
     if (!powerActionAllowed(c->powerActions, arg) ||
         !powerActionAllowed(c->powerConfirm, arg))
@@ -760,7 +796,9 @@ static void doAction(PanelConfig *c,
   } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "refresh")) {
     restartWeather(c, s, weatherPid);
   } else if (!strcmp(kind, "brightness") && arg) {
-    setBrightness(c, s, arg);
+    if (scheduleBrightness(c, s, arg, brightnessTimerFd))
+      logMessage(
+          "ERROR", "cannot schedule brightness update: %s", strerror(errno));
   }
 }
 #endif
@@ -853,6 +891,8 @@ static int runDiagnostics(const PanelConfig *config,
   char description[512];
   appDescribeTerminal(config, description, sizeof(description));
   printf("terminal=%s\n", description);
+  printf("language.mode=%s\n", config->language);
+  printf("language=%s\n", panelLanguage(config));
   for (AppRole role = APP_ROLE_SYSTEM_MONITOR; role <= APP_ROLE_CALENDAR;
        role++) {
     appDescribeRole(config, role, description, sizeof(description));
@@ -864,7 +904,8 @@ static int runDiagnostics(const PanelConfig *config,
            config->weatherLocations[config->activeWeatherLocation].id);
   PowerAction powerActions[16];
   size_t powerActionCount =
-      powerActionList(config->powerActions,
+      powerActionList(config,
+                      config->powerActions,
                       powerActions,
                       sizeof(powerActions) / sizeof(powerActions[0]));
   printf("power.backend=%s\n",
@@ -1100,6 +1141,15 @@ int main(int argc, char **argv) {
              "native X11 support was unavailable when this binary was built");
   return 1;
 #else
+  sigset_t signals;
+  sigemptyset(&signals);
+  sigaddset(&signals, SIGINT);
+  sigaddset(&signals, SIGTERM);
+  sigaddset(&signals, SIGCHLD);
+  if (sigprocmask(SIG_BLOCK, &signals, NULL)) {
+    logMessage("ERROR", "cannot block runtime signals: %s", strerror(errno));
+    return 1;
+  }
   const char *runtime = getenv("XDG_RUNTIME_DIR");
   char fallback[64];
   if (!runtime) {
@@ -1386,9 +1436,64 @@ int main(int argc, char **argv) {
         {.label = "First", .search = "first", .action = "popup|first"},
         {.label = "Second", .search = "second", .action = "popup|second"},
     };
+    xcb_set_input_focus(x,
+                        XCB_INPUT_FOCUS_POINTER_ROOT,
+                        nativePanelWindow(panel),
+                        XCB_CURRENT_TIME);
+    xcb_flush(x);
     if (!nativePopupAvailable(smokePopup) ||
         nativePopupOpen(smokePopup, popupItems, 2, false, false)) {
       logMessage("ERROR", "native popup smoke-test could not open");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    xcb_get_input_focus_reply_t *popupFocus =
+        xcb_get_input_focus_reply(x, xcb_get_input_focus(x), NULL);
+    xcb_connection_t *inputProbe = xcb_connect(NULL, NULL);
+    xcb_grab_keyboard_reply_t *keyboardProbe = NULL;
+    xcb_grab_pointer_reply_t *pointerProbe = NULL;
+    if (popupFocus && popupFocus->focus != nativePanelWindow(panel) &&
+        inputProbe && !xcb_connection_has_error(inputProbe)) {
+      keyboardProbe =
+          xcb_grab_keyboard_reply(inputProbe,
+                                  xcb_grab_keyboard(inputProbe,
+                                                    0,
+                                                    screen->root,
+                                                    XCB_CURRENT_TIME,
+                                                    XCB_GRAB_MODE_ASYNC,
+                                                    XCB_GRAB_MODE_ASYNC),
+                                  NULL);
+      pointerProbe =
+          xcb_grab_pointer_reply(inputProbe,
+                                 xcb_grab_pointer(inputProbe,
+                                                  0,
+                                                  screen->root,
+                                                  XCB_EVENT_MASK_BUTTON_PRESS,
+                                                  XCB_GRAB_MODE_ASYNC,
+                                                  XCB_GRAB_MODE_ASYNC,
+                                                  XCB_WINDOW_NONE,
+                                                  XCB_CURSOR_NONE,
+                                                  XCB_CURRENT_TIME),
+                                 NULL);
+    }
+    bool inputAvailable = keyboardProbe && pointerProbe &&
+                          keyboardProbe->status == XCB_GRAB_STATUS_SUCCESS &&
+                          pointerProbe->status == XCB_GRAB_STATUS_SUCCESS;
+    if (inputProbe && !xcb_connection_has_error(inputProbe)) {
+      xcb_ungrab_keyboard(inputProbe, XCB_CURRENT_TIME);
+      xcb_ungrab_pointer(inputProbe, XCB_CURRENT_TIME);
+      xcb_flush(inputProbe);
+    }
+    free(pointerProbe);
+    free(keyboardProbe);
+    if (inputProbe)
+      xcb_disconnect(inputProbe);
+    free(popupFocus);
+    if (!inputAvailable) {
+      logMessage("ERROR", "native popup monopolized global input");
       nativePopupDestroy(smokePopup);
       nativePanelDestroy(panel);
       xcb_disconnect(x);
@@ -1417,6 +1522,59 @@ int main(int argc, char **argv) {
       close(lock);
       return 1;
     }
+    xcb_get_input_focus_reply_t *restoredFocus =
+        xcb_get_input_focus_reply(x, xcb_get_input_focus(x), NULL);
+    bool focusRestored =
+        restoredFocus && restoredFocus->focus == nativePanelWindow(panel);
+    free(restoredFocus);
+    if (!focusRestored) {
+      logMessage("ERROR", "native popup did not restore input focus");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    if (nativePopupOpen(smokePopup, popupItems, 2, false, false)) {
+      logMessage("ERROR", "native popup smoke-test could not reopen");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    xcb_focus_out_event_t staleFocusOut = {0};
+    staleFocusOut.response_type = XCB_FOCUS_OUT;
+    if (!nativePopupHandleEvent(smokePopup,
+                                (xcb_generic_event_t *)&staleFocusOut,
+                                popupAction,
+                                sizeof(popupAction),
+                                &popupRedraw) ||
+        !nativePopupIsOpen(smokePopup)) {
+      logMessage("ERROR", "stale focus event closed a reopened popup");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    xcb_set_input_focus(x,
+                        XCB_INPUT_FOCUS_POINTER_ROOT,
+                        nativePanelWindow(panel),
+                        XCB_CURRENT_TIME);
+    if (!nativePopupHandleEvent(smokePopup,
+                                (xcb_generic_event_t *)&staleFocusOut,
+                                popupAction,
+                                sizeof(popupAction),
+                                &popupRedraw) ||
+        nativePopupIsOpen(smokePopup)) {
+      logMessage("ERROR", "real focus loss did not close native popup");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
     nativePopupDestroy(smokePopup);
     usleep(100000);
     nativePanelDestroy(panel);
@@ -1434,18 +1592,15 @@ int main(int argc, char **argv) {
   PowerAction availablePowerActions[16];
   cfg.internalPowerAvailable =
       nativePopupAvailable(popup) &&
-      powerActionList(cfg.powerActions,
+      powerActionList(&cfg,
+                      cfg.powerActions,
                       availablePowerActions,
                       sizeof(availablePowerActions) /
                           sizeof(availablePowerActions[0])) > 0;
-  sigset_t signals;
-  sigemptyset(&signals);
-  sigaddset(&signals, SIGINT);
-  sigaddset(&signals, SIGTERM);
-  sigaddset(&signals, SIGCHLD);
-  sigprocmask(SIG_BLOCK, &signals, NULL);
   int sfd = signalfd(-1, &signals, SFD_CLOEXEC | SFD_NONBLOCK);
   int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
+  int brightnessTfd =
+      timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
   struct itimerspec tick = {{1, 0}, {0, 1}};
   timerfd_settime(tfd, 0, &tick, NULL);
   WorkspaceBackend *workspaceBackend = workspaceBackendCreate(x, root, &cfg);
@@ -1491,7 +1646,7 @@ int main(int argc, char **argv) {
         {tfd, POLLIN, 0},
         {sfd, POLLIN, 0},
         {workspaceBackendPollFd(workspaceBackend), POLLIN, 0},
-        {-1, 0, 0},
+        {brightnessTfd, POLLIN, 0},
         {xfd, POLLIN, 0},
         {networkEvents.readFd, POLLIN, 0},
         {titleRoot.readFd, POLLIN, 0},
@@ -1596,6 +1751,7 @@ int main(int argc, char **argv) {
                      &state,
                      action,
                      &vd,
+                     brightnessTfd,
                      workspaceBackend,
                      popup,
                      &weatherPid,
@@ -1609,6 +1765,7 @@ int main(int argc, char **argv) {
                    &state,
                    action,
                    &vd,
+                   brightnessTfd,
                    workspaceBackend,
                    popup,
                    &weatherPid,
@@ -1649,6 +1806,16 @@ int main(int argc, char **argv) {
       if (vd) {
         moduleVolume(&cfg, &state);
         vd = false;
+        dirty = true;
+      }
+    }
+    if (fds[3].revents & POLLIN) {
+      uint64_t expirations;
+      if (read(brightnessTfd, &expirations, sizeof(expirations)) ==
+              (ssize_t)sizeof(expirations) &&
+          applyBrightness(&state)) {
+        logMessage("ERROR", "brightness update failed");
+        moduleBrightness(&cfg, &state);
         dirty = true;
       }
     }
@@ -1703,6 +1870,7 @@ int main(int argc, char **argv) {
     }
   }
   close(tfd);
+  close(brightnessTfd);
   close(sfd);
   if (weatherPid > 0) {
     kill(weatherPid, SIGTERM);

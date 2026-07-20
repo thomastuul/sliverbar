@@ -21,6 +21,7 @@
       "binaryDir": "${sourceDir}/build/container-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "/usr",
         "SLIVERBAR_WITH_XCB": "ON"
       }
     },
