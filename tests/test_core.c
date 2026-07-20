@@ -310,6 +310,10 @@ int main(int argc, char **argv) {
   CHECK(moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
   CHECK(brightnessState.brightnessPercent == 39);
   CHECK(strstr(brightnessState.brightness, "  39%") != NULL);
+  brightnessState.brightnessUpdatePending = true;
+  CHECK(!moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
+  CHECK(brightnessState.brightnessPercent == 39);
+  brightnessState.brightnessUpdatePending = false;
   CHECK(!moduleBrightnessAdjust(&cfg, &brightnessState, "invalid"));
   brightnessState.brightnessPercent = 5;
   CHECK(!moduleBrightnessAdjust(&cfg, &brightnessState, "down"));

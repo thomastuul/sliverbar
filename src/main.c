@@ -428,7 +428,12 @@ static int scheduleBrightness(const PanelConfig *c,
   if (!moduleBrightnessAdjust(c, s, operation))
     return 0;
   struct itimerspec debounce = {{0, 0}, {0, 75000000}};
-  return timerfd_settime(timerFd, 0, &debounce, NULL);
+  if (timerfd_settime(timerFd, 0, &debounce, NULL)) {
+    moduleBrightness(c, s);
+    return -1;
+  }
+  s->brightnessUpdatePending = true;
+  return 0;
 }
 
 static void refreshWeather(const PanelConfig *c) {
@@ -1812,11 +1817,13 @@ int main(int argc, char **argv) {
     if (fds[3].revents & POLLIN) {
       uint64_t expirations;
       if (read(brightnessTfd, &expirations, sizeof(expirations)) ==
-              (ssize_t)sizeof(expirations) &&
-          applyBrightness(&state)) {
-        logMessage("ERROR", "brightness update failed");
-        moduleBrightness(&cfg, &state);
-        dirty = true;
+          (ssize_t)sizeof(expirations)) {
+        state.brightnessUpdatePending = false;
+        if (applyBrightness(&state)) {
+          logMessage("ERROR", "brightness update failed");
+          moduleBrightness(&cfg, &state);
+          dirty = true;
+        }
       }
     }
     if (fds[5].revents & POLLIN) {

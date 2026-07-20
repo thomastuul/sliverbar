@@ -64,6 +64,7 @@ typedef struct {
   bool cpuInitialized;
   int brightnessPercent;
   bool brightnessInitialized;
+  bool brightnessUpdatePending;
   bool focusedWorkspaceKnown;
   bool focusedWorkspaceOccupied;
   char brightnessOutput[64];

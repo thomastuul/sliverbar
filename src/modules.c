@@ -541,7 +541,8 @@ void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
 bool moduleBrightnessAdjust(const PanelConfig *c,
                             PanelState *s,
                             const char *operation) {
-  if (!s->brightnessInitialized || !s->brightnessOutput[0] || !operation)
+  if (!s->brightnessInitialized || s->brightnessUpdatePending ||
+      !s->brightnessOutput[0] || !operation)
     return false;
   int direction = 0;
   if (!strcmp(operation, "up"))
