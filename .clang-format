@@ -3,10 +3,11 @@ UseTab: Never
 TabWidth: 8
 Language: Cpp
 Standard: Latest
-ColumnLimit: 100
-IndentWidth: 4
+ColumnLimit: 80
+IndentWidth: 2
 ContinuationIndentWidth: 4
 BreakBeforeBraces: Attach
+SpaceBeforeParens: ControlStatements
 AllowShortBlocksOnASingleLine: Never
 AllowShortFunctionsOnASingleLine: None
 AllowShortIfStatementsOnASingleLine: Never
