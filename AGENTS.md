@@ -11,7 +11,7 @@
 For normal C changes, use the reproducible container workflow from the
 repository root:
 
-    ./lemonbar_c/scripts/container-build.sh
+    ./scripts/container-build.sh
 
 This is the authoritative validation before committing C changes. It must run:
 
@@ -27,17 +27,31 @@ Set `CONTAINER_ENGINE=podman` to use rootless Podman instead of Docker.
 
 ## Deployment validation
 
-- Before every deployment, CTest must pass and the `codex-security` plugin's
-  `$security-scan` workflow must be run against the repository.
-- Treat both CTest and Codex Security as mandatory deployment gates. Do not
-  deploy while either check has failed or has not been completed.
+- Before every deployment, CTest must pass.
+- Run the `codex-security` plugin's `$security-scan` workflow only when the
+  user explicitly requests a security scan or when the software is about to be
+  packaged for distribution. Before starting such a scan, ask the user for
+  confirmation and wait for approval.
+- Do not represent a security scan as a routine prerequisite for every build or
+  deployment when neither condition applies.
+
+## Packaging
+
+- The project should remain packageable as a distributable Linux package, for
+  example a Debian package (`.deb`). Prefer integrating package generation
+  through the existing CMake/install metadata (such as CPack) rather than
+  duplicating build definitions.
+- Before producing a package, verify the installed binary, configuration files,
+  runtime-library requirements, package contents, and version metadata. Ask the
+  user for confirmation before running the required Security Scan for that
+  packaging operation.
 
 A local build may be used for quick iteration:
 
-    cmake -S lemonbar_c -B build/lemonbar_c \
+    cmake -S . -B build/local \
       -DCMAKE_BUILD_TYPE=RelWithDebInfo
-    cmake --build build/lemonbar_c --parallel
-    ctest --test-dir build/lemonbar_c --output-on-failure
+    cmake --build build/local --parallel
+    ctest --test-dir build/local --output-on-failure
 
 ## Containerized development
 

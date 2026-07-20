@@ -21,7 +21,7 @@
       "binaryDir": "${sourceDir}/build/container-release",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "LEMONBAR_C_WITH_XCB": "ON"
+        "SLIVERBAR_WITH_XCB": "ON"
       }
     },
     {
@@ -30,7 +30,7 @@
       "binaryDir": "${sourceDir}/build/container-fallback",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
-        "LEMONBAR_C_WITH_XCB": "OFF"
+        "SLIVERBAR_WITH_XCB": "OFF"
       }
     },
     {
@@ -39,8 +39,8 @@
       "binaryDir": "${sourceDir}/build/container-sanitizers",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
-        "LEMONBAR_C_SANITIZERS": "ON",
-        "LEMONBAR_C_WITH_XCB": "ON"
+        "SLIVERBAR_SANITIZERS": "ON",
+        "SLIVERBAR_WITH_XCB": "ON"
       }
     }
   ],

@@ -1,5 +1,5 @@
-#ifndef LEMONBAR_C_NATIVE_TRAY_H
-#define LEMONBAR_C_NATIVE_TRAY_H
+#ifndef SLIVERBAR_NATIVE_TRAY_H
+#define SLIVERBAR_NATIVE_TRAY_H
 
 #include <stdbool.h>
 #include <stddef.h>

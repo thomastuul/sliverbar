@@ -18,7 +18,7 @@ cmake --preset container-sanitizers
 cmake --build --preset container-sanitizers
 ctest --preset container-sanitizers
 
-expected="lemonbar-panel $(cat VERSION)"
-actual="$(build/container-release/lemonbar-panel --version)"
+expected="sliverbar $(cat VERSION)"
+actual="$(build/container-release/sliverbar --version)"
 test "$actual" = "$expected"
 printf '%s\n' "$actual"

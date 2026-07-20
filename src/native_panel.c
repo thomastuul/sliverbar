@@ -174,7 +174,7 @@ static void configureEwmh(NativePanel *panel) {
                       8,
                       (uint32_t)strlen(panel->config.wmName),
                       panel->config.wmName);
-  const char CLASS_NAME[] = "lemonbar-c\0panel\0";
+  const char CLASS_NAME[] = "sliverbar\0Sliverbar\0";
   xcb_change_property(connection,
                       XCB_PROP_MODE_REPLACE,
                       window,

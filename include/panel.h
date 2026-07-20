@@ -1,5 +1,5 @@
-#ifndef LEMONBAR_C_PANEL_H
-#define LEMONBAR_C_PANEL_H
+#ifndef SLIVERBAR_PANEL_H
+#define SLIVERBAR_PANEL_H
 
 #include <stdbool.h>
 #include <stddef.h>
