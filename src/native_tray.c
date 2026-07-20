@@ -209,7 +209,19 @@ NativeTray *nativeTrayCreate(xcb_connection_t *connection,
   tray->iconHeight = panelHeight > 2 ? panelHeight - 2 : panelHeight;
   tray->gap = 1;
   tray->visible = true;
-  tray->selection = internAtom(connection, "_NET_SYSTEM_TRAY_S0");
+  unsigned screenNumber = 0;
+  xcb_screen_iterator_t screens =
+      xcb_setup_roots_iterator(xcb_get_setup(connection));
+  while (screens.rem && screens.data->root != screen->root) {
+    xcb_screen_next(&screens);
+    screenNumber++;
+  }
+  char selectionName[64];
+  snprintf(selectionName,
+           sizeof(selectionName),
+           "_NET_SYSTEM_TRAY_S%u",
+           screenNumber);
+  tray->selection = internAtom(connection, selectionName);
   tray->opcode = internAtom(connection, "_NET_SYSTEM_TRAY_OPCODE");
   tray->manager = internAtom(connection, "MANAGER");
   tray->xembed = internAtom(connection, "_XEMBED");
@@ -248,7 +260,8 @@ NativeTray *nativeTrayCreate(xcb_connection_t *connection,
   free(owner);
   if (!available) {
     logMessage("WARNING",
-               "another system tray manager already owns _NET_SYSTEM_TRAY_S0");
+               "another system tray manager already owns %s",
+               selectionName);
     return tray;
   }
   tray->available = true;

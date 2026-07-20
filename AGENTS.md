@@ -28,10 +28,8 @@ Set `CONTAINER_ENGINE=podman` to use rootless Podman instead of Docker.
 ## Deployment validation
 
 - Before every deployment, CTest must pass.
-- Run the `codex-security` plugin's `$security-scan` workflow only when the
-  user explicitly requests a security scan or when the software is about to be
-  packaged for distribution. Before starting such a scan, ask the user for
-  confirmation and wait for approval.
+- A full `codex-security` `$security-scan`, including validation and attack-path
+  analysis, is optional and may only be started after explicit user approval.
 - Do not represent a security scan as a routine prerequisite for every build or
   deployment when neither condition applies.
 
@@ -42,9 +40,12 @@ Set `CONTAINER_ENGINE=podman` to use rootless Podman instead of Docker.
   through the existing CMake/install metadata (such as CPack) rather than
   duplicating build definitions.
 - Before producing a package, verify the installed binary, configuration files,
-  runtime-library requirements, package contents, and version metadata. Ask the
-  user for confirmation before running the required Security Scan for that
-  packaging operation.
+  runtime-library requirements, package contents, and version metadata.
+- Before producing a distributable package, perform a restricted, read-only
+  security review of the repository. Do not request Trusted Access for Cyber.
+  Limit the review to threat modeling and static source inspection; do not
+  generate exploits or proof-of-concept attacks, perform offensive testing, or
+  access external systems.
 
 A local build may be used for quick iteration:
 

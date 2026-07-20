@@ -1,5 +1,7 @@
 #include "panel.h"
 
+#include "app_launcher.h"
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -20,18 +22,63 @@ action(char *out, size_t n, int button, const char *command, const char *body) {
 }
 
 void moduleClock(const PanelConfig *c, PanelState *s) {
+  s->clock[0] = '\0';
+  if (!moduleModeActive(c->moduleClock, true))
+    return;
   time_t now = time(NULL);
   struct tm tm;
   localtime_r(&now, &tm);
+  static const char *const DAYS_EN[] = {
+      "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"};
+  static const char *const DAYS_DE[] = {
+      "So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"};
+  static const char *const MONTHS_EN[] = {"Jan",
+                                          "Feb",
+                                          "Mar",
+                                          "Apr",
+                                          "May",
+                                          "Jun",
+                                          "Jul",
+                                          "Aug",
+                                          "Sep",
+                                          "Oct",
+                                          "Nov",
+                                          "Dec"};
+  static const char *const MONTHS_DE[] = {"Jan",
+                                          "Feb",
+                                          "Mär",
+                                          "Apr",
+                                          "Mai",
+                                          "Jun",
+                                          "Jul",
+                                          "Aug",
+                                          "Sep",
+                                          "Okt",
+                                          "Nov",
+                                          "Dez"};
+  bool german = panelLanguageIsGerman(c);
   char d[64], text[160];
-  strftime(d, sizeof(d), "%a %b %d", &tm);
+  snprintf(d,
+           sizeof(d),
+           "%s %s %02d",
+           german ? DAYS_DE[tm.tm_wday] : DAYS_EN[tm.tm_wday],
+           german ? MONTHS_DE[tm.tm_mon] : MONTHS_EN[tm.tm_mon],
+           tm.tm_mday);
   char t[32];
   strftime(t, sizeof(t), "%T", &tm);
   snprintf(text, sizeof(text), " %s  %s", d, t);
-  block(s->clock, sizeof(s->clock), c->colorBg, c->colorClock, text);
+  char body[256];
+  block(body, sizeof(body), c->colorBg, c->colorClock, text);
+  if (appRoleAvailable(c, APP_ROLE_CALENDAR))
+    action(s->clock, sizeof(s->clock), 1, "role|calendar", body);
+  else
+    snprintf(s->clock, sizeof(s->clock), "%s", body);
 }
 
 void moduleCpu(const PanelConfig *c, PanelState *s) {
+  s->cpu[0] = '\0';
+  if (!moduleModeActive(c->moduleCpu, true))
+    return;
   FILE *f = fopen("/proc/stat", "r");
   unsigned long long u, n, sy, id, io, ir, si, st;
   if (!f || fscanf(f,
@@ -66,11 +113,18 @@ void moduleCpu(const PanelConfig *c, PanelState *s) {
     padding = 0;
   snprintf(text, sizeof(text), " %s%%%*s", usage, padding, "");
   block(body, sizeof(body), c->colorBg, c->colorSystem, text);
-  action(s->cpu, sizeof(s->cpu), 1, "terminal|btop", body);
+  if (appRoleAvailable(c, APP_ROLE_SYSTEM_MONITOR))
+    action(s->cpu, sizeof(s->cpu), 1, "role|system_monitor", body);
+  else
+    snprintf(s->cpu, sizeof(s->cpu), "%s", body);
 }
 
 void moduleBattery(const PanelConfig *c, PanelState *s) {
+  s->battery[0] = '\0';
+  if (c->moduleBattery == MODULE_DISABLED)
+    return;
   DIR *d = opendir("/sys/class/power_supply");
+  bool powerSupplyAvailable = d != NULL;
   int sum = 0, count = 0;
   bool charging = false, full = true;
   if (d) {
@@ -99,6 +153,8 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
     }
     closedir(d);
   }
+  if (!moduleModeActive(c->moduleBattery, powerSupplyAvailable))
+    return;
   char text[96];
   if (!count)
     snprintf(text, sizeof(text), " AC");
@@ -130,21 +186,42 @@ void moduleScreencast(const PanelConfig *c,
                       const char *runtime) {
   char p[PANEL_PATH_MAX];
   snprintf(p, sizeof(p), "%s/screencast.pid", runtime);
+  bool active = access(p, F_OK) == 0;
+  s->screencast[0] = '\0';
+  if (!moduleModeActive(c->moduleScreencast, active))
+    return;
   block(s->screencast,
         sizeof(s->screencast),
         c->colorBg,
-        access(p, F_OK) == 0 ? c->colorCritical : c->colorFree,
+        active ? c->colorCritical : c->colorFree,
         "壘");
 }
 
 void moduleVolume(const PanelConfig *c, PanelState *s) {
-  char out[2048];
-  char *argv[] = {"amixer", "get", "Master", NULL};
-  if (runCapture(argv, out, sizeof(out), 1000))
+  s->volume[0] = '\0';
+  bool pactl = commandExists("pactl");
+  bool amixer = commandExists("amixer");
+  if (!moduleModeActive(c->moduleVolume, pactl || amixer) ||
+      (!pactl && !amixer))
     return;
+  char out[2048];
+  bool muted = false;
+  if (pactl) {
+    char *volumeArgv[] = {"pactl", "get-sink-volume", "@DEFAULT_SINK@", NULL};
+    if (runCapture(volumeArgv, out, sizeof(out), 1000))
+      return;
+    char muteOutput[128];
+    char *muteArgv[] = {"pactl", "get-sink-mute", "@DEFAULT_SINK@", NULL};
+    if (!runCapture(muteArgv, muteOutput, sizeof(muteOutput), 1000))
+      muted = strstr(muteOutput, "yes") != NULL;
+  } else {
+    char *volumeArgv[] = {"amixer", "get", "Master", NULL};
+    if (runCapture(volumeArgv, out, sizeof(out), 1000))
+      return;
+    muted = strstr(out, "[off]") != NULL;
+  }
   char *p = strchr(out, '%');
   int level = 0;
-  bool muted = strstr(out, "[off]") != NULL;
   if (p) {
     char *q = p;
     while (q > out && q[-1] >= '0' && q[-1] <= '9')
@@ -169,7 +246,10 @@ void moduleVolume(const PanelConfig *c, PanelState *s) {
         c->colorBg,
         muted ? c->colorMuted : c->colorVolume,
         text);
-  action(tmp, sizeof(tmp), 1, "terminal|pulsemixer", body);
+  if (appRoleAvailable(c, APP_ROLE_VOLUME_SETTINGS))
+    action(tmp, sizeof(tmp), 1, "role|volume_settings", body);
+  else
+    snprintf(tmp, sizeof(tmp), "%s", body);
   char middle[768];
   action(middle, sizeof(middle), 3, "volume|toggle", tmp);
   char down[1024];
@@ -221,57 +301,185 @@ int parseNmcliWifi(const char *output,
   return -1;
 }
 
-static int wirelessStrength(const char *interface) {
-  FILE *file = fopen("/proc/net/wireless", "r");
-  if (!file)
+int wifiQualityPercent(double quality) {
+  if (quality != quality || quality < 0.0)
     return -1;
-  char line[512], name[128];
-  double quality;
-  int strength = -1;
-  while (fgets(line, sizeof(line), file)) {
-    if (sscanf(line, " %127[^:]: %*s %lf", name, &quality) == 2 &&
-        !strcmp(name, interface)) {
-      strength = (int)(quality * 100.0 / 70.0);
-      if (strength > 100)
-        strength = 100;
-      if (strength < 0)
-        strength = 0;
-      break;
+  if (quality >= 70.0)
+    return 100;
+  return (int)((quality * 100.0 + 35.0) / 70.0);
+}
+
+int parseDefaultRouteInterface(const char *routes,
+                               char *interface,
+                               size_t interfaceSize) {
+  if (!routes || !interface || interfaceSize == 0)
+    return -1;
+  const char *line = strchr(routes, '\n');
+  line = line ? line + 1 : routes;
+  while (*line) {
+    const char *end = strchr(line, '\n');
+    size_t length = end ? (size_t)(end - line) : strlen(line);
+    char copy[512], name[128];
+    if (length >= sizeof(copy))
+      length = sizeof(copy) - 1;
+    memcpy(copy, line, length);
+    copy[length] = '\0';
+    unsigned long destination, gateway, flags;
+    int fields =
+        sscanf(copy, "%127s %lx %lx %lx", name, &destination, &gateway, &flags);
+    (void)gateway;
+    if (fields == 4 && destination == 0 && (flags & 1UL)) {
+      snprintf(interface, interfaceSize, "%s", name);
+      return 0;
     }
+    line = end ? end + 1 : line + length;
   }
-  fclose(file);
+  interface[0] = '\0';
+  return -1;
+}
+
+static void defaultRouteInterface(char *interface, size_t interfaceSize) {
+  char routes[16384];
+  interface[0] = '\0';
+  if (!readTextFile("/proc/net/route", routes, sizeof(routes)))
+    parseDefaultRouteInterface(routes, interface, interfaceSize);
+}
+
+int parseWirelessQuality(const char *contents,
+                         const char *interface,
+                         double *quality,
+                         int *percent) {
+  if (!contents || !interface || !quality || !percent)
+    return -1;
+  const char *line = contents;
+  while (*line) {
+    const char *end = strchr(line, '\n');
+    size_t length = end ? (size_t)(end - line) : strlen(line);
+    char copy[512], name[128];
+    if (length >= sizeof(copy))
+      length = sizeof(copy) - 1;
+    memcpy(copy, line, length);
+    copy[length] = '\0';
+    double value = 0.0;
+    if (sscanf(copy, " %127[^:]: %*s %lf", name, &value) == 2 &&
+        !strcmp(name, interface)) {
+      int converted = wifiQualityPercent(value);
+      if (converted < 0)
+        return -1;
+      *quality = value;
+      *percent = converted;
+      return 0;
+    }
+    line = end ? end + 1 : line + length;
+  }
+  return -1;
+}
+
+static int wirelessStrength(const char *interface, double *rawValue) {
+  char contents[16384];
+  int strength = -1;
+  if (readTextFile("/proc/net/wireless", contents, sizeof(contents)) ||
+      parseWirelessQuality(contents, interface, rawValue, &strength))
+    return -1;
   return strength;
 }
 
+static void findNetworkInterfaces(bool *ethernet,
+                                  bool *wifi,
+                                  char *wifiInterface,
+                                  size_t wifiInterfaceSize) {
+  *ethernet = false;
+  *wifi = false;
+  wifiInterface[0] = '\0';
+  char preferredInterface[256];
+  defaultRouteInterface(preferredInterface, sizeof(preferredInterface));
+  DIR *directory = opendir("/sys/class/net");
+  if (!directory)
+    return;
+  struct dirent *entry;
+  while ((entry = readdir(directory))) {
+    if (entry->d_name[0] == '.' || !strcmp(entry->d_name, "lo"))
+      continue;
+    char path[PANEL_PATH_MAX], state[32];
+    snprintf(path, sizeof(path), "/sys/class/net/%s/operstate", entry->d_name);
+    if (readTextFile(path, state, sizeof(state)) || strcmp(state, "up") != 0)
+      continue;
+    snprintf(path, sizeof(path), "/sys/class/net/%s/wireless", entry->d_name);
+    char phy[PANEL_PATH_MAX];
+    snprintf(phy, sizeof(phy), "/sys/class/net/%s/phy80211", entry->d_name);
+    if (!access(path, F_OK) || !access(phy, F_OK)) {
+      *wifi = true;
+      if (!wifiInterface[0] || !strcmp(entry->d_name, preferredInterface))
+        snprintf(wifiInterface, wifiInterfaceSize, "%s", entry->d_name);
+    } else {
+      snprintf(path, sizeof(path), "/sys/class/net/%s/device", entry->d_name);
+      if (!access(path, F_OK))
+        *ethernet = true;
+    }
+  }
+  closedir(directory);
+}
+
+int wifiDiagnostic(WifiDiagnostic *diagnostic) {
+  if (!diagnostic)
+    return -1;
+  memset(diagnostic, 0, sizeof(*diagnostic));
+  diagnostic->percent = -1;
+  bool ethernet = false, wifi = false;
+  findNetworkInterfaces(
+      &ethernet, &wifi, diagnostic->interface, sizeof(diagnostic->interface));
+  (void)ethernet;
+  if (!wifi)
+    return -1;
+  double rawValue = 0.0;
+  int kernelStrength = wirelessStrength(diagnostic->interface, &rawValue);
+  if (kernelStrength >= 0) {
+    snprintf(diagnostic->backend, sizeof(diagnostic->backend), "kernel-proc");
+    diagnostic->rawValue = rawValue;
+    diagnostic->percent = kernelStrength;
+    return 0;
+  }
+  if (!commandExists("nmcli"))
+    return -1;
+  char output[2048], ssid[128];
+  int nmcliStrength = -1;
+  char *arguments[] = {"nmcli",
+                       "--terse",
+                       "--escape",
+                       "no",
+                       "--fields",
+                       "IN-USE,SSID,SIGNAL",
+                       "device",
+                       "wifi",
+                       "list",
+                       "--rescan",
+                       "no",
+                       "ifname",
+                       diagnostic->interface,
+                       NULL};
+  if (runCapture(arguments, output, sizeof(output), 1500) ||
+      parseNmcliWifi(output, ssid, sizeof(ssid), &nmcliStrength))
+    return -1;
+  snprintf(diagnostic->backend, sizeof(diagnostic->backend), "nmcli");
+  diagnostic->rawValue = nmcliStrength;
+  diagnostic->percent = nmcliStrength;
+  return 0;
+}
+
 void moduleNetwork(const PanelConfig *c, PanelState *s) {
-  DIR *d = opendir("/sys/class/net");
+  s->network[0] = '\0';
+  if (c->moduleNetwork == MODULE_DISABLED)
+    return;
   bool eth = false, wifi = false;
   char ssid[128] = "-", wifiInterface[256] = "";
   int strength = -1;
-  if (d) {
-    struct dirent *e;
-    while ((e = readdir(d))) {
-      if (e->d_name[0] == '.' || !strcmp(e->d_name, "lo"))
-        continue;
-      char p[PANEL_PATH_MAX], v[32];
-      snprintf(p, sizeof(p), "/sys/class/net/%s/operstate", e->d_name);
-      if (readTextFile(p, v, sizeof(v)) || strcmp(v, "up") != 0)
-        continue;
-      snprintf(p, sizeof(p), "/sys/class/net/%s/wireless", e->d_name);
-      char phy[PANEL_PATH_MAX];
-      snprintf(phy, sizeof(phy), "/sys/class/net/%s/phy80211", e->d_name);
-      if (!access(p, F_OK) || !access(phy, F_OK)) {
-        wifi = true;
-        if (!wifiInterface[0])
-          snprintf(wifiInterface, sizeof(wifiInterface), "%s", e->d_name);
-      } else {
-        snprintf(p, sizeof(p), "/sys/class/net/%s/device", e->d_name);
-        if (!access(p, F_OK))
-          eth = true;
-      }
-    }
-    closedir(d);
-  }
+  findNetworkInterfaces(&eth, &wifi, wifiInterface, sizeof(wifiInterface));
+  if (!moduleModeActive(c->moduleNetwork, eth || wifi))
+    return;
+  double rawKernelStrength = 0.0;
+  int kernelStrength =
+      wifi ? wirelessStrength(wifiInterface, &rawKernelStrength) : -1;
+  int nmcliStrength = -1;
   if (wifi && commandExists("nmcli")) {
     char out[2048];
     char *av[] = {"nmcli",
@@ -288,12 +496,10 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
                   "ifname",
                   wifiInterface,
                   NULL};
-    if (runCapture(av, out, sizeof(out), 1500) ||
-        parseNmcliWifi(out, ssid, sizeof(ssid), &strength))
-      strength = wirelessStrength(wifiInterface);
-  } else if (wifi) {
-    strength = wirelessStrength(wifiInterface);
+    if (!runCapture(av, out, sizeof(out), 1500))
+      parseNmcliWifi(out, ssid, sizeof(ssid), &nmcliStrength);
   }
+  strength = kernelStrength >= 0 ? kernelStrength : nmcliStrength;
   char text[256], body[512], safe[128], wifiText[64] = "";
   shellQuoteAction(ssid, safe, sizeof(safe));
   if (wifi && strength >= 0) {
@@ -315,10 +521,16 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
   char cmd[180];
   snprintf(cmd, sizeof(cmd), "notify|Network|%s", safe);
   action(tmp, sizeof(tmp), 3, cmd, body);
-  action(s->network, sizeof(s->network), 1, "terminal|nmtui", tmp);
+  if (appRoleAvailable(c, APP_ROLE_NETWORK_SETTINGS))
+    action(s->network, sizeof(s->network), 1, "role|network_settings", tmp);
+  else
+    snprintf(s->network, sizeof(s->network), "%s", tmp);
 }
 
 void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
+  s->brightness[0] = '\0';
+  if (!moduleModeActive(c->moduleBrightness, true))
+    return;
   char text[64], body[256], tmp[512];
   snprintf(text, sizeof(text), " %3d%%", pct);
   block(body, sizeof(body), c->colorBg, c->colorBrightness, text);
@@ -326,7 +538,38 @@ void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
   action(s->brightness, sizeof(s->brightness), 4, "brightness|up", tmp);
 }
 
+bool moduleBrightnessAdjust(const PanelConfig *c,
+                            PanelState *s,
+                            const char *operation) {
+  if (!s->brightnessInitialized || s->brightnessUpdatePending ||
+      !s->brightnessOutput[0] || !operation)
+    return false;
+  int direction = 0;
+  if (!strcmp(operation, "up"))
+    direction = 1;
+  else if (!strcmp(operation, "down"))
+    direction = -1;
+  else
+    return false;
+  int target = s->brightnessPercent + direction * c->brightnessStep;
+  if (target < 5)
+    target = 5;
+  if (target > 100)
+    target = 100;
+  if (target == s->brightnessPercent)
+    return false;
+  s->brightnessPercent = target;
+  moduleBrightnessValue(c, s, target);
+  return true;
+}
+
 void moduleBrightness(const PanelConfig *c, PanelState *s) {
+  s->brightness[0] = '\0';
+  s->brightnessInitialized = false;
+  s->brightnessOutput[0] = '\0';
+  if (!moduleModeActive(c->moduleBrightness, commandExists("xrandr")) ||
+      !commandExists("xrandr"))
+    return;
   char query[16384], output[64] = "";
   char *qv[] = {"xrandr", "--query", NULL};
   if (!runCapture(qv, query, sizeof(query), 1200)) {
@@ -378,6 +621,9 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   char data[32768] = "";
   if (*c->weatherCache)
     readTextFile(c->weatherCache, data, sizeof(data));
+  s->weather[0] = '\0';
+  if (!moduleModeActive(c->moduleWeather, c->location[0] && data[0]))
+    return;
   int rain = 0, min = 0, max = 0;
   char *p = strstr(data, "\"chanceofrain\"");
   for (int i = 0; p && i < 8; i++, p = strstr(p + 1, "\"chanceofrain\"")) {
@@ -389,11 +635,18 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   min = jsonInteger(p);
   p = strstr(data, "\"maxtempC\"");
   max = jsonInteger(p);
-  char text[96], body[256], tmp[512];
+  char text[96], body[256], right[512], middle[768];
   snprintf(text, sizeof(text), "爫%3d%% %3d° %3d°", rain, min, max);
   block(body, sizeof(body), c->colorBg, c->colorWeather, text);
-  action(tmp, sizeof(tmp), 3, "weather|notify", body);
-  action(s->weather, sizeof(s->weather), 1, "weather|open", tmp);
+  if (*c->weatherImage && appCanOpenFile(c->weatherImage))
+    action(right, sizeof(right), 3, "weather|open", body);
+  else
+    snprintf(right, sizeof(right), "%s", body);
+  action(middle, sizeof(middle), 2, "weather|refresh", right);
+  if (c->weatherLocationCount > 1)
+    action(s->weather, sizeof(s->weather), 1, "weather|locations", middle);
+  else
+    snprintf(s->weather, sizeof(s->weather), "%s", middle);
 }
 
 void moduleWorkspace(const PanelConfig *c, PanelState *s, const char *report) {
@@ -466,22 +719,109 @@ void moduleWorkspace(const PanelConfig *c, PanelState *s, const char *report) {
   strncat(s->workspace, tail, sizeof(s->workspace) - strlen(s->workspace) - 1);
 }
 
+void moduleWorkspaceEwmh(const PanelConfig *c,
+                         PanelState *s,
+                         const WorkspaceSnapshot *snapshot) {
+  s->workspace[0] = '\0';
+  s->focusedWorkspaceKnown = false;
+  s->focusedWorkspaceOccupied = false;
+  if (!snapshot || snapshot->count == 0 ||
+      snapshot->count > PANEL_WORKSPACE_MAX ||
+      snapshot->current >= snapshot->count)
+    return;
+  s->focusedWorkspaceKnown = true;
+  s->focusedWorkspaceOccupied = snapshot->occupied[snapshot->current];
+  for (size_t i = 0; i < snapshot->count; i++) {
+    bool focused = i == snapshot->current;
+    const char *fg = c->colorFree;
+    const char *bg = c->colorFreeBg;
+    if (focused && snapshot->urgent[i]) {
+      fg = c->colorFocusedUrgent;
+      bg = c->colorFocusedUrgentBg;
+    } else if (focused && snapshot->occupied[i]) {
+      fg = c->colorFocusedOccupied;
+      bg = c->colorFocusedOccupiedBg;
+    } else if (focused) {
+      fg = c->colorFocusedFree;
+      bg = c->colorFocusedFreeBg;
+    } else if (snapshot->urgent[i]) {
+      fg = c->colorUrgent;
+      bg = c->colorUrgentBg;
+    } else if (snapshot->occupied[i]) {
+      fg = c->colorOccupied;
+      bg = c->colorOccupiedBg;
+    }
+    char fallback[16], label[128], part[512];
+    snprintf(fallback, sizeof(fallback), "%u", (unsigned)i + 1U);
+    shellQuoteAction(snapshot->names[i][0] ? snapshot->names[i] : fallback,
+                     label,
+                     sizeof(label));
+    snprintf(part,
+             sizeof(part),
+             "%%{F%s}%%{B%s}%%{U%s}%%{+u}%%{A1:workspace|%zu:} %s "
+             "%%{A}%%{B-}%%{F-}%%{-u}",
+             fg,
+             bg,
+             c->colorNetwork,
+             i,
+             label);
+    strncat(
+        s->workspace, part, sizeof(s->workspace) - strlen(s->workspace) - 1);
+  }
+}
+
 void moduleStatic(const PanelConfig *c, PanelState *s) {
   char body[128];
-  block(body, sizeof(body), c->colorBg, c->colorFg, "");
-  action(s->launcher, sizeof(s->launcher), 1, "launcher", body);
-  block(body, sizeof(body), c->colorBg, c->colorFg, "");
-  action(s->power, sizeof(s->power), 1, "power", body);
+  s->launcher[0] = '\0';
+  s->power[0] = '\0';
+  bool internalLauncher = strcmp(c->applicationLauncher, "external") != 0 &&
+                          strcmp(c->applicationLauncher, "disabled") != 0 &&
+                          c->internalLauncherAvailable;
+  bool externalLauncher = strcmp(c->applicationLauncher, "internal") != 0 &&
+                          strcmp(c->applicationLauncher, "disabled") != 0 &&
+                          appSpecAvailable(c, c->launcher);
+  if (moduleModeActive(c->moduleLauncher,
+                       internalLauncher || externalLauncher)) {
+    block(body, sizeof(body), c->colorBg, c->colorFg, "");
+    action(s->launcher, sizeof(s->launcher), 1, "launcher", body);
+  }
+  bool internalPower = strcmp(c->powerMenuMode, "external") != 0 &&
+                       strcmp(c->powerMenuMode, "disabled") != 0 &&
+                       c->internalPowerAvailable;
+  bool externalPower = strcmp(c->powerMenuMode, "internal") != 0 &&
+                       strcmp(c->powerMenuMode, "disabled") != 0 &&
+                       appSpecAvailable(c, c->powerMenu);
+  if (moduleModeActive(c->modulePower, internalPower || externalPower)) {
+    block(body, sizeof(body), c->colorBg, c->colorFg, "");
+    action(s->power, sizeof(s->power), 1, "power", body);
+  }
+}
+
+void moduleInhibitor(const PanelConfig *c,
+                     PanelState *s,
+                     bool available,
+                     bool active) {
+  s->inhibitor[0] = '\0';
+  if (!moduleModeActive(c->moduleInhibitor, available) || !available)
+    return;
+  char body[128];
+  block(body,
+        sizeof(body),
+        c->colorBg,
+        active ? c->colorWarning : c->colorFree,
+        c->iconFont[0] ? "" : "☕");
+  action(s->inhibitor, sizeof(s->inhibitor), 1, "inhibitor|toggle", body);
 }
 
 void renderPanel(const PanelState *s, char *out, size_t n) {
   snprintf(out,
            n,
-           "%%{l}%s%s%%{c}%s%%{r}%s%s%s%s%s%s%s%s%s%s\n",
+           "%%{l}%s%s%%{c}%s%%{r}%s%s%s%s%s%s%s%s%s%s%s\n",
            s->launcher,
            s->workspace,
            s->title,
            s->screencast,
+           s->inhibitor,
            s->weather,
            s->battery,
            s->network,

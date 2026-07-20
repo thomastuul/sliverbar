@@ -2,9 +2,11 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 
 static void copy(char *dst, size_t size, const char *src) {
   if (size > 0)
@@ -13,14 +15,25 @@ static void copy(char *dst, size_t size, const char *src) {
 
 void configDefaults(PanelConfig *c) {
   memset(c, 0, sizeof(*c));
-  copy(c->font, sizeof(c->font), "JetBrainsMono:style=Regular:size=13");
-  copy(c->iconFont,
-       sizeof(c->iconFont),
-       "Hack Nerd Font Mono:style=Regular:size=13");
+  copy(c->font, sizeof(c->font), "Monospace:style=Regular:size=11");
   copy(c->wmName, sizeof(c->wmName), "sliverbar");
-  copy(c->terminal, sizeof(c->terminal), "alacritty");
-  copy(c->location, sizeof(c->location), "München");
-  copy(c->language, sizeof(c->language), "de");
+  copy(c->monitor, sizeof(c->monitor), "primary");
+  copy(c->workspaceBackend, sizeof(c->workspaceBackend), "auto");
+  copy(c->applicationLauncher, sizeof(c->applicationLauncher), "auto");
+  copy(c->powerMenuMode, sizeof(c->powerMenuMode), "auto");
+  copy(c->powerActions,
+       sizeof(c->powerActions),
+       "lock,suspend,hibernate,suspend_then_hibernate,hybrid_sleep,reboot,"
+       "poweroff");
+  copy(c->powerConfirm,
+       sizeof(c->powerConfirm),
+       "suspend,hibernate,suspend_then_hibernate,hybrid_sleep,reboot,poweroff");
+  copy(c->terminal, sizeof(c->terminal), "auto");
+  copy(c->systemMonitor, sizeof(c->systemMonitor), "auto");
+  copy(c->networkSettings, sizeof(c->networkSettings), "auto");
+  copy(c->volumeSettings, sizeof(c->volumeSettings), "auto");
+  copy(c->calendar, sizeof(c->calendar), "auto");
+  copy(c->language, sizeof(c->language), "auto");
   copy(c->colorPanelBg, 16, "#191A21");
   copy(c->colorBg, 16, "#282A36");
   copy(c->colorFg, 16, "#ff5555");
@@ -56,6 +69,38 @@ void configDefaults(PanelConfig *c) {
   c->titleMax = 45;
 }
 
+bool moduleModeActive(ModuleMode mode, bool available) {
+  return mode == MODULE_ENABLED || (mode == MODULE_AUTO && available);
+}
+
+static int localeLanguage(const char *locale) {
+  if (!locale || !*locale || !strcmp(locale, "C") ||
+      !strncasecmp(locale, "C.", 2) || !strcmp(locale, "POSIX"))
+    return -1;
+  return !strncasecmp(locale, "de", 2) &&
+                 (!locale[2] || strchr("_.@:-", locale[2]))
+             ? 1
+             : 0;
+}
+
+const char *panelLanguage(const PanelConfig *c) {
+  if (c && !strcmp(c->language, "de"))
+    return "de";
+  if (c && !strcmp(c->language, "en"))
+    return "en";
+  const char *const VARIABLES[] = {"LANGUAGE", "LC_MESSAGES", "LC_ALL", "LANG"};
+  for (size_t i = 0; i < sizeof(VARIABLES) / sizeof(VARIABLES[0]); i++) {
+    int language = localeLanguage(getenv(VARIABLES[i]));
+    if (language >= 0)
+      return language ? "de" : "en";
+  }
+  return "en";
+}
+
+bool panelLanguageIsGerman(const PanelConfig *c) {
+  return !strcmp(panelLanguage(c), "de");
+}
+
 static char *trim(char *s) {
   while (isspace((unsigned char)*s))
     s++;
@@ -75,6 +120,42 @@ static int number(const char *s, long min, long max, long *out) {
   return 0;
 }
 
+static bool validLocationId(const char *id) {
+  if (!id || !*id)
+    return false;
+  for (const char *cursor = id; *cursor; cursor++)
+    if (!isalnum((unsigned char)*cursor) && *cursor != '_' && *cursor != '-')
+      return false;
+  return true;
+}
+
+static int addWeatherLocation(PanelConfig *c, const char *value) {
+  if (c->weatherLocationCount >= PANEL_WEATHER_LOCATION_MAX)
+    return -1;
+  char copybuf[384];
+  copy(copybuf, sizeof(copybuf), value);
+  char *first = strchr(copybuf, '|');
+  if (!first)
+    return -1;
+  *first++ = '\0';
+  char *second = strchr(first, '|');
+  if (second)
+    *second++ = '\0';
+  char *id = trim(copybuf);
+  char *label = trim(first);
+  char *query = second ? trim(second) : label;
+  if (!validLocationId(id) || !*label || !*query)
+    return -1;
+  for (size_t i = 0; i < c->weatherLocationCount; i++)
+    if (!strcmp(c->weatherLocations[i].id, id))
+      return -1;
+  WeatherLocation *location = &c->weatherLocations[c->weatherLocationCount++];
+  copy(location->id, sizeof(location->id), id);
+  copy(location->label, sizeof(location->label), label);
+  copy(location->query, sizeof(location->query), query);
+  return 0;
+}
+
 static int assign(PanelConfig *c, const char *k, const char *v) {
 #define STR(key, field)                                                        \
   do {                                                                         \
@@ -86,13 +167,74 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   STR("font", font);
   STR("icon_font", iconFont);
   STR("wm_name", wmName);
+  STR("monitor", monitor);
+  if (!strcmp(k, "workspace_backend")) {
+    if (strcmp(v, "auto") != 0 && strcmp(v, "bspwm") != 0 &&
+        strcmp(v, "ewmh") != 0 && strcmp(v, "none") != 0)
+      return -1;
+    copy(c->workspaceBackend, sizeof(c->workspaceBackend), v);
+    return 0;
+  }
+  if (!strcmp(k, "application_launcher") || !strcmp(k, "power_menu_mode")) {
+    if (strcmp(v, "auto") != 0 && strcmp(v, "internal") != 0 &&
+        strcmp(v, "external") != 0 && strcmp(v, "disabled") != 0)
+      return -1;
+    bool launcher = !strcmp(k, "application_launcher");
+    char *destination = launcher ? c->applicationLauncher : c->powerMenuMode;
+    size_t destinationSize =
+        launcher ? sizeof(c->applicationLauncher) : sizeof(c->powerMenuMode);
+    copy(destination, destinationSize, v);
+    return 0;
+  }
   STR("terminal", terminal);
+  STR("system_monitor", systemMonitor);
+  STR("network_settings", networkSettings);
+  STR("volume_settings", volumeSettings);
+  STR("calendar", calendar);
+  STR("power_actions", powerActions);
+  STR("power_confirm", powerConfirm);
   STR("location", location);
-  STR("language", language);
+  if (!strcmp(k, "weather_location"))
+    return addWeatherLocation(c, v);
+  STR("weather_default", defaultWeatherLocation);
+  if (!strcmp(k, "language")) {
+    if (strcmp(v, "auto") != 0 && strcmp(v, "de") != 0 && strcmp(v, "en") != 0)
+      return -1;
+    copy(c->language, sizeof(c->language), v);
+    return 0;
+  }
   STR("launcher", launcher);
   STR("power_menu", powerMenu);
   STR("weather_cache", weatherCache);
   STR("weather_image", weatherImage);
+#define MODULE(key, field)                                                     \
+  do {                                                                         \
+    if (!strcmp(k, "module_" key)) {                                           \
+      if (!strcmp(v, "auto"))                                                  \
+        c->field = MODULE_AUTO;                                                \
+      else if (!strcmp(v, "enabled"))                                          \
+        c->field = MODULE_ENABLED;                                             \
+      else if (!strcmp(v, "disabled"))                                         \
+        c->field = MODULE_DISABLED;                                            \
+      else                                                                     \
+        return -1;                                                             \
+      return 0;                                                                \
+    }                                                                          \
+  } while (0)
+  MODULE("clock", moduleClock);
+  MODULE("title", moduleTitle);
+  MODULE("cpu", moduleCpu);
+  MODULE("battery", moduleBattery);
+  MODULE("screencast", moduleScreencast);
+  MODULE("volume", moduleVolume);
+  MODULE("network", moduleNetwork);
+  MODULE("brightness", moduleBrightness);
+  MODULE("weather", moduleWeather);
+  MODULE("launcher", moduleLauncher);
+  MODULE("tray", moduleTray);
+  MODULE("power", modulePower);
+  MODULE("inhibitor", moduleInhibitor);
+#undef MODULE
   STR("color_panel_bg", colorPanelBg);
   STR("color_bg", colorBg);
   STR("color_fg", colorFg);
@@ -136,13 +278,34 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   NUM("volume_step", volumeStep, 1, 100);
   NUM("brightness_step", brightnessStep, 1, 100);
 #undef NUM
-  if (!strcmp(k, "weather_interval") || !strcmp(k, "network_interval") ||
-      !strcmp(k, "title_max")) {
+  if (!strcmp(k, "weather_interval")) {
+    if (number(v, LONG_MIN, LONG_MAX, &n))
+      return -1;
+    if (n < (long)PANEL_WEATHER_INTERVAL_MIN) {
+      logMessage("WARNING",
+                 "weather_interval=%ld is below the minimum of %u seconds; "
+                 "using %u seconds",
+                 n,
+                 PANEL_WEATHER_INTERVAL_MIN,
+                 PANEL_WEATHER_INTERVAL_MIN);
+      c->weatherInterval = PANEL_WEATHER_INTERVAL_MIN;
+    } else if (n > (long)PANEL_WEATHER_INTERVAL_MAX) {
+      logMessage("WARNING",
+                 "weather_interval=%ld exceeds the maximum of %u seconds; "
+                 "using %u seconds",
+                 n,
+                 PANEL_WEATHER_INTERVAL_MAX,
+                 PANEL_WEATHER_INTERVAL_MAX);
+      c->weatherInterval = PANEL_WEATHER_INTERVAL_MAX;
+    } else {
+      c->weatherInterval = (unsigned)n;
+    }
+    return 0;
+  }
+  if (!strcmp(k, "network_interval") || !strcmp(k, "title_max")) {
     if (number(v, 1, 86400, &n))
       return -1;
-    if (!strcmp(k, "weather_interval"))
-      c->weatherInterval = (unsigned)n;
-    else if (!strcmp(k, "network_interval"))
+    if (!strcmp(k, "network_interval"))
       c->networkInterval = (unsigned)n;
     else
       c->titleMax = (unsigned)n;
@@ -192,5 +355,70 @@ int configLoad(PanelConfig *c,
     rc = -1;
   }
   fclose(f);
+  const char *const POWER_LISTS[] = {c->powerActions, c->powerConfirm};
+  static const char *const POWER_IDS[] = {"lock",
+                                          "suspend",
+                                          "hibernate",
+                                          "suspend_then_hibernate",
+                                          "hybrid_sleep",
+                                          "reboot",
+                                          "poweroff"};
+  for (size_t listIndex = 0; !rc && listIndex < 2; listIndex++) {
+    char list[256];
+    copy(list, sizeof(list), POWER_LISTS[listIndex]);
+    char *save = NULL;
+    bool seen[7] = {0};
+    for (char *id = strtok_r(list, ",", &save); id;
+         id = strtok_r(NULL, ",", &save)) {
+      id = trim(id);
+      bool found = false;
+      for (size_t i = 0; i < 7; i++)
+        if (!strcmp(id, POWER_IDS[i])) {
+          if (seen[i])
+            break;
+          seen[i] = true;
+          found = true;
+          break;
+        }
+      if (!found) {
+        snprintf(error,
+                 errorSize,
+                 "%s: invalid %s",
+                 path,
+                 listIndex == 0 ? "power_actions" : "power_confirm");
+        rc = -1;
+        break;
+      }
+    }
+  }
+  if (!rc && c->weatherLocationCount) {
+    size_t selected = 0;
+    if (c->defaultWeatherLocation[0]) {
+      bool found = false;
+      for (size_t i = 0; i < c->weatherLocationCount; i++)
+        if (!strcmp(c->weatherLocations[i].id, c->defaultWeatherLocation)) {
+          selected = i;
+          found = true;
+          break;
+        }
+      if (!found) {
+        snprintf(error, errorSize, "%s: unknown weather_default", path);
+        return -1;
+      }
+    }
+    c->activeWeatherLocation = selected;
+    copy(c->location, sizeof(c->location), c->weatherLocations[selected].query);
+  } else if (!rc && c->location[0]) {
+    c->weatherLocationCount = 1;
+    copy(c->weatherLocations[0].id,
+         sizeof(c->weatherLocations[0].id),
+         "default");
+    copy(c->weatherLocations[0].label,
+         sizeof(c->weatherLocations[0].label),
+         c->location);
+    copy(c->weatherLocations[0].query,
+         sizeof(c->weatherLocations[0].query),
+         c->location);
+  }
   return rc;
 }

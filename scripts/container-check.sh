@@ -18,6 +18,10 @@ cmake --preset container-sanitizers
 cmake --build --preset container-sanitizers
 ctest --preset container-sanitizers
 
+cmake --preset container-clang
+cmake --build --preset container-clang
+ctest --preset container-clang
+
 expected="sliverbar $(cat VERSION)"
 actual="$(build/container-release/sliverbar --version)"
 test "$actual" = "$expected"
