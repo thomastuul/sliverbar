@@ -1,0 +1,696 @@
+# Aufgaben: Sliverbar als generisches X11-Panel
+
+## Zielbild
+
+Sliverbar soll auf Linux-Systemen mit X11 und einem weitgehend
+EWMH-kompatiblen Window Manager lauffaehig sein. Window-Manager-spezifische
+Integrationen duerfen Zusatzfunktionen bereitstellen, aber nicht Voraussetzung
+fuer den Start oder den grundlegenden Panelbetrieb sein.
+
+"Jedes Linux-System mit Xorg" ist dabei nicht als Garantie fuer beliebige,
+nicht EWMH-kompatible Window Manager zu verstehen. Unterstuetzte
+Laufzeitbibliotheken, Architekturen und getestete Umgebungen muessen explizit
+dokumentiert werden.
+
+## Bugfix: Unplausible WLAN-Signalstaerke
+
+Beobachtete Reproduktion am 20.07.2026:
+
+- Sliverbar verwendet bevorzugt `nmcli` und erhaelt fuer das aktive WLAN 63 %.
+- `/proc/net/wireless` meldet fuer `wlo1` eine Linkqualitaet von 51/70, also
+  gerundet etwa 73 %.
+- Conky zeigt `${wireless_link_qual_perc wlo1}` an und liegt damit in der
+  plausibleren Groessenordnung des Kernelwerts.
+- Sliverbars vorhandener Kernel-Fallback berechnet ebenfalls aus 70, wird aber
+  nur benutzt, wenn `nmcli` oder dessen Parser fehlschlaegt. Dadurch werden im
+  Normalbetrieb zwei unterschiedlich skalierte Messwerte verglichen.
+
+- [ ] Signalquelle und Bedeutung des angezeigten Prozentwerts eindeutig
+  festlegen und dokumentieren: Linkqualitaet des aktiven Interfaces oder die
+  von NetworkManager normalisierte Signalstaerke.
+- [ ] Fuer eine mit Conky vergleichbare Anzeige die Kernel-Linkqualitaet des
+  aktiven WLAN-Interfaces bevorzugen, sofern sie verfuegbar und gueltig ist.
+  `nmcli` kann weiterhin SSID und Verbindungsstatus liefern sowie als Fallback
+  dienen.
+- [ ] Bei der Umrechnung von Kernelqualitaet in Prozent korrekt runden statt
+  den Gleitkommawert nur abzuschneiden und das Ergebnis auf 0 bis 100
+  begrenzen.
+- [ ] Nicht einfach das erste aktive WLAN-Interface aus `/sys/class/net`
+  verwenden. Bei mehreren WLAN-Adaptern das tatsaechlich verbundene
+  beziehungsweise fuer die Standardroute verwendete Interface bestimmen.
+- [ ] Beruecksichtigen, dass `/proc/net/wireless` nicht mit jedem Treiber eine
+  brauchbare Qualitaet liefert. Eine priorisierte Backend-Reihenfolge mit
+  sauberem Fallback fuer Kernel/nl80211, NetworkManager und "nicht verfuegbar"
+  definieren.
+- [ ] In `sliverbar --diagnose` WLAN-Interface, verwendetes Signal-Backend,
+  Rohwert und daraus berechneten Prozentwert ausgeben.
+- [ ] Parser- und Berechnungstests mit festen Beispielen ergaenzen, darunter
+  51/70 -> 73 %, ungueltige Werte, Grenzwerte, mehrere Access Points mit
+  gleicher SSID und mehrere WLAN-Interfaces.
+- [ ] Einen Laufzeittest vorsehen, der Sliverbars Wert mit der ausgewaehlten
+  Referenzquelle vergleicht, ohne einen bestimmten Prozentwert fuer alle
+  Treiber vorauszusetzen.
+
+Akzeptanzkriterium: Sliverbar zeigt fuer das tatsaechlich aktive WLAN-Interface
+einen korrekt gerundeten Wert aus der dokumentierten, besten verfuegbaren
+Quelle. Auf dem reproduzierenden System entspricht die Anzeige bei 51/70 rund
+73 % statt dem abweichend skalierten NetworkManager-Wert von 63 %.
+
+## Prioritaet 1: Window Manager entkoppeln
+
+- [ ] Eine interne Schnittstelle fuer Window-Manager-Funktionen definieren:
+  - Arbeitsflaechen ermitteln und aktualisieren;
+  - aktive Arbeitsflaeche wechseln;
+  - belegte, fokussierte und dringende Arbeitsflaechen darstellen;
+  - Titel des aktiven Fensters verfolgen.
+- [ ] Ein generisches EWMH-Backend als Standard implementieren.
+  - Relevante Eigenschaften sind mindestens `_NET_CURRENT_DESKTOP`,
+    `_NET_NUMBER_OF_DESKTOPS`, `_NET_DESKTOP_NAMES`, `_NET_WM_DESKTOP`,
+    `_NET_ACTIVE_WINDOW` und die Dringlichkeitsinformationen der Fenster.
+- [ ] Die bestehende `bspc subscribe report`-Integration in ein optionales
+  bspwm-Backend verschieben.
+- [ ] Backend-Auswahl ueber automatische Erkennung und eine explizite
+  Konfigurationsoption erlauben.
+- [ ] Sliverbar ohne `bspc` starten und dauerhaft betreiben koennen.
+- [ ] Einen eingeschraenkten Betrieb ohne verfuegbares Workspace-Backend
+  ermoeglichen; das Workspace-Modul wird dann ausgeblendet, statt das Panel zu
+  beenden.
+- [ ] Tests fuer das EWMH-Backend, das bspwm-Backend und den Betrieb ohne
+  Workspace-Backend hinzufuegen.
+
+Akzeptanzkriterium: Sliverbar startet unter Xvfb ohne installiertes `bspc`,
+bleibt aktiv und zeigt alle vom Window Manager unabhaengigen Module an.
+
+## Prioritaet 2: Neutrale Konfiguration und optionale Module
+
+- [ ] Benutzerspezifische Standardwerte entfernen oder neutralisieren:
+  - keine Pfade unter `~/.config/bspwm` automatisch einsetzen;
+  - keinen bestimmten Terminalemulator voraussetzen;
+  - Wetterort und Sprache nicht fest auf Muenchen und Deutsch setzen;
+  - robuste Standardschrift mit dokumentierter Font-Fallback-Strategie
+    verwenden;
+  - Icon-Schrift optional machen, damit fehlende Nerd Fonts den Betrieb nicht
+    unbrauchbar machen.
+- [ ] Module einzeln per Konfiguration aktivieren, deaktivieren oder automatisch
+  erkennen lassen.
+- [ ] Fehlende optionale Programme wie `pactl`, `amixer`, `nmcli`, `xrandr`,
+  `curl`, `notify-send` und `xdg-open` als normale Laufzeitsituation behandeln.
+- [ ] Fuer jedes Modul festlegen, welche Backends und externen Programme
+  optional beziehungsweise zwingend sind.
+- [ ] Eine Diagnoseoption wie `sliverbar --diagnose` vorsehen, die erkannte
+  Backends, fehlende optionale Programme, Display, Window-Manager-Backend,
+  Schriften und Konfigurationspfad ausgibt.
+- [ ] Tests sicherstellen, dass fehlende optionale Programme weder Absturz noch
+  Beendigung des Panels verursachen.
+
+Akzeptanzkriterium: Eine minimale Konfiguration startet nur Uhr und Fenstertitel
+und benoetigt ausser den grafischen Laufzeitbibliotheken keine externen
+Hilfsprogramme.
+
+## Querschnittsaufgabe: Standardanwendungen und Anwendungsrollen
+
+Aktuell sind mehrere Klickziele fest verdrahtet: CPU startet `btop`, Netzwerk
+startet `nmtui`, Lautstaerke startet `pulsemixer` und Terminalprogramme werden
+mit dem fest konfigurierten `alacritty -e` ausgefuehrt. Das soll durch eine
+einheitliche, portable Startlogik ersetzt werden.
+
+Freedesktop/XDG definiert Standardanwendungen fuer MIME-Typen und URI-Schemata.
+Es gibt jedoch keine allgemeine Standardzuordnung fuer die semantischen Rollen
+"Systemmonitor" oder "Netzwerkkonfiguration". Desktop-Kategorien wie `System`,
+`Monitor`, `Network` und `Settings` klassifizieren Programme fuer Menues, legen
+aber keine bevorzugte Anwendung fest.
+
+- [ ] Eine zentrale Launcher-Schnittstelle definieren, die folgende Ziele ohne
+  Shell-Auswertung starten kann:
+  - Standardanwendung fuer einen MIME-Typ oder ein URI-Schema;
+  - Anwendung ueber ihre Desktop-Datei-ID mit korrekter Beruecksichtigung von
+    `Exec`, `TryExec`, `Terminal` und D-Bus-Aktivierung;
+  - Terminalprogramm ueber den bevorzugten Terminal-Launcher;
+  - expliziten Befehl als gepruefte argv-Liste.
+- [ ] Desktop-Dateien nicht mit einem vereinfachten eigenen `Exec`-Parser
+  starten. Dafuer GIO oder eine andere standardkonforme Desktop-Entry-
+  Implementierung verwenden.
+- [ ] Fuer automatisch aufgeloeste Anwendungsrollen folgende Reihenfolge
+  verwenden und dokumentieren:
+  1. explizite Sliverbar-Konfiguration als Benutzer-Override;
+  2. standardisierte XDG-Zuordnung, falls fuer das Ziel ein MIME-Typ oder
+     URI-Schema existiert;
+  3. standardisierte oder Desktop-spezifische Praeferenz, falls tatsaechlich
+     vorhanden;
+  4. dokumentierte automatische Kandidatenerkennung;
+  5. keine Klickaktion, wenn kein passendes Ziel existiert.
+- [ ] Keine kuenstlichen MIME-Typen oder URI-Schemata erfinden, um eine nicht
+  vorhandene XDG-Standardrolle vorzuspiegeln.
+
+### Bevorzugtes Terminal
+
+- [ ] Einen portablen Terminal-Launcher untersuchen und implementieren. Dabei
+  `xdg-terminal-exec` verwenden, wenn es installiert und nutzbar ist, sowie
+  sinnvolle Desktop- und Umgebungs-Fallbacks pruefen.
+- [ ] `terminal=alacritty` durch `terminal=auto` beziehungsweise eine optionale
+  explizite Terminalkonfiguration ersetzen.
+- [ ] Unterschiede der Ausfuehrungsoptionen verschiedener Terminals nicht durch
+  die Annahme abbilden, dass jedes Terminal `-e` gleich interpretiert.
+- [ ] Falls kein Terminal ermittelt werden kann, terminalgebundene Klickziele
+  deaktivieren, ohne den Panelbetrieb zu beeintraechtigen.
+
+### Systemmonitor
+
+- [ ] Den fest codierten CPU-Klick auf `btop` entfernen.
+- [ ] Eine Konfigurationsrolle `system_monitor` vorsehen, die eine Desktop-ID
+  oder argv-Liste akzeptiert und standardmaessig auf `auto` steht.
+- [ ] Bei `auto` zunaechst eine tatsaechlich konfigurierte Desktop-Praeferenz
+  nutzen, falls die Umgebung eine solche bereitstellt. Da XDG keine
+  Standardrolle hierfuer definiert, danach nur dokumentierte installierte
+  Kandidaten wie grafische Systemmonitore oder `btop`/`htop` pruefen.
+- [ ] Terminalbasierte Kandidaten ueber den ermittelten Standard-Terminal-
+  Launcher starten; grafische Desktop-Anwendungen direkt aktivieren.
+
+### Netzwerkkonfiguration
+
+- [ ] Den fest codierten Netzwerk-Klick auf `nmtui` entfernen.
+- [ ] Eine Konfigurationsrolle `network_settings` vorsehen, die eine Desktop-ID
+  oder argv-Liste akzeptiert und standardmaessig auf `auto` steht.
+- [ ] Bei `auto` die aktive Netzwerkverwaltung beruecksichtigen. Fuer
+  NetworkManager koennen beispielsweise ein installierter grafischer Editor,
+  ein passendes Desktop-Control-Center oder als letzter Fallback `nmtui` im
+  bevorzugten Terminal verwendet werden.
+- [ ] Keine beliebige Anwendung allein aufgrund der allgemeinen Kategorie
+  `Network` starten; darunter fallen auch Browser und andere unpassende
+  Programme.
+
+### Weitere Klickziele
+
+- [ ] Dieselbe Launcher-Schnittstelle fuer Kalender, Wetterbild,
+  Lautstaerkemixer, Launcher und Power-Menue verwenden.
+- [ ] Fuer Bilddateien weiterhin die XDG-Standardanwendung des MIME-Typs
+  verwenden.
+- [ ] Fuer Lautstaerkekonfiguration eine eigene optionale Rolle
+  `volume_settings` einfuehren, statt `pulsemixer` vorauszusetzen.
+- [ ] Erkannte Ziele, Aufloesungsweg und fehlende Rollen in
+  `sliverbar --diagnose` anzeigen.
+- [ ] Tests fuer Desktop-IDs, MIME-Handler, Terminal- und GUI-Anwendungen,
+  Overrides, Fallback-Reihenfolge, fehlende Anwendungen und fehlerhafte Starts
+  hinzufuegen.
+
+Akzeptanzkriterium: Kein Panelblock setzt `alacritty`, `btop`, `nmtui` oder
+`pulsemixer` fest voraus. Wo das System eine standardisierte Zuordnung kennt,
+wird diese verwendet. Fuer nicht standardisierte Rollen greift eine explizite,
+dokumentierte Konfiguration oder eine transparente automatische Erkennung; ein
+fehlendes Ziel beeintraechtigt Sliverbar nicht.
+
+## Feature: Integrierter Anwendungsstarter mit Suche
+
+Der linke Launcher-Block soll optional einen nativen Anwendungsstarter von
+Sliverbar oeffnen. Der erste Umfang entspricht Rofis `drun`-Anwendungsmodus:
+installierte Desktop-Anwendungen anzeigen, durchsuchen, auswaehlen und starten.
+Weitere Rofi-Modi wie freie Shellbefehle, Fensterwechsel, SSH oder Plugins sind
+nicht Teil des ersten Umfangs.
+
+- [ ] Eine Konfigurationsoption wie
+  `application_launcher=internal|external|auto|disabled` definieren.
+- [ ] Den internen Starter als bevorzugte generische Variante anbieten, ohne
+  die bestehende Moeglichkeit eines externen Launchers wie Rofi zu entfernen.
+- [ ] Bei `external` eine Desktop-ID oder gepruefte argv-Liste aus der zentralen
+  Launcher-Schnittstelle verwenden; keine Shellauswertung einfuehren.
+- [ ] Linksklick auf den ganz linken Launcher-Block oeffnet beziehungsweise
+  schliesst den internen Starter.
+
+### Anwendungen ermitteln und starten
+
+- [ ] Installierte Anwendungen ueber GIO `GAppInfo` ermitteln, statt die
+  XDG-Verzeichnisse und Desktop-Dateien mit einem unvollstaendigen eigenen
+  Parser auszuwerten.
+- [ ] Nur Anwendungen anzeigen, fuer die `g_app_info_should_show()` wahr ist.
+  Damit muessen unter anderem `Hidden`, `NoDisplay`, `OnlyShowIn` und
+  `NotShowIn` entsprechend der Desktopumgebung beruecksichtigt werden.
+- [ ] Pro Eintrag mindestens lokalisierter Anzeigename, generischer Name,
+  Beschreibung, Desktop-ID und ausfuehrbares Programm als Suchdaten erfassen.
+- [ ] Die ausgewaehlte Anwendung ueber `g_app_info_launch()` und einen passenden
+  Launch-Kontext starten. Desktop-Entry-Feldcodes, D-Bus-Aktivierung und
+  Terminalanwendungen nicht selbst nachimplementieren.
+- [ ] Veraenderungen durch neu installierte oder entfernte Anwendungen erkennen
+  oder den Anwendungscache beim naechsten Oeffnen sicher aktualisieren.
+- [ ] Fehlerhafte oder nicht mehr vorhandene Desktop-Eintraege ueberspringen;
+  ein fehlgeschlagener Start darf Sliverbar nicht beenden.
+
+### Suche und Sortierung
+
+- [ ] Beim Oeffnen den Tastaturfokus direkt in das Suchfeld setzen.
+- [ ] Unicode-faehige, von Gross-/Kleinschreibung unabhaengige Suche vorsehen,
+  beispielsweise mit GLib-Casefolding.
+- [ ] Fuer die erste Version eine nachvollziehbare tokenbasierte Teilstring-
+  Suche implementieren: Namensanfang vor Wortanfang, Wortanfang vor sonstigem
+  Treffer.
+- [ ] Fuzzy Matching erst als spaetere, getrennt testbare Verbesserung
+  ergaenzen; Trefferreihenfolge muss stabil und erklaerbar bleiben.
+- [ ] Ohne Suchtext Anwendungen alphabetisch oder optional nach zuletzt
+  verwendeten Anwendungen sortieren.
+- [ ] Nutzungshistorie nur lokal und optional unter
+  `$XDG_STATE_HOME/sliverbar` speichern; eine Deaktivierung und ein einfaches
+  Loeschen der Historie vorsehen.
+
+### Native X11-Oberflaeche
+
+- [ ] Ein eigenes X11-Fenster auf dem Monitor des Panels erzeugen, mit Cairo
+  und Pango im bestehenden Farbschema darstellen und am Launcher-Block
+  verankern oder konfigurierbar zentrieren.
+- [ ] Suchfeld, markierten Treffer und eine begrenzte scrollbare Ergebnisliste
+  darstellen. Textdarstellung ist fuer die erste Version ausreichend.
+- [ ] Anwendungssymbole in einer zweiten Ausbaustufe ueber `GIcon` und eine
+  standardkonforme Icon-Theme-Aufloesung ergaenzen; fehlende Icons duerfen
+  keinen Eintrag ausblenden.
+- [ ] Navigation mit Pfeiltasten, Page Up/Down, Home/End, Enter und Escape sowie
+  Auswahl, Scrollen und Schliessen per Maus unterstuetzen.
+- [ ] X11-Tastatureingaben mit `xkbcommon-x11` und Compose-Unterstuetzung
+  auswerten, damit Tastaturlayouts, Umlaute und tote Tasten korrekt
+  funktionieren.
+- [ ] Tastatur- oder Pointer-Grabs nur waehrend des geoeffneten Starters halten
+  und auf allen Fehler-, Fokusverlust- und Beendigungspfaden sicher freigeben.
+- [ ] Den Starter bei Klick ausserhalb, Escape, Panel-Ausblendung,
+  Monitorwechsel oder erfolgreichem Anwendungsstart schliessen.
+- [ ] Positionierung und Groesse an kleinen Bildschirmen, mehreren Monitoren und
+  Bildschirmraendern begrenzen.
+
+### Abhaengigkeiten und Fallback
+
+- [ ] GIO und `xkbcommon-x11` als direkte Build- und Laufzeitabhaengigkeiten des
+  nativen X11-Starters pruefen, in CMake erkennen und dokumentieren.
+- [ ] Den vorgeschriebenen CLI-only-Build ohne XCB-Entwicklungsheader weiterhin
+  erhalten; der native Starter darf dort nicht mitgebaut werden muessen.
+- [ ] Wenn die Abhaengigkeiten des internen Starters fehlen, bei `auto` einen
+  konfigurierten externen Launcher verwenden oder den Block ohne Fehler
+  deaktivieren.
+- [ ] In `sliverbar --diagnose` Launcher-Modus, erkannte Abhaengigkeiten,
+  Anzahl sichtbarer Anwendungen und externen Fallback ausgeben.
+
+### Tests und Dokumentation
+
+- [ ] Tests mit einem isolierten `XDG_DATA_HOME` und kontrollierten
+  Desktop-Dateien erstellen: sichtbare, versteckte, lokalisierte, doppelte,
+  ungueltige und nicht mehr vorhandene Anwendungen.
+- [ ] Suche, Ranking, Unicode, leere Trefferliste und stabile Sortierung als
+  reine Logiktests abdecken.
+- [ ] Unter Xvfb Oeffnen, Texteingabe, Tastaturnavigation, Mauswahl, Scrollen,
+  Abbruch, Fokusverlust und erfolgreichen Start einer Testanwendung pruefen.
+- [ ] Sicherstellen, dass der Suchtext niemals als Befehl ausgefuehrt wird und
+  nur ein ausgewaehlter registrierter Desktop-Eintrag gestartet werden kann.
+- [ ] Internen und externen Launcher-Modus sowie Konfigurationsbeispiele in der
+  README dokumentieren.
+
+Akzeptanzkriterium: Ein Linksklick auf den linken Launcher-Block oeffnet einen
+nativen, per Tastatur durchsuchbaren Katalog der installierten und fuer das
+Anwendungsmenue sichtbaren Programme. Enter oder Linksklick startet den
+markierten Desktop-Eintrag standardkonform und schliesst das Fenster. Rofi oder
+ein anderer externer Launcher bleibt als konfigurierbare Alternative erhalten.
+
+## Feature: Integriertes System- und Power-Menue
+
+Der ganz rechte Power-Block soll optional ein natives Sliverbar-Menue oeffnen
+und das bestehende Rofi-Power-Menue ersetzen. Nur Aktionen, die auf dem System
+tatsaechlich vorhanden und fuer den Benutzer zulaessig sind, werden angezeigt.
+
+Das bestehende Rofi-Menue bezeichnet eine Aktion als `Suspend`, fuehrt aber
+`systemctl suspend-then-hibernate` aus. Im neuen Menue muessen Suspend,
+Hibernate und Suspend-then-Hibernate getrennte, korrekt benannte Aktionen sein.
+
+- [ ] Eine Konfigurationsoption wie
+  `power_menu=internal|external|auto|disabled` definieren.
+- [ ] Linksklick auf den ganz rechten Power-Block oeffnet beziehungsweise
+  schliesst das interne Menue.
+- [ ] Das Menue als wiederverwendbares natives X11-Popup umsetzen und am rechten
+  Panelrand verankern. Tastatur- und Mausbedienung aus dem Anwendungsstarter
+  wiederverwenden.
+- [ ] Rofi oder ein anderes externes Menue als optionale Alternative behalten,
+  aber keine benutzerspezifischen bspwm-/Rofi-Pfade als Standard einsetzen.
+
+### Aktionen und Glyphs
+
+| Aktion | Glyph | Bedeutung |
+| --- | --- | --- |
+| Bildschirm sperren | `` | Lock |
+| Abmelden | `` | Logout |
+| Standby/Suspend | `` | Schlafmodus im RAM |
+| Hibernate | `` | Ruhezustand auf Datentraeger |
+| Suspend, dann Hibernate | `` `` | zweistufiger Schlafmodus |
+| Hybrid Sleep | `` | Suspend und Hibernate kombiniert |
+| Neustart | `` | Reboot |
+| Ausschalten | `` | Poweroff |
+
+- [ ] Im Menue neben dem Glyph immer eine lokalisierbare Textbezeichnung
+  anzeigen; gefaehrliche Aktionen duerfen nicht nur anhand eines Symbols
+  unterschieden werden muessen.
+- [ ] Reihenfolge und Sichtbarkeit der grundsaetzlich erlaubten Aktionen
+  konfigurierbar machen. Die Laufzeitpruefung darf eine nicht unterstuetzte oder
+  nicht erlaubte Aktion trotzdem ausblenden.
+- [ ] Fehlende Glyphs ueber die allgemeine Icon-Fallback-Strategie abfangen.
+
+### Faehigkeiten sicher erkennen
+
+- [ ] Als primaeres Backend die D-Bus-Schnittstelle
+  `org.freedesktop.login1.Manager` verwenden, vorzugsweise ueber das bereits
+  geplante GIO/GDBus.
+- [ ] Beim Oeffnen des Menues mindestens `CanPowerOff`, `CanReboot`,
+  `CanSuspend`, `CanHibernate`, `CanHybridSleep` und
+  `CanSuspendThenHibernate` abfragen, soweit die laufende logind-Version die
+  jeweilige Methode anbietet.
+- [ ] Eine Aktion nur bei Rueckgabe `yes` oder `challenge` anzeigen. `challenge`
+  bedeutet, dass die Aktion verfuegbar ist, aber eine interaktive
+  Polkit-Autorisierung verlangen kann. Bei `no`, `na`, fehlender Methode oder
+  nicht erreichbarem Dienst bleibt sie unsichtbar.
+- [ ] Power-Aktionen ueber die zugehoerigen logind-Methoden mit erlaubter
+  interaktiver Autorisierung ausloesen, nicht durch fest codierte Aufrufe von
+  `systemctl`.
+- [ ] Einen optionalen Backend-/Command-Fallback nur explizit ueber gepruefte
+  argv-Konfiguration erlauben. Seine Faehigkeiten muessen ebenfalls explizit
+  konfiguriert sein und duerfen nicht aus einem vorhandenen Programmnamen
+  geraten werden.
+- [ ] Den gesamten Power-Block ausblenden, wenn weder internes Backend noch
+  externer Fallback mindestens eine sichere Aktion bereitstellt.
+
+### Lock und Logout
+
+- [ ] Bildschirm-Sperren getrennt von den Power-Faehigkeiten erkennen, da ein
+  vorhandener logind-Aufruf nicht garantiert, dass die X11-Sitzung einen
+  Lock-Screen bereitstellt.
+- [ ] Vorzugsweise die registrierte Sitzung beziehungsweise eine geeignete
+  ScreenSaver-/Session-Schnittstelle verwenden und einen konfigurierten
+  Lock-Befehl als Fallback erlauben.
+- [ ] Logout ueber ein Window-Manager-/Session-Backend ausfuehren. Fuer bspwm
+  kann dies das optionale bspwm-Backend uebernehmen; ein erzwungenes
+  `TerminateUser` darf nicht als allgemeiner, harmloser Fallback verwendet
+  werden.
+- [ ] Lock und Logout ausblenden, wenn keine passende Integration sicher
+  erkannt oder konfiguriert wurde.
+
+### Bestaetigung und Fehlerbehandlung
+
+- [ ] Lock standardmaessig sofort ausfuehren. Fuer Logout, Suspend, Hibernate,
+  Hybrid Sleep, Suspend-then-Hibernate, Reboot und Poweroff eine native
+  Bestaetigungsansicht anzeigen.
+- [ ] In der Bestaetigung `Nein` beziehungsweise Abbrechen vorselektieren und
+  Enter, Escape sowie eindeutige Mausziele unterstuetzen.
+- [ ] Bestaetigung pro Aktion konfigurierbar machen, aber fuer Reboot und
+  Poweroff standardmaessig eingeschaltet lassen.
+- [ ] D-Bus-, Polkit- und Backend-Fehler sichtbar melden, ohne Sliverbar zu
+  beenden. Nach einem Fehler muss das Menue erneut benutzbar sein.
+- [ ] Mehrfachklicks und wiederholte Tasteneingaben entprellen, damit keine
+  Aktion zweimal angefordert wird.
+
+### Zusammenspiel mit dem Inhibitor
+
+- [ ] Wenn Sliverbars eigener Standby-Inhibitor aktiv ist und der Benutzer im
+  Power-Menue bewusst eine Schlafaktion waehlt, in der Bestaetigung explizit
+  auf den Konflikt hinweisen.
+- [ ] Nach Bestaetigung den eigenen Inhibitor vor der Schlafanforderung
+  freigeben. Schlaegt die Anforderung fehl, den vorherigen Zustand
+  wiederherstellen.
+- [ ] Festlegen und testen, ob ein vor dem Schlaf aktiver Inhibitor nach dem
+  Aufwachen derselben Sliverbar-Instanz automatisch wieder aufgenommen werden
+  soll. Dies darf nicht mit einer Wiederherstellung nach einem Neustart von
+  Sliverbar verwechselt werden.
+
+### Vorbereitende Aktionen
+
+- [ ] Die benutzerspezifischen `mpc`-/`playerctl`-Vorbereitungen des bisherigen
+  Rofi-Skripts nicht als allgemeines Standardverhalten fest einbauen.
+- [ ] Optional wiederholbare, argv-basierte Hooks pro Aktion erlauben oder ein
+  generisches MPRIS-Pause-Verhalten als spaetere Erweiterung untersuchen.
+- [ ] Fehler optionaler Hooks protokollieren und festlegen, ob sie die
+  bestaetigte Power-Aktion abbrechen oder nur eine Warnung erzeugen.
+
+### Tests und Dokumentation
+
+- [ ] Ein austauschbares Test-Backend verwenden, das alle Kombinationen aus
+  `yes`, `challenge`, `no`, `na`, fehlender Methode und D-Bus-Fehler simuliert,
+  ohne den Testrechner herunterzufahren oder schlafen zu legen.
+- [ ] Unter Xvfb Menueposition, Glyphs und Beschriftungen, Tastatur- und
+  Mauswahl, sichere Vorbelegung, Abbruch und Bestaetigung testen.
+- [ ] Sicherstellen, dass eine nicht angebotene Aktion weder sichtbar noch ueber
+  manipulierte interne Action-Strings ausloesbar ist.
+- [ ] Inhibitor-Konflikt, Freigabe, fehlgeschlagene Schlafanforderung und
+  Verhalten nach simuliertem Resume testen.
+- [ ] Verfuegbare Power-Aktionen, Backend, Autorisierungsstatus und externe
+  Fallbacks in `sliverbar --diagnose` ausgeben.
+- [ ] Aktionen, Glyphs, Bestaetigungsregeln und Konfigurationsbeispiele in der
+  README dokumentieren.
+
+Akzeptanzkriterium: Ein Linksklick auf den rechten Power-Block oeffnet ein
+natives Menue mit Glyph und Text fuer jede aktuell verfuegbare Aktion.
+Insbesondere erscheint Hibernate nur, wenn das Backend die Funktion als
+verfuegbar meldet. Gefaehrliche Aktionen benoetigen eine sichere Bestaetigung
+und werden ueber das erkannte Sitzungs-/Power-Backend statt ueber fest codierte
+Rofi- oder `systemctl`-Aufrufe ausgefuehrt.
+
+## Feature: Mehrere Wetterorte und Ortsauswahl
+
+- [ ] In der Konfiguration eine Liste mehrerer Wetterorte erlauben. Im
+  bestehenden `key=value`-Format vorzugsweise denselben Schluessel mehrfach
+  zulassen, zum Beispiel:
+
+  ```ini
+  weather_location=Muenchen
+  weather_location=Berlin
+  weather_location=London
+  weather_default=Berlin
+  ```
+
+- [ ] Optional getrennte Anzeigenamen und Suchwerte ermoeglichen, falls der
+  Wetterdienst fuer einen eindeutigen Ort einen ausfuehrlicheren Suchbegriff
+  benoetigt.
+- [ ] Leere, doppelte und zu lange Ortseintraege bei `--check-config` ablehnen;
+  Anzahl und Laenge der Eintraege muessen feste, dokumentierte Grenzen haben.
+- [ ] Den aktiven Wetterort als Laufzeitzustand fuehren, statt die eingelesene
+  Konfiguration beim Umschalten zu veraendern.
+- [ ] Den zuletzt ausgewaehlten Ort optional unter
+  `$XDG_STATE_HOME/sliverbar` speichern und beim naechsten Start
+  wiederherstellen. Die Konfigurationsdatei darf dabei nicht automatisch
+  umgeschrieben werden.
+- [ ] Wetterdaten und Vorhersagebilder pro Ort getrennt cachen. Fuer Dateinamen
+  eine sichere ID oder einen Hash verwenden, nicht den ungeprueften Ortsnamen
+  als Pfadbestandteil.
+- [ ] Beim Wechsel sofort vorhandene Cache-Daten des neuen Orts anzeigen und
+  anschliessend eine Aktualisierung im Hintergrund anstossen.
+- [ ] Sicherstellen, dass eine noch laufende Anfrage fuer den vorherigen Ort
+  nach einem Wechsel nicht die Anzeige oder den Cache des neuen Orts
+  ueberschreibt.
+- [ ] Bei nur einem konfigurierten Ort weiterhin ohne unnoetiges Auswahlmenue
+  funktionieren.
+
+### Bedienung
+
+- [ ] Linksklick auf den Wetterbereich oeffnet ein am Wetterblock verankertes
+  Auswahlmenue mit allen konfigurierten Orten und einer Markierung des aktiven
+  Orts.
+- [ ] Das Auswahlmenue nativ mit X11 umsetzen, damit weder `rofi` noch `dmenu`
+  eine zwingende Laufzeitabhaengigkeit werden.
+- [ ] Auswahl per Maus vorsehen; Tastaturbedienung mit Pfeiltasten, Enter und
+  Escape sowie Schliessen bei einem Klick ausserhalb des Menues ergaenzen.
+- [ ] Die bisherige Aktion zum Oeffnen des Vorhersagebilds von Linksklick auf
+  Rechtsklick verschieben.
+- [ ] Das Vorhersagebild weiterhin ueber `xdg-open` oeffnen, damit die fuer den
+  MIME-Typ `image/png` konfigurierte Standardanwendung verwendet wird. Keinen
+  Bildbetrachter wie `sxiv` direkt in Sliverbar fest eintragen.
+- [ ] Einen Test ergaenzen, der fuer die Vorschau den Aufruf des
+  Standardprogramm-Dispatchers prueft, ohne eine konkrete Desktop-Anwendung
+  vorauszusetzen.
+- [ ] Festlegen, ob der Mittelklick weiterhin eine Wetterbenachrichtigung zeigt
+  oder stattdessen eine sofortige Aktualisierung ausloest.
+- [ ] Das Menue bei ausgeblendetem Panel, Monitorwechsel und Beendigung von
+  Sliverbar ebenfalls ausblenden beziehungsweise zerstoeren.
+
+### Tests und Dokumentation
+
+- [ ] Parser-Tests fuer einen Ort, mehrere Orte, Standardort, ungueltige Listen
+  und doppelte Orte ergaenzen.
+- [ ] Tests fuer Auswahl, Zustandswiederherstellung, getrennte Cache-Dateien und
+  den Wechsel waehrend einer laufenden Wetteranfrage hinzufuegen.
+- [ ] Das X11-Menue unter Xvfb testen: Oeffnen, Auswahl, Abbruch, Klick
+  ausserhalb und korrekte Positionierung am Bildschirmrand.
+- [ ] Konfigurationsbeispiel und Mausbelegung in der README dokumentieren.
+
+Akzeptanzkriterium: Mehrere Orte koennen in der Konfiguration hinterlegt
+werden. Ein Linksklick oeffnet ohne externen Menueprozess die Ortsliste; nach
+der Auswahl zeigt die Leiste den gewaehlten Ort an, aktualisiert dessen Daten
+asynchron und stellt die Auswahl beim naechsten Start optional wieder her.
+
+## Feature: Standby- und Hibernation-Inhibitor
+
+- [ ] Einen eigenen Inhibitor-Block rechts vom Wetterblock und links vom
+  Batterie- beziehungsweise AC-Block einfuegen.
+- [ ] Als Glyph die Kaffeetasse `` (Font Awesome/Nerd Font, U+F0F4)
+  verwenden. Fuer Installationen ohne Icon-Schrift einen darstellbaren
+  Text- oder Unicode-Fallback vorsehen.
+- [ ] Inaktiven Zustand mit `color_free` und aktive Inhibition mit
+  `color_warning` darstellen. Spaeter optional eigene konfigurierbare Farben
+  `color_inhibit_inactive` und `color_inhibit_active` anbieten.
+- [ ] Linksklick schaltet die Inhibition fuer Standby und Hibernation ein
+  beziehungsweise aus.
+- [ ] Den Zustand aus dem tatsaechlichen Inhibitor-Prozess beziehungsweise
+  dessen gehaltenem Lock ableiten, nicht nur aus einem internen booleschen
+  Schalter.
+- [ ] Beim unerwarteten Ende des Inhibitor-Backends sofort auf den inaktiven
+  Zustand wechseln und den Benutzer optional benachrichtigen.
+- [ ] Beim normalen Beenden von Sliverbar den eigenen Inhibitor sauber
+  freigeben.
+- [ ] Die Inhibition nach einem Neustart von Sliverbar standardmaessig nicht
+  automatisch wieder aktivieren.
+
+### Backend und Portabilitaet
+
+- [ ] Eine kleine Backend-Schnittstelle fuer Inhibition definieren, damit die
+  Paneldarstellung nicht direkt von systemd abhaengt.
+- [ ] Als erstes Backend `systemd-inhibit` beziehungsweise die logind-Inhibit-
+  Schnittstelle fuer `sleep` untersuchen und implementieren. Festlegen, ob auch
+  `handle-lid-switch` blockiert werden soll oder nur explizite
+  Standby-/Hibernation-Anforderungen.
+- [ ] Das Backend zur Laufzeit erkennen. Wenn insbesondere `systemd-inhibit`
+  beziehungsweise kein anderes kompatibles Inhibit-Backend verfuegbar ist,
+  den Block vollstaendig ausblenden. Kein inaktives Fehlersymbol oder
+  Platzhalter darf sichtbar bleiben und der Panelstart darf nicht scheitern.
+- [ ] Optional einen konfigurierbaren argv-basierten Inhibit-Befehl als
+  alternatives Backend vorsehen; keine Shell-Auswertung einfuehren.
+- [ ] Status und gewaehltes Backend in der geplanten Ausgabe von
+  `sliverbar --diagnose` anzeigen.
+
+### Tests und Dokumentation
+
+- [ ] Zustandswechsel, Farbwechsel, Blockreihenfolge und Klickaktion testen.
+- [ ] Start, kontrolliertes Beenden und unerwarteten Ausfall des Backends mit
+  einem Test-Backend pruefen, ohne den Entwicklungsrechner wirklich am Schlafen
+  zu hindern.
+- [ ] Den Betrieb ohne verfuegbares Inhibit-Backend testen.
+- [ ] Bedeutung des Icons, Mausbelegung, blockierte Schlafarten und
+  Backend-Voraussetzungen dokumentieren.
+
+Akzeptanzkriterium: Bei vorhandenem Backend aktiviert ein Linksklick einen
+echten Inhibitor fuer Standby und Hibernation und faerbt die Kaffeetasse gelb.
+Ein weiterer Klick oder das Beenden von Sliverbar gibt den Inhibitor frei und
+stellt das Icon wieder grau dar. Fehlt ein kompatibles Backend, ist der gesamte
+Block unsichtbar und der restliche Panelbetrieb bleibt unbeeintraechtigt.
+
+## Feature: Standardkalender ueber Datum und Uhrzeit oeffnen
+
+- [ ] Den gesamten Datums- und Uhrzeitblock mit einer Linksklickaktion
+  versehen, die die auf dem System als Standard registrierte Kalenderanwendung
+  oeffnet.
+- [ ] Den Standardhandler fuer den MIME-Typ `text/calendar` ueber eine
+  standardkonforme GIO-/XDG-Schnittstelle ermitteln und die Anwendung ohne
+  Shell-Auswertung starten.
+- [ ] Nicht blind `xdg-open calendar:` verwenden: Der Handler des URI-Schemas
+  `calendar:` kann von der Standardanwendung fuer `text/calendar` abweichen.
+- [ ] Keine leere oder kuenstliche `.ics`-Datei erzeugen, nur um den
+  MIME-Handler zu starten; dies koennte ungewollt einen Importdialog oder einen
+  Termineintrag oeffnen.
+- [ ] Optional einen expliziten `calendar_command` als argv-basierte
+  Konfigurationsalternative vorsehen. Dieser hat Vorrang vor der automatischen
+  Erkennung und darf nicht durch eine Shell ausgewertet werden.
+- [ ] Wenn kein Kalenderhandler und kein konfigurierter Befehl verfuegbar ist,
+  Datum und Uhrzeit weiterhin normal anzeigen. Ein Klick darf weder den
+  Panelbetrieb beeintraechtigen noch ein beliebiges Ersatzprogramm starten.
+- [ ] Den erkannten Kalenderhandler in `sliverbar --diagnose` ausgeben.
+- [ ] Tests fuer Standardhandler, konfigurierten Fallback, fehlenden Handler,
+  fehlerhaften Start und korrekt gerouteten Linksklick hinzufuegen.
+- [ ] Klickfunktion und Konfigurationsalternative in der README dokumentieren.
+
+Akzeptanzkriterium: Ein Linksklick auf Datum oder Uhrzeit startet die fuer
+`text/calendar` registrierte Standardanwendung. Fehlt diese, bleibt der
+Zeitblock sichtbar und Sliverbar laeuft unveraendert weiter.
+
+## Prioritaet 3: Standardkonforme Konfigurationssuche
+
+- [ ] Folgende Suchreihenfolge implementieren und dokumentieren:
+  1. `--config PATH`;
+  2. `SLIVERBAR_CONFIG`;
+  3. `$XDG_CONFIG_HOME/sliverbar/panel.conf`;
+  4. `$HOME/.config/sliverbar/panel.conf`, falls `XDG_CONFIG_HOME` fehlt;
+  5. installierte Systemkonfiguration, beispielsweise
+     `/etc/sliverbar/panel.conf`.
+- [ ] Festlegen, ob ohne vorhandene Konfigurationsdatei interne Defaults
+  verwendet werden oder mit einer klaren Fehlermeldung abgebrochen wird.
+- [ ] Den tatsaechlich verwendeten Pfad in `--diagnose` ausgeben.
+- [ ] Tests fuer Prioritaet, Fallback und fehlende Umgebungsvariablen anlegen.
+
+Akzeptanzkriterium: Ein ueber CMake installiertes Sliverbar kann ohne Wechsel in
+das Quell- oder Buildverzeichnis gestartet werden.
+
+## Prioritaet 4: Mehrmonitor- und Multi-Screen-Unterstuetzung
+
+- [ ] Den von `xcb_connect` gewaehlten X-Screen korrekt beruecksichtigen, statt
+  immer den ersten Root-Screen zu verwenden.
+- [ ] RandR-Monitore beziehungsweise Ausgaenge erkennen.
+- [ ] Eine Monitorwahl konfigurieren koennen, beispielsweise `primary`, Name,
+  Index oder `all`.
+- [ ] Panelposition, Breite und `_NET_WM_STRUT_PARTIAL` auf den ausgewaehlten
+  Monitor und dessen Koordinaten begrenzen.
+- [ ] Aenderungen der Monitoranordnung zur Laufzeit behandeln.
+- [ ] Die System-Tray-Selection passend zum X-Screen bilden, statt
+  `_NET_SYSTEM_TRAY_S0` fest einzutragen.
+- [ ] Tests fuer einen und mehrere virtuelle Monitore beziehungsweise Screens
+  unter Xvfb ergaenzen.
+
+Akzeptanzkriterium: Das Panel kann gezielt auf einem ausgewaehlten Monitor
+erscheinen und reserviert nur dort den korrekten Bildschirmbereich.
+
+## Prioritaet 5: Distribution und Laufzeitkompatibilitaet
+
+- [ ] Die zwingenden dynamischen Laufzeitbibliotheken dokumentieren: XCB,
+  Cairo, Pango, GLib, Fontconfig und deren transitive Anforderungen.
+- [ ] Eine Mindestversion fuer glibc und weitere relevante Bibliotheken
+  festlegen oder Pakete jeweils in einer kompatiblen Zielumgebung bauen.
+- [ ] Unterstuetzte CPU-Architekturen definieren und Builds nicht als universell
+  portabel bezeichnen, wenn sie nur fuer x86-64 erzeugt wurden.
+- [ ] Paketgenerierung ueber bestehende CMake-Installationsmetadaten und CPack
+  vorbereiten, zunaechst beispielsweise fuer `.deb` und spaeter optional `.rpm`.
+- [ ] Vor jeder Paketproduktion Binary, Konfigurationsdateien,
+  Laufzeitbibliotheken, Paketinhalt und Versionsmetadaten pruefen.
+- [ ] Vor einer tatsaechlichen Paketproduktion die laut Projektanweisung
+  erforderliche Security-Scan-Bestaetigung beim Benutzer einholen.
+
+Akzeptanzkriterium: Ein erzeugtes Paket installiert Binary und
+Beispielkonfiguration an standardkonforme Orte, deklariert alle
+Laufzeitabhaengigkeiten und laesst sich auf einer sauberen Zielinstallation
+starten.
+
+## Prioritaet 6: Portabilitaets- und Kompatibilitaetsmatrix
+
+- [ ] Builds mindestens mit GCC und Clang pruefen.
+- [ ] Container-Tests fuer mehrere Distributionsfamilien vorsehen, zum Beispiel
+  Debian/Ubuntu, Fedora und Arch Linux.
+- [ ] X11-Integrationstests mit mehreren EWMH-kompatiblen Window Managern
+  ergaenzen.
+- [ ] Folgende Szenarien automatisiert testen:
+  - fehlende optionale Programme;
+  - kein bspwm und kein `bspc`;
+  - fehlende konfigurierte Schriften;
+  - ein Monitor, mehrere Monitore und mehrere X-Screens;
+  - bereits belegte System-Tray-Selection;
+  - unterbrochene oder neu gestartete Backend-Prozesse;
+  - fehlendes `XDG_RUNTIME_DIR`, `XDG_CONFIG_HOME` oder `HOME`.
+- [ ] README um eine ehrliche Supportmatrix aus "unterstuetzt", "getestet" und
+  "Best Effort" erweitern.
+
+Akzeptanzkriterium: Die dokumentierte Supportmatrix wird durch reproduzierbare
+Build- und Integrationstests abgedeckt; nicht getestete Kombinationen werden
+nicht als garantiert kompatibel bezeichnet.
+
+## Dokumentation
+
+- [ ] Die aktuelle Formulierung "Linux with X11 and bspwm" nach Einfuehrung des
+  generischen Backends durch das neue Zielbild ersetzen.
+- [ ] Zwingende grafische Laufzeitbibliotheken von optionalen Modul-Backends
+  getrennt auffuehren.
+- [ ] Konfigurationsbeispiele fuer einen minimalen generischen Betrieb und fuer
+  die erweiterte bspwm-Integration bereitstellen.
+- [ ] Grenzen durch nicht EWMH-kompatible Window Manager erklaeren.
+- [ ] `--version`, `--check-config` und die geplante Diagnoseoption gemeinsam
+  dokumentieren.
+
+## Empfohlene Reihenfolge
+
+1. Window-Manager-Schnittstelle und EWMH-Backend.
+2. Betrieb ohne bspwm sowie optionale Module und neutrale Defaults.
+3. XDG-Konfigurationssuche.
+4. Mehrmonitor- und Multi-Screen-Unterstuetzung.
+5. Testmatrix auf weitere Distributionen und Window Manager ausweiten.
+6. Paketgenerierung und verifizierte Distributionsartefakte.
