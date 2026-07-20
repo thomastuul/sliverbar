@@ -1,5 +1,7 @@
 #include "panel.h"
 
+#include "app_launcher.h"
+
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
@@ -31,7 +33,12 @@ void moduleClock(const PanelConfig *c, PanelState *s) {
   char t[32];
   strftime(t, sizeof(t), "%T", &tm);
   snprintf(text, sizeof(text), " %s  %s", d, t);
-  block(s->clock, sizeof(s->clock), c->colorBg, c->colorClock, text);
+  char body[256];
+  block(body, sizeof(body), c->colorBg, c->colorClock, text);
+  if (appRoleAvailable(c, APP_ROLE_CALENDAR))
+    action(s->clock, sizeof(s->clock), 1, "role|calendar", body);
+  else
+    snprintf(s->clock, sizeof(s->clock), "%s", body);
 }
 
 void moduleCpu(const PanelConfig *c, PanelState *s) {
@@ -72,7 +79,10 @@ void moduleCpu(const PanelConfig *c, PanelState *s) {
     padding = 0;
   snprintf(text, sizeof(text), " %s%%%*s", usage, padding, "");
   block(body, sizeof(body), c->colorBg, c->colorSystem, text);
-  action(s->cpu, sizeof(s->cpu), 1, "terminal|btop", body);
+  if (appRoleAvailable(c, APP_ROLE_SYSTEM_MONITOR))
+    action(s->cpu, sizeof(s->cpu), 1, "role|system_monitor", body);
+  else
+    snprintf(s->cpu, sizeof(s->cpu), "%s", body);
 }
 
 void moduleBattery(const PanelConfig *c, PanelState *s) {
@@ -154,16 +164,29 @@ void moduleScreencast(const PanelConfig *c,
 
 void moduleVolume(const PanelConfig *c, PanelState *s) {
   s->volume[0] = '\0';
-  if (!moduleModeActive(c->moduleVolume, commandExists("amixer")) ||
-      !commandExists("amixer"))
+  bool pactl = commandExists("pactl");
+  bool amixer = commandExists("amixer");
+  if (!moduleModeActive(c->moduleVolume, pactl || amixer) ||
+      (!pactl && !amixer))
     return;
   char out[2048];
-  char *argv[] = {"amixer", "get", "Master", NULL};
-  if (runCapture(argv, out, sizeof(out), 1000))
-    return;
+  bool muted = false;
+  if (pactl) {
+    char *volumeArgv[] = {"pactl", "get-sink-volume", "@DEFAULT_SINK@", NULL};
+    if (runCapture(volumeArgv, out, sizeof(out), 1000))
+      return;
+    char muteOutput[128];
+    char *muteArgv[] = {"pactl", "get-sink-mute", "@DEFAULT_SINK@", NULL};
+    if (!runCapture(muteArgv, muteOutput, sizeof(muteOutput), 1000))
+      muted = strstr(muteOutput, "yes") != NULL;
+  } else {
+    char *volumeArgv[] = {"amixer", "get", "Master", NULL};
+    if (runCapture(volumeArgv, out, sizeof(out), 1000))
+      return;
+    muted = strstr(out, "[off]") != NULL;
+  }
   char *p = strchr(out, '%');
   int level = 0;
-  bool muted = strstr(out, "[off]") != NULL;
   if (p) {
     char *q = p;
     while (q > out && q[-1] >= '0' && q[-1] <= '9')
@@ -188,7 +211,10 @@ void moduleVolume(const PanelConfig *c, PanelState *s) {
         c->colorBg,
         muted ? c->colorMuted : c->colorVolume,
         text);
-  action(tmp, sizeof(tmp), 1, "terminal|pulsemixer", body);
+  if (appRoleAvailable(c, APP_ROLE_VOLUME_SETTINGS))
+    action(tmp, sizeof(tmp), 1, "role|volume_settings", body);
+  else
+    snprintf(tmp, sizeof(tmp), "%s", body);
   char middle[768];
   action(middle, sizeof(middle), 3, "volume|toggle", tmp);
   char down[1024];
@@ -380,7 +406,10 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
   char cmd[180];
   snprintf(cmd, sizeof(cmd), "notify|Network|%s", safe);
   action(tmp, sizeof(tmp), 3, cmd, body);
-  action(s->network, sizeof(s->network), 1, "terminal|nmtui", tmp);
+  if (appRoleAvailable(c, APP_ROLE_NETWORK_SETTINGS))
+    action(s->network, sizeof(s->network), 1, "role|network_settings", tmp);
+  else
+    snprintf(s->network, sizeof(s->network), "%s", tmp);
 }
 
 void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
@@ -470,7 +499,10 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   snprintf(text, sizeof(text), "爫%3d%% %3d° %3d°", rain, min, max);
   block(body, sizeof(body), c->colorBg, c->colorWeather, text);
   action(tmp, sizeof(tmp), 3, "weather|notify", body);
-  action(s->weather, sizeof(s->weather), 1, "weather|open", tmp);
+  if (*c->weatherImage && appCanOpenFile(c->weatherImage))
+    action(s->weather, sizeof(s->weather), 1, "weather|open", tmp);
+  else
+    snprintf(s->weather, sizeof(s->weather), "%s", tmp);
 }
 
 void moduleWorkspace(const PanelConfig *c, PanelState *s, const char *report) {
@@ -598,11 +630,11 @@ void moduleStatic(const PanelConfig *c, PanelState *s) {
   char body[128];
   s->launcher[0] = '\0';
   s->power[0] = '\0';
-  if (moduleModeActive(c->moduleLauncher, c->launcher[0])) {
+  if (moduleModeActive(c->moduleLauncher, appSpecAvailable(c, c->launcher))) {
     block(body, sizeof(body), c->colorBg, c->colorFg, "");
     action(s->launcher, sizeof(s->launcher), 1, "launcher", body);
   }
-  if (moduleModeActive(c->modulePower, c->powerMenu[0])) {
+  if (moduleModeActive(c->modulePower, appSpecAvailable(c, c->powerMenu))) {
     block(body, sizeof(body), c->colorBg, c->colorFg, "");
     action(s->power, sizeof(s->power), 1, "power", body);
   }

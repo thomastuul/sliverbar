@@ -1,9 +1,12 @@
 #include "panel.h"
 
+#include "app_launcher.h"
+
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #define CHECK(condition)                                                       \
@@ -67,6 +70,48 @@ int main(int argc, char **argv) {
   CHECK(strcmp(cfg.colorOccupied, "#ff5555") == 0);
   CHECK(cfg.moduleCpu == MODULE_DISABLED);
   CHECK(unlink(path) == 0);
+
+  CHECK(appSpecAvailable(&cfg, "command:/bin/true"));
+  CHECK(!appSpecAvailable(&cfg, "command:/definitely/missing/sliverbar"));
+  CHECK(!appSpecAvailable(&cfg, "command:'unterminated"));
+  snprintf(cfg.terminal, sizeof(cfg.terminal), "/bin/true");
+  CHECK(appTerminalAvailable(&cfg));
+  char *terminalProbe[] = {"/bin/true", NULL};
+  CHECK(appLaunchTerminal(&cfg, terminalProbe) == 0);
+  snprintf(cfg.terminal, sizeof(cfg.terminal), "auto");
+
+  if (appLauncherHasGio()) {
+    char dataHome[] = "/tmp/sliverbar-app-info-XXXXXX";
+    CHECK(mkdtemp(dataHome) != NULL);
+    char applications[128];
+    snprintf(applications, sizeof(applications), "%s/applications", dataHome);
+    CHECK(mkdir(applications, 0700) == 0);
+    char desktopPath[256];
+    snprintf(desktopPath,
+             sizeof(desktopPath),
+             "%s/sliverbar-test.desktop",
+             applications);
+    FILE *desktop = fopen(desktopPath, "w");
+    CHECK(desktop != NULL);
+    CHECK(fputs("[Desktop Entry]\nType=Application\nName=Sliverbar Test\n"
+                "Exec=/bin/true\n",
+                desktop) >= 0);
+    CHECK(fclose(desktop) == 0);
+    const char *oldDataHome = getenv("XDG_DATA_HOME");
+    char oldDataHomeCopy[PANEL_PATH_MAX] = "";
+    if (oldDataHome)
+      snprintf(oldDataHomeCopy, sizeof(oldDataHomeCopy), "%s", oldDataHome);
+    CHECK(setenv("XDG_DATA_HOME", dataHome, 1) == 0);
+    CHECK(appSpecAvailable(&cfg, "desktop:sliverbar-test.desktop"));
+    CHECK(appLaunchSpec(&cfg, "desktop:sliverbar-test.desktop") == 0);
+    if (oldDataHome)
+      CHECK(setenv("XDG_DATA_HOME", oldDataHomeCopy, 1) == 0);
+    else
+      CHECK(unsetenv("XDG_DATA_HOME") == 0);
+    CHECK(unlink(desktopPath) == 0);
+    CHECK(rmdir(applications) == 0);
+    CHECK(rmdir(dataHome) == 0);
+  }
 
   char quoted[32];
   shellQuoteAction("a:b|c%\n", quoted, sizeof(quoted));

@@ -3,6 +3,8 @@
 #include "version.h"
 #include "workspace_backend.h"
 
+#include "app_launcher.h"
+
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -530,23 +532,30 @@ static void doAction(const PanelConfig *c,
   } else if (!strcmp(kind, "workspace") && arg) {
     workspaceBackendSwitch(workspaceBackend, arg);
   } else if (!strcmp(kind, "terminal") && arg) {
-    char *av[] = {(char *)c->terminal, "-e", arg, NULL};
-    spawnDetached(av);
+    char *av[] = {arg, NULL};
+    appLaunchTerminal(c, av);
+  } else if (!strcmp(kind, "role") && arg) {
+    if (!strcmp(arg, "system_monitor"))
+      appLaunchRole(c, APP_ROLE_SYSTEM_MONITOR);
+    else if (!strcmp(arg, "network_settings"))
+      appLaunchRole(c, APP_ROLE_NETWORK_SETTINGS);
+    else if (!strcmp(arg, "volume_settings"))
+      appLaunchRole(c, APP_ROLE_VOLUME_SETTINGS);
+    else if (!strcmp(arg, "calendar"))
+      appLaunchRole(c, APP_ROLE_CALENDAR);
   } else if (!strcmp(kind, "launcher") && *c->launcher) {
-    char *av[] = {(char *)c->launcher, NULL};
-    spawnDetached(av);
+    appLaunchSpec(c, c->launcher);
   } else if (!strcmp(kind, "power") && *c->powerMenu) {
-    char *av[] = {(char *)c->powerMenu, NULL};
-    spawnDetached(av);
-  } else if (!strcmp(kind, "notify") && arg) {
+    appLaunchSpec(c, c->powerMenu);
+  } else if (!strcmp(kind, "notify") && arg && commandExists("notify-send")) {
     char *message = strtok_r(NULL, "", &save);
     char *av[] = {"notify-send", arg, message ? message : "", NULL};
     spawnDetached(av);
   } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "open") &&
              *c->weatherImage) {
-    char *av[] = {"xdg-open", (char *)c->weatherImage, NULL};
-    spawnDetached(av);
-  } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "notify")) {
+    appOpenFile(c->weatherImage);
+  } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "notify") &&
+             commandExists("notify-send")) {
     char summary[128];
     snprintf(summary, sizeof(summary), "Weather: %.118s", c->location);
     char *av[] = {"notify-send",
@@ -696,32 +705,33 @@ int main(int argc, char **argv) {
       const char *configHome = getenv("XDG_CONFIG_HOME");
       const char *home = getenv("HOME");
       bool userConfigFound = false;
-      if (configHome &&
-          !joinPath(defaultConfig,
-                    sizeof(defaultConfig),
-                    configHome,
-                    "/sliverbar/panel.conf") &&
-          access(defaultConfig, R_OK) == 0)
+      if (configHome) {
+        if (!joinPath(defaultConfig,
+                      sizeof(defaultConfig),
+                      configHome,
+                      "/sliverbar/panel.conf") &&
+            access(defaultConfig, R_OK) == 0)
+          userConfigFound = true;
+      } else if (home &&
+                 !joinPath(defaultConfig,
+                           sizeof(defaultConfig),
+                           home,
+                           "/.config/sliverbar/panel.conf") &&
+                 access(defaultConfig, R_OK) == 0) {
         userConfigFound = true;
-      if (!userConfigFound && home &&
-          !joinPath(defaultConfig,
-                    sizeof(defaultConfig),
-                    home,
-                    "/.config/sliverbar/panel.conf") &&
-          access(defaultConfig, R_OK) == 0)
-        userConfigFound = true;
+      }
       if (userConfigFound)
         config = defaultConfig;
       else if (access(SLIVERBAR_SYSTEM_CONFIG, R_OK) == 0)
         config = SLIVERBAR_SYSTEM_CONFIG;
       else if (access("panel.conf", R_OK) == 0)
         config = "panel.conf";
-      else
+      else if (access("config/panel.conf", R_OK) == 0)
         config = "config/panel.conf";
     }
   }
   char error[512];
-  if (configLoad(&cfg, config, error, sizeof(error))) {
+  if (config && configLoad(&cfg, config, error, sizeof(error))) {
     logMessage("ERROR", "%s", error);
     return 1;
   }

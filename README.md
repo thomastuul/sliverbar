@@ -137,6 +137,26 @@ Font remains an optional visual enhancement. Weather is disabled automatically
 until `location` is configured. The example assumes neither a terminal nor a
 launcher or power-menu script.
 
+### Application roles
+
+Clicks are dispatched without shell evaluation. `system_monitor`,
+`network_settings`, `volume_settings`, and `calendar` default to `auto`.
+Overrides accept `desktop:ID.desktop`, `command:PROGRAM ARGUMENTS`, or
+`terminal:PROGRAM ARGUMENTS`; quoted argv syntax is parsed but never evaluated
+as shell code. Desktop entries and default file handlers use GIO when it was
+available at build time, preserving `Exec` field codes, `TryExec`, terminal
+metadata, and D-Bus activation.
+
+Automatic resolution first honors the explicit override. Calendar then uses
+the registered `text/calendar` handler. Other roles have no standardized XDG
+default and therefore use a documented shortlist: common graphical system
+monitors before `btop`/`htop`/`top`, NetworkManager's editor before `nmtui`,
+and `pavucontrol` before terminal mixers. Terminal programs prefer
+`xdg-terminal-exec`, then a simple `$TERMINAL`, followed by known terminals
+with their appropriate command separator. If no valid target exists, the block
+remains visible but has no click action. Forecast images are opened through the
+registered default file handler rather than a hard-coded image viewer.
+
 `workspace_backend=auto` prefers bspwm's report stream when a reachable `bspc`
 is available and otherwise uses EWMH. `ewmh` forces the portable backend,
 `bspwm` requests bspwm with an automatic EWMH fallback, and `none` hides the

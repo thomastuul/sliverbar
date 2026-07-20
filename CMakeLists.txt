@@ -14,12 +14,14 @@ if(PkgConfig_FOUND)
     pkg_check_modules(XCB QUIET IMPORTED_TARGET xcb)
     pkg_check_modules(CAIRO_XCB QUIET IMPORTED_TARGET cairo-xcb)
     pkg_check_modules(PANGOCAIRO QUIET IMPORTED_TARGET pangocairo)
+    pkg_check_modules(GIO QUIET IMPORTED_TARGET gio-2.0 gio-unix-2.0)
 endif()
 
 option(SLIVERBAR_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
 option(SLIVERBAR_WITH_XCB "Build the native XCB event backend when available" ON)
 
 add_library(sliverbar_core
+    src/app_launcher.c
     src/config.c
     src/modules.c
     src/util.c
@@ -28,6 +30,10 @@ target_include_directories(sliverbar_core PUBLIC include)
 target_compile_features(sliverbar_core PUBLIC c_std_17)
 target_compile_definitions(sliverbar_core PRIVATE _GNU_SOURCE _POSIX_C_SOURCE=200809L)
 target_compile_options(sliverbar_core PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+if(GIO_FOUND)
+    target_link_libraries(sliverbar_core PRIVATE PkgConfig::GIO)
+    target_compile_definitions(sliverbar_core PRIVATE HAVE_GIO=1)
+endif()
 
 add_executable(sliverbar src/main.c)
 target_link_libraries(sliverbar PRIVATE sliverbar_core)

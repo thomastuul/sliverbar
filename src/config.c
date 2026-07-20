@@ -17,6 +17,10 @@ void configDefaults(PanelConfig *c) {
   copy(c->wmName, sizeof(c->wmName), "sliverbar");
   copy(c->workspaceBackend, sizeof(c->workspaceBackend), "auto");
   copy(c->terminal, sizeof(c->terminal), "auto");
+  copy(c->systemMonitor, sizeof(c->systemMonitor), "auto");
+  copy(c->networkSettings, sizeof(c->networkSettings), "auto");
+  copy(c->volumeSettings, sizeof(c->volumeSettings), "auto");
+  copy(c->calendar, sizeof(c->calendar), "auto");
   copy(c->language, sizeof(c->language), "en");
   copy(c->colorPanelBg, 16, "#191A21");
   copy(c->colorBg, 16, "#282A36");
@@ -95,6 +99,10 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
     return 0;
   }
   STR("terminal", terminal);
+  STR("system_monitor", systemMonitor);
+  STR("network_settings", networkSettings);
+  STR("volume_settings", volumeSettings);
+  STR("calendar", calendar);
   STR("location", location);
   STR("language", language);
   STR("launcher", launcher);

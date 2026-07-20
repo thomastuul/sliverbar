@@ -21,6 +21,8 @@ typedef struct {
   char font[128], iconFont[128], geometry[64], wmName[64];
   char workspaceBackend[16];
   char terminal[64], location[128], language[16];
+  char systemMonitor[256], networkSettings[256], volumeSettings[256];
+  char calendar[256];
   char launcher[PANEL_PATH_MAX], powerMenu[PANEL_PATH_MAX];
   char weatherCache[PANEL_PATH_MAX], weatherImage[PANEL_PATH_MAX];
   char colorPanelBg[16], colorBg[16], colorFg[16], colorFree[16],

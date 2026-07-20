@@ -120,17 +120,17 @@ Es gibt jedoch keine allgemeine Standardzuordnung fuer die semantischen Rollen
 `Monitor`, `Network` und `Settings` klassifizieren Programme fuer Menues, legen
 aber keine bevorzugte Anwendung fest.
 
-- [ ] Eine zentrale Launcher-Schnittstelle definieren, die folgende Ziele ohne
+- [x] Eine zentrale Launcher-Schnittstelle definieren, die folgende Ziele ohne
   Shell-Auswertung starten kann:
   - Standardanwendung fuer einen MIME-Typ oder ein URI-Schema;
   - Anwendung ueber ihre Desktop-Datei-ID mit korrekter Beruecksichtigung von
     `Exec`, `TryExec`, `Terminal` und D-Bus-Aktivierung;
   - Terminalprogramm ueber den bevorzugten Terminal-Launcher;
   - expliziten Befehl als gepruefte argv-Liste.
-- [ ] Desktop-Dateien nicht mit einem vereinfachten eigenen `Exec`-Parser
+- [x] Desktop-Dateien nicht mit einem vereinfachten eigenen `Exec`-Parser
   starten. Dafuer GIO oder eine andere standardkonforme Desktop-Entry-
   Implementierung verwenden.
-- [ ] Fuer automatisch aufgeloeste Anwendungsrollen folgende Reihenfolge
+- [x] Fuer automatisch aufgeloeste Anwendungsrollen folgende Reihenfolge
   verwenden und dokumentieren:
   1. explizite Sliverbar-Konfiguration als Benutzer-Override;
   2. standardisierte XDG-Zuordnung, falls fuer das Ziel ein MIME-Typ oder
@@ -139,53 +139,53 @@ aber keine bevorzugte Anwendung fest.
      vorhanden;
   4. dokumentierte automatische Kandidatenerkennung;
   5. keine Klickaktion, wenn kein passendes Ziel existiert.
-- [ ] Keine kuenstlichen MIME-Typen oder URI-Schemata erfinden, um eine nicht
+- [x] Keine kuenstlichen MIME-Typen oder URI-Schemata erfinden, um eine nicht
   vorhandene XDG-Standardrolle vorzuspiegeln.
 
 ### Bevorzugtes Terminal
 
-- [ ] Einen portablen Terminal-Launcher untersuchen und implementieren. Dabei
+- [x] Einen portablen Terminal-Launcher untersuchen und implementieren. Dabei
   `xdg-terminal-exec` verwenden, wenn es installiert und nutzbar ist, sowie
   sinnvolle Desktop- und Umgebungs-Fallbacks pruefen.
-- [ ] `terminal=alacritty` durch `terminal=auto` beziehungsweise eine optionale
+- [x] `terminal=alacritty` durch `terminal=auto` beziehungsweise eine optionale
   explizite Terminalkonfiguration ersetzen.
-- [ ] Unterschiede der Ausfuehrungsoptionen verschiedener Terminals nicht durch
+- [x] Unterschiede der Ausfuehrungsoptionen verschiedener Terminals nicht durch
   die Annahme abbilden, dass jedes Terminal `-e` gleich interpretiert.
-- [ ] Falls kein Terminal ermittelt werden kann, terminalgebundene Klickziele
+- [x] Falls kein Terminal ermittelt werden kann, terminalgebundene Klickziele
   deaktivieren, ohne den Panelbetrieb zu beeintraechtigen.
 
 ### Systemmonitor
 
-- [ ] Den fest codierten CPU-Klick auf `btop` entfernen.
-- [ ] Eine Konfigurationsrolle `system_monitor` vorsehen, die eine Desktop-ID
+- [x] Den fest codierten CPU-Klick auf `btop` entfernen.
+- [x] Eine Konfigurationsrolle `system_monitor` vorsehen, die eine Desktop-ID
   oder argv-Liste akzeptiert und standardmaessig auf `auto` steht.
-- [ ] Bei `auto` zunaechst eine tatsaechlich konfigurierte Desktop-Praeferenz
+- [x] Bei `auto` zunaechst eine tatsaechlich konfigurierte Desktop-Praeferenz
   nutzen, falls die Umgebung eine solche bereitstellt. Da XDG keine
   Standardrolle hierfuer definiert, danach nur dokumentierte installierte
   Kandidaten wie grafische Systemmonitore oder `btop`/`htop` pruefen.
-- [ ] Terminalbasierte Kandidaten ueber den ermittelten Standard-Terminal-
+- [x] Terminalbasierte Kandidaten ueber den ermittelten Standard-Terminal-
   Launcher starten; grafische Desktop-Anwendungen direkt aktivieren.
 
 ### Netzwerkkonfiguration
 
-- [ ] Den fest codierten Netzwerk-Klick auf `nmtui` entfernen.
-- [ ] Eine Konfigurationsrolle `network_settings` vorsehen, die eine Desktop-ID
+- [x] Den fest codierten Netzwerk-Klick auf `nmtui` entfernen.
+- [x] Eine Konfigurationsrolle `network_settings` vorsehen, die eine Desktop-ID
   oder argv-Liste akzeptiert und standardmaessig auf `auto` steht.
 - [ ] Bei `auto` die aktive Netzwerkverwaltung beruecksichtigen. Fuer
   NetworkManager koennen beispielsweise ein installierter grafischer Editor,
   ein passendes Desktop-Control-Center oder als letzter Fallback `nmtui` im
   bevorzugten Terminal verwendet werden.
-- [ ] Keine beliebige Anwendung allein aufgrund der allgemeinen Kategorie
+- [x] Keine beliebige Anwendung allein aufgrund der allgemeinen Kategorie
   `Network` starten; darunter fallen auch Browser und andere unpassende
   Programme.
 
 ### Weitere Klickziele
 
-- [ ] Dieselbe Launcher-Schnittstelle fuer Kalender, Wetterbild,
+- [x] Dieselbe Launcher-Schnittstelle fuer Kalender, Wetterbild,
   Lautstaerkemixer, Launcher und Power-Menue verwenden.
-- [ ] Fuer Bilddateien weiterhin die XDG-Standardanwendung des MIME-Typs
+- [x] Fuer Bilddateien weiterhin die XDG-Standardanwendung des MIME-Typs
   verwenden.
-- [ ] Fuer Lautstaerkekonfiguration eine eigene optionale Rolle
+- [x] Fuer Lautstaerkekonfiguration eine eigene optionale Rolle
   `volume_settings` einfuehren, statt `pulsemixer` vorauszusetzen.
 - [ ] Erkannte Ziele, Aufloesungsweg und fehlende Rollen in
   `sliverbar --diagnose` anzeigen.
@@ -571,27 +571,27 @@ Block unsichtbar und der restliche Panelbetrieb bleibt unbeeintraechtigt.
 
 ## Feature: Standardkalender ueber Datum und Uhrzeit oeffnen
 
-- [ ] Den gesamten Datums- und Uhrzeitblock mit einer Linksklickaktion
+- [x] Den gesamten Datums- und Uhrzeitblock mit einer Linksklickaktion
   versehen, die die auf dem System als Standard registrierte Kalenderanwendung
   oeffnet.
-- [ ] Den Standardhandler fuer den MIME-Typ `text/calendar` ueber eine
+- [x] Den Standardhandler fuer den MIME-Typ `text/calendar` ueber eine
   standardkonforme GIO-/XDG-Schnittstelle ermitteln und die Anwendung ohne
   Shell-Auswertung starten.
-- [ ] Nicht blind `xdg-open calendar:` verwenden: Der Handler des URI-Schemas
+- [x] Nicht blind `xdg-open calendar:` verwenden: Der Handler des URI-Schemas
   `calendar:` kann von der Standardanwendung fuer `text/calendar` abweichen.
-- [ ] Keine leere oder kuenstliche `.ics`-Datei erzeugen, nur um den
+- [x] Keine leere oder kuenstliche `.ics`-Datei erzeugen, nur um den
   MIME-Handler zu starten; dies koennte ungewollt einen Importdialog oder einen
   Termineintrag oeffnen.
-- [ ] Optional einen expliziten `calendar_command` als argv-basierte
+- [x] Optional einen expliziten `calendar_command` als argv-basierte
   Konfigurationsalternative vorsehen. Dieser hat Vorrang vor der automatischen
   Erkennung und darf nicht durch eine Shell ausgewertet werden.
-- [ ] Wenn kein Kalenderhandler und kein konfigurierter Befehl verfuegbar ist,
+- [x] Wenn kein Kalenderhandler und kein konfigurierter Befehl verfuegbar ist,
   Datum und Uhrzeit weiterhin normal anzeigen. Ein Klick darf weder den
   Panelbetrieb beeintraechtigen noch ein beliebiges Ersatzprogramm starten.
 - [ ] Den erkannten Kalenderhandler in `sliverbar --diagnose` ausgeben.
 - [ ] Tests fuer Standardhandler, konfigurierten Fallback, fehlenden Handler,
   fehlerhaften Start und korrekt gerouteten Linksklick hinzufuegen.
-- [ ] Klickfunktion und Konfigurationsalternative in der README dokumentieren.
+- [x] Klickfunktion und Konfigurationsalternative in der README dokumentieren.
 
 Akzeptanzkriterium: Ein Linksklick auf Datum oder Uhrzeit startet die fuer
 `text/calendar` registrierte Standardanwendung. Fehlt diese, bleibt der
@@ -599,14 +599,14 @@ Zeitblock sichtbar und Sliverbar laeuft unveraendert weiter.
 
 ## Prioritaet 3: Standardkonforme Konfigurationssuche
 
-- [ ] Folgende Suchreihenfolge implementieren und dokumentieren:
+- [x] Folgende Suchreihenfolge implementieren und dokumentieren:
   1. `--config PATH`;
   2. `SLIVERBAR_CONFIG`;
   3. `$XDG_CONFIG_HOME/sliverbar/panel.conf`;
   4. `$HOME/.config/sliverbar/panel.conf`, falls `XDG_CONFIG_HOME` fehlt;
   5. installierte Systemkonfiguration, beispielsweise
      `/etc/sliverbar/panel.conf`.
-- [ ] Festlegen, ob ohne vorhandene Konfigurationsdatei interne Defaults
+- [x] Festlegen, ob ohne vorhandene Konfigurationsdatei interne Defaults
   verwendet werden oder mit einer klaren Fehlermeldung abgebrochen wird.
 - [ ] Den tatsaechlich verwendeten Pfad in `--diagnose` ausgeben.
 - [ ] Tests fuer Prioritaet, Fallback und fehlende Umgebungsvariablen anlegen.
