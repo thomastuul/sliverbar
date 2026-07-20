@@ -11,59 +11,76 @@
 #define PANEL_ARG_MAX 16
 
 typedef struct {
-    char font[128], icon_font[128], geometry[64], wm_name[64];
-    char terminal[64], location[128], language[16];
-    char launcher[PANEL_PATH_MAX], power_menu[PANEL_PATH_MAX];
-    char weather_cache[PANEL_PATH_MAX], weather_image[PANEL_PATH_MAX];
-    char color_panel_bg[16], color_bg[16], color_fg[16], color_free[16], color_focus[16];
-    char color_free_bg[16], color_focused_free[16], color_focused_free_bg[16];
-    char color_occupied[16], color_occupied_bg[16];
-    char color_focused_occupied[16], color_focused_occupied_bg[16];
-    char color_urgent[16], color_urgent_bg[16];
-    char color_focused_urgent[16], color_focused_urgent_bg[16];
-    char color_clock[16], color_volume[16], color_muted[16], color_system[16];
-    char color_network[16], color_weather[16], color_battery[16];
-    char color_warning[16], color_critical[16], color_brightness[16];
-    int height, clickable_areas, underline, volume_step, brightness_step;
-    unsigned weather_interval, network_interval, title_max;
-} panel_config;
+  char font[128], iconFont[128], geometry[64], wmName[64];
+  char terminal[64], location[128], language[16];
+  char launcher[PANEL_PATH_MAX], powerMenu[PANEL_PATH_MAX];
+  char weatherCache[PANEL_PATH_MAX], weatherImage[PANEL_PATH_MAX];
+  char colorPanelBg[16], colorBg[16], colorFg[16], colorFree[16],
+      colorFocus[16];
+  char colorFreeBg[16], colorFocusedFree[16], colorFocusedFreeBg[16];
+  char colorOccupied[16], colorOccupiedBg[16];
+  char colorFocusedOccupied[16], colorFocusedOccupiedBg[16];
+  char colorUrgent[16], colorUrgentBg[16];
+  char colorFocusedUrgent[16], colorFocusedUrgentBg[16];
+  char colorClock[16], colorVolume[16], colorMuted[16], colorSystem[16];
+  char colorNetwork[16], colorWeather[16], colorBattery[16];
+  char colorWarning[16], colorCritical[16], colorBrightness[16];
+  int height, clickableAreas, underline, volumeStep, brightnessStep;
+  unsigned weatherInterval, networkInterval, titleMax;
+} PanelConfig;
 
 typedef struct {
-    uint64_t cpu_total, cpu_idle;
-    bool cpu_initialized;
-    int brightness_percent;
-    bool brightness_initialized;
-    char brightness_output[64];
-    char workspace[PANEL_TEXT_MAX], title[PANEL_TEXT_MAX];
-    char launcher[PANEL_TEXT_MAX], weather[PANEL_TEXT_MAX], battery[PANEL_TEXT_MAX];
-    char network[PANEL_TEXT_MAX], brightness[PANEL_TEXT_MAX], volume[PANEL_TEXT_MAX];
-    char cpu[PANEL_TEXT_MAX], clock[PANEL_TEXT_MAX], tray[PANEL_TEXT_MAX];
-    char power[PANEL_TEXT_MAX], screencast[PANEL_TEXT_MAX];
-} panel_state;
+  uint64_t cpuTotal, cpuIdle;
+  bool cpuInitialized;
+  int brightnessPercent;
+  bool brightnessInitialized;
+  bool focusedWorkspaceKnown;
+  bool focusedWorkspaceOccupied;
+  char brightnessOutput[64];
+  char workspace[PANEL_TEXT_MAX], title[PANEL_TEXT_MAX];
+  char launcher[PANEL_TEXT_MAX], weather[PANEL_TEXT_MAX],
+      battery[PANEL_TEXT_MAX];
+  char network[PANEL_TEXT_MAX], brightness[PANEL_TEXT_MAX],
+      volume[PANEL_TEXT_MAX];
+  char cpu[PANEL_TEXT_MAX], clock[PANEL_TEXT_MAX], tray[PANEL_TEXT_MAX];
+  char power[PANEL_TEXT_MAX], screencast[PANEL_TEXT_MAX];
+} PanelState;
 
-void config_defaults(panel_config *cfg);
-int config_load(panel_config *cfg, const char *path, char *error, size_t error_size);
-int mkdir_p(const char *path, mode_t mode);
-int read_text_file(const char *path, char *buffer, size_t size);
-int write_atomic(const char *path, const char *data, mode_t mode);
-bool command_exists(const char *name);
-int run_capture(char *const argv[], char *output, size_t size, int timeout_ms);
-int spawn_detached(char *const argv[]);
-void shell_quote_action(const char *input, char *output, size_t size);
-void log_message(const char *level, const char *format, ...);
+void configDefaults(PanelConfig *cfg);
+int configLoad(PanelConfig *cfg,
+               const char *path,
+               char *error,
+               size_t errorSize);
+int mkdirP(const char *path, mode_t mode);
+int readTextFile(const char *path, char *buffer, size_t size);
+int writeAtomic(const char *path, const char *data, mode_t mode);
+bool commandExists(const char *name);
+int runCapture(char *const argv[], char *output, size_t size, int timeoutMs);
+int spawnDetached(char *const argv[]);
+void shellQuoteAction(const char *input, char *output, size_t size);
+void logMessage(const char *level, const char *format, ...);
 
-void module_clock(const panel_config *cfg, panel_state *state);
-void module_cpu(const panel_config *cfg, panel_state *state);
-void module_battery(const panel_config *cfg, panel_state *state);
-void module_screencast(const panel_config *cfg, panel_state *state, const char *runtime_dir);
-void module_volume(const panel_config *cfg, panel_state *state);
-int parse_nmcli_wifi(const char *output, char *ssid, size_t ssid_size, int *strength);
-void module_network(const panel_config *cfg, panel_state *state);
-void module_brightness(const panel_config *cfg, panel_state *state);
-void module_brightness_value(const panel_config *cfg, panel_state *state, int percent);
-void module_weather(const panel_config *cfg, panel_state *state);
-void module_workspace(const panel_config *cfg, panel_state *state, const char *report);
-void module_static(const panel_config *cfg, panel_state *state);
-void render_panel(const panel_state *state, char *output, size_t size);
+void moduleClock(const PanelConfig *cfg, PanelState *state);
+void moduleCpu(const PanelConfig *cfg, PanelState *state);
+void moduleBattery(const PanelConfig *cfg, PanelState *state);
+void moduleScreencast(const PanelConfig *cfg,
+                      PanelState *state,
+                      const char *runtimeDir);
+void moduleVolume(const PanelConfig *cfg, PanelState *state);
+int parseNmcliWifi(const char *output,
+                   char *ssid,
+                   size_t ssidSize,
+                   int *strength);
+void moduleNetwork(const PanelConfig *cfg, PanelState *state);
+void moduleBrightness(const PanelConfig *cfg, PanelState *state);
+void moduleBrightnessValue(const PanelConfig *cfg,
+                           PanelState *state,
+                           int percent);
+void moduleWeather(const PanelConfig *cfg, PanelState *state);
+void moduleWorkspace(const PanelConfig *cfg,
+                     PanelState *state,
+                     const char *report);
+void moduleStatic(const PanelConfig *cfg, PanelState *state);
+void renderPanel(const PanelState *state, char *output, size_t size);
 
 #endif

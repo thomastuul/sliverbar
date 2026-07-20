@@ -9,24 +9,24 @@
 #ifdef HAVE_NATIVE_PANEL
 #include <xcb/xcb.h>
 
-typedef struct native_panel native_panel;
+typedef struct NativePanel NativePanel;
 
-native_panel *native_panel_create(xcb_connection_t *connection,
-                                  xcb_screen_t *screen,
-                                  const panel_config *config,
-                                  char *error,
-                                  size_t error_size);
-void native_panel_destroy(native_panel *panel);
-int native_panel_draw(native_panel *panel, const panel_state *state);
-bool native_panel_handle_event(native_panel *panel,
-                               const xcb_generic_event_t *event,
-                               char *action,
-                               size_t action_size,
-                               bool *redraw);
-xcb_window_t native_panel_window(const native_panel *panel);
-bool native_panel_owns_tray(const native_panel *panel);
-size_t native_panel_tray_icon_count(const native_panel *panel);
-xcb_atom_t native_panel_tray_opcode(const native_panel *panel);
+NativePanel *nativePanelCreate(xcb_connection_t *connection,
+                               xcb_screen_t *screen,
+                               const PanelConfig *config,
+                               char *error,
+                               size_t errorSize);
+void nativePanelDestroy(NativePanel *panel);
+int nativePanelDraw(NativePanel *panel, const PanelState *state);
+bool nativePanelHandleEvent(NativePanel *panel,
+                            const xcb_generic_event_t *event,
+                            char *action,
+                            size_t actionSize,
+                            bool *redraw);
+xcb_window_t nativePanelWindow(const NativePanel *panel);
+bool nativePanelOwnsTray(const NativePanel *panel);
+size_t nativePanelTrayIconCount(const NativePanel *panel);
+xcb_atom_t nativePanelTrayOpcode(const NativePanel *panel);
 
 #endif
 

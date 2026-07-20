@@ -25,6 +25,13 @@ This is the authoritative validation before committing C changes. It must run:
 
 Set `CONTAINER_ENGINE=podman` to use rootless Podman instead of Docker.
 
+## Deployment validation
+
+- Before every deployment, CTest must pass and the `codex-security` plugin's
+  `$security-scan` workflow must be run against the repository.
+- Treat both CTest and Codex Security as mandatory deployment gates. Do not
+  deploy while either check has failed or has not been completed.
+
 A local build may be used for quick iteration:
 
     cmake -S lemonbar_c -B build/lemonbar_c \
