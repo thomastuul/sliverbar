@@ -111,6 +111,23 @@ int main(int argc, char **argv) {
   CHECK(strength == 88);
   CHECK(parseNmcliWifi("*:broken:unknown\n", ssid, sizeof(ssid), &strength) !=
         0);
+  CHECK(wifiQualityPercent(51.0) == 73);
+  CHECK(wifiQualityPercent(0.0) == 0);
+  CHECK(wifiQualityPercent(70.0) == 100);
+  CHECK(wifiQualityPercent(90.0) == 100);
+  CHECK(wifiQualityPercent(-1.0) == -1);
+
+  const char ROUTES[] =
+      "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n"
+      "eth0\t0000A8C0\t00000000\t0001\t0\t0\t0\t00FFFFFF\n"
+      "wlo1\t00000000\t0101A8C0\t0003\t0\t0\t600\t00000000\n";
+  char routeInterface[32];
+  CHECK(parseDefaultRouteInterface(
+            ROUTES, routeInterface, sizeof(routeInterface)) == 0);
+  CHECK(strcmp(routeInterface, "wlo1") == 0);
+  CHECK(parseDefaultRouteInterface("Iface\tDestination\n",
+                                   routeInterface,
+                                   sizeof(routeInterface)) != 0);
 
   moduleWorkspace(&cfg, &state, "WMDP-3:O1:o2:f3:LT:TT:G");
   CHECK(state.focusedWorkspaceKnown);

@@ -71,6 +71,10 @@ int parseNmcliWifi(const char *output,
                    char *ssid,
                    size_t ssidSize,
                    int *strength);
+int wifiQualityPercent(double quality);
+int parseDefaultRouteInterface(const char *routes,
+                               char *interface,
+                               size_t interfaceSize);
 void moduleNetwork(const PanelConfig *cfg, PanelState *state);
 void moduleBrightness(const PanelConfig *cfg, PanelState *state);
 void moduleBrightnessValue(const PanelConfig *cfg,

@@ -28,14 +28,14 @@ Beobachtete Reproduktion am 20.07.2026:
 - [ ] Signalquelle und Bedeutung des angezeigten Prozentwerts eindeutig
   festlegen und dokumentieren: Linkqualitaet des aktiven Interfaces oder die
   von NetworkManager normalisierte Signalstaerke.
-- [ ] Fuer eine mit Conky vergleichbare Anzeige die Kernel-Linkqualitaet des
+- [x] Fuer eine mit Conky vergleichbare Anzeige die Kernel-Linkqualitaet des
   aktiven WLAN-Interfaces bevorzugen, sofern sie verfuegbar und gueltig ist.
   `nmcli` kann weiterhin SSID und Verbindungsstatus liefern sowie als Fallback
   dienen.
-- [ ] Bei der Umrechnung von Kernelqualitaet in Prozent korrekt runden statt
+- [x] Bei der Umrechnung von Kernelqualitaet in Prozent korrekt runden statt
   den Gleitkommawert nur abzuschneiden und das Ergebnis auf 0 bis 100
   begrenzen.
-- [ ] Nicht einfach das erste aktive WLAN-Interface aus `/sys/class/net`
+- [x] Nicht einfach das erste aktive WLAN-Interface aus `/sys/class/net`
   verwenden. Bei mehreren WLAN-Adaptern das tatsaechlich verbundene
   beziehungsweise fuer die Standardroute verwendete Interface bestimmen.
 - [ ] Beruecksichtigen, dass `/proc/net/wireless` nicht mit jedem Treiber eine

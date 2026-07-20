@@ -221,6 +221,50 @@ int parseNmcliWifi(const char *output,
   return -1;
 }
 
+int wifiQualityPercent(double quality) {
+  if (quality != quality || quality < 0.0)
+    return -1;
+  if (quality >= 70.0)
+    return 100;
+  return (int)((quality * 100.0 + 35.0) / 70.0);
+}
+
+int parseDefaultRouteInterface(const char *routes,
+                               char *interface,
+                               size_t interfaceSize) {
+  if (!routes || !interface || interfaceSize == 0)
+    return -1;
+  const char *line = strchr(routes, '\n');
+  line = line ? line + 1 : routes;
+  while (*line) {
+    const char *end = strchr(line, '\n');
+    size_t length = end ? (size_t)(end - line) : strlen(line);
+    char copy[512], name[128];
+    if (length >= sizeof(copy))
+      length = sizeof(copy) - 1;
+    memcpy(copy, line, length);
+    copy[length] = '\0';
+    unsigned long destination, gateway, flags;
+    int fields =
+        sscanf(copy, "%127s %lx %lx %lx", name, &destination, &gateway, &flags);
+    (void)gateway;
+    if (fields == 4 && destination == 0 && (flags & 1UL)) {
+      snprintf(interface, interfaceSize, "%s", name);
+      return 0;
+    }
+    line = end ? end + 1 : line + length;
+  }
+  interface[0] = '\0';
+  return -1;
+}
+
+static void defaultRouteInterface(char *interface, size_t interfaceSize) {
+  char routes[16384];
+  interface[0] = '\0';
+  if (!readTextFile("/proc/net/route", routes, sizeof(routes)))
+    parseDefaultRouteInterface(routes, interface, interfaceSize);
+}
+
 static int wirelessStrength(const char *interface) {
   FILE *file = fopen("/proc/net/wireless", "r");
   if (!file)
@@ -231,11 +275,7 @@ static int wirelessStrength(const char *interface) {
   while (fgets(line, sizeof(line), file)) {
     if (sscanf(line, " %127[^:]: %*s %lf", name, &quality) == 2 &&
         !strcmp(name, interface)) {
-      strength = (int)(quality * 100.0 / 70.0);
-      if (strength > 100)
-        strength = 100;
-      if (strength < 0)
-        strength = 0;
+      strength = wifiQualityPercent(quality);
       break;
     }
   }
@@ -246,8 +286,9 @@ static int wirelessStrength(const char *interface) {
 void moduleNetwork(const PanelConfig *c, PanelState *s) {
   DIR *d = opendir("/sys/class/net");
   bool eth = false, wifi = false;
-  char ssid[128] = "-", wifiInterface[256] = "";
+  char ssid[128] = "-", wifiInterface[256] = "", preferredInterface[256];
   int strength = -1;
+  defaultRouteInterface(preferredInterface, sizeof(preferredInterface));
   if (d) {
     struct dirent *e;
     while ((e = readdir(d))) {
@@ -262,7 +303,7 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
       snprintf(phy, sizeof(phy), "/sys/class/net/%s/phy80211", e->d_name);
       if (!access(p, F_OK) || !access(phy, F_OK)) {
         wifi = true;
-        if (!wifiInterface[0])
+        if (!wifiInterface[0] || !strcmp(e->d_name, preferredInterface))
           snprintf(wifiInterface, sizeof(wifiInterface), "%s", e->d_name);
       } else {
         snprintf(p, sizeof(p), "/sys/class/net/%s/device", e->d_name);
@@ -272,6 +313,8 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
     }
     closedir(d);
   }
+  int kernelStrength = wifi ? wirelessStrength(wifiInterface) : -1;
+  int nmcliStrength = -1;
   if (wifi && commandExists("nmcli")) {
     char out[2048];
     char *av[] = {"nmcli",
@@ -288,12 +331,10 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
                   "ifname",
                   wifiInterface,
                   NULL};
-    if (runCapture(av, out, sizeof(out), 1500) ||
-        parseNmcliWifi(out, ssid, sizeof(ssid), &strength))
-      strength = wirelessStrength(wifiInterface);
-  } else if (wifi) {
-    strength = wirelessStrength(wifiInterface);
+    if (!runCapture(av, out, sizeof(out), 1500))
+      parseNmcliWifi(out, ssid, sizeof(ssid), &nmcliStrength);
   }
+  strength = kernelStrength >= 0 ? kernelStrength : nmcliStrength;
   char text[256], body[512], safe[128], wifiText[64] = "";
   shellQuoteAction(ssid, safe, sizeof(safe));
   if (wifi && strength >= 0) {
