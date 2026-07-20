@@ -20,6 +20,9 @@ action(char *out, size_t n, int button, const char *command, const char *body) {
 }
 
 void moduleClock(const PanelConfig *c, PanelState *s) {
+  s->clock[0] = '\0';
+  if (!moduleModeActive(c->moduleClock, true))
+    return;
   time_t now = time(NULL);
   struct tm tm;
   localtime_r(&now, &tm);
@@ -32,6 +35,9 @@ void moduleClock(const PanelConfig *c, PanelState *s) {
 }
 
 void moduleCpu(const PanelConfig *c, PanelState *s) {
+  s->cpu[0] = '\0';
+  if (!moduleModeActive(c->moduleCpu, true))
+    return;
   FILE *f = fopen("/proc/stat", "r");
   unsigned long long u, n, sy, id, io, ir, si, st;
   if (!f || fscanf(f,
@@ -70,6 +76,9 @@ void moduleCpu(const PanelConfig *c, PanelState *s) {
 }
 
 void moduleBattery(const PanelConfig *c, PanelState *s) {
+  s->battery[0] = '\0';
+  if (c->moduleBattery == MODULE_DISABLED)
+    return;
   DIR *d = opendir("/sys/class/power_supply");
   int sum = 0, count = 0;
   bool charging = false, full = true;
@@ -99,6 +108,8 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
     }
     closedir(d);
   }
+  if (!moduleModeActive(c->moduleBattery, count > 0))
+    return;
   char text[96];
   if (!count)
     snprintf(text, sizeof(text), " AC");
@@ -130,14 +141,22 @@ void moduleScreencast(const PanelConfig *c,
                       const char *runtime) {
   char p[PANEL_PATH_MAX];
   snprintf(p, sizeof(p), "%s/screencast.pid", runtime);
+  bool active = access(p, F_OK) == 0;
+  s->screencast[0] = '\0';
+  if (!moduleModeActive(c->moduleScreencast, active))
+    return;
   block(s->screencast,
         sizeof(s->screencast),
         c->colorBg,
-        access(p, F_OK) == 0 ? c->colorCritical : c->colorFree,
+        active ? c->colorCritical : c->colorFree,
         "壘");
 }
 
 void moduleVolume(const PanelConfig *c, PanelState *s) {
+  s->volume[0] = '\0';
+  if (!moduleModeActive(c->moduleVolume, commandExists("amixer")) ||
+      !commandExists("amixer"))
+    return;
   char out[2048];
   char *argv[] = {"amixer", "get", "Master", NULL};
   if (runCapture(argv, out, sizeof(out), 1000))
@@ -284,6 +303,9 @@ static int wirelessStrength(const char *interface) {
 }
 
 void moduleNetwork(const PanelConfig *c, PanelState *s) {
+  s->network[0] = '\0';
+  if (c->moduleNetwork == MODULE_DISABLED)
+    return;
   DIR *d = opendir("/sys/class/net");
   bool eth = false, wifi = false;
   char ssid[128] = "-", wifiInterface[256] = "", preferredInterface[256];
@@ -313,6 +335,8 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
     }
     closedir(d);
   }
+  if (!moduleModeActive(c->moduleNetwork, eth || wifi))
+    return;
   int kernelStrength = wifi ? wirelessStrength(wifiInterface) : -1;
   int nmcliStrength = -1;
   if (wifi && commandExists("nmcli")) {
@@ -360,6 +384,9 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
 }
 
 void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
+  s->brightness[0] = '\0';
+  if (!moduleModeActive(c->moduleBrightness, true))
+    return;
   char text[64], body[256], tmp[512];
   snprintf(text, sizeof(text), " %3d%%", pct);
   block(body, sizeof(body), c->colorBg, c->colorBrightness, text);
@@ -368,6 +395,12 @@ void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
 }
 
 void moduleBrightness(const PanelConfig *c, PanelState *s) {
+  s->brightness[0] = '\0';
+  s->brightnessInitialized = false;
+  s->brightnessOutput[0] = '\0';
+  if (!moduleModeActive(c->moduleBrightness, commandExists("xrandr")) ||
+      !commandExists("xrandr"))
+    return;
   char query[16384], output[64] = "";
   char *qv[] = {"xrandr", "--query", NULL};
   if (!runCapture(qv, query, sizeof(query), 1200)) {
@@ -419,6 +452,9 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   char data[32768] = "";
   if (*c->weatherCache)
     readTextFile(c->weatherCache, data, sizeof(data));
+  s->weather[0] = '\0';
+  if (!moduleModeActive(c->moduleWeather, c->location[0] && data[0]))
+    return;
   int rain = 0, min = 0, max = 0;
   char *p = strstr(data, "\"chanceofrain\"");
   for (int i = 0; p && i < 8; i++, p = strstr(p + 1, "\"chanceofrain\"")) {
@@ -560,10 +596,16 @@ void moduleWorkspaceEwmh(const PanelConfig *c,
 
 void moduleStatic(const PanelConfig *c, PanelState *s) {
   char body[128];
-  block(body, sizeof(body), c->colorBg, c->colorFg, "");
-  action(s->launcher, sizeof(s->launcher), 1, "launcher", body);
-  block(body, sizeof(body), c->colorBg, c->colorFg, "");
-  action(s->power, sizeof(s->power), 1, "power", body);
+  s->launcher[0] = '\0';
+  s->power[0] = '\0';
+  if (moduleModeActive(c->moduleLauncher, c->launcher[0])) {
+    block(body, sizeof(body), c->colorBg, c->colorFg, "");
+    action(s->launcher, sizeof(s->launcher), 1, "launcher", body);
+  }
+  if (moduleModeActive(c->modulePower, c->powerMenu[0])) {
+    block(body, sizeof(body), c->colorBg, c->colorFg, "");
+    action(s->power, sizeof(s->power), 1, "power", body);
+  }
 }
 
 void renderPanel(const PanelState *s, char *out, size_t n) {

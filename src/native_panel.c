@@ -251,8 +251,12 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
   char description[256];
   fontName(config->font, description, sizeof(description));
   panel->font = pango_font_description_from_string(description);
-  fontName(config->iconFont, description, sizeof(description));
-  panel->iconFont = pango_font_description_from_string(description);
+  if (config->iconFont[0]) {
+    fontName(config->iconFont, description, sizeof(description));
+    panel->iconFont = pango_font_description_from_string(description);
+  } else {
+    panel->iconFont = pango_font_description_copy(panel->font);
+  }
   pango_layout_set_font_description(panel->layout, panel->font);
   xcb_flush(connection);
   if (cairo_surface_status(panel->surface) != CAIRO_STATUS_SUCCESS) {
@@ -499,7 +503,8 @@ static int drawMarkup(NativePanel *panel, const char *markup) {
     int *x = &positions[segments[i].align];
     drawSegment(panel, &segments[i], *x);
     if (segments[i].align == ALIGN_RIGHT && segments[i].offset &&
-        nativeTrayAvailable(panel->tray))
+        moduleModeActive(panel->config.moduleTray,
+                         nativeTrayAvailable(panel->tray)))
       nativeTrayLayout(panel->tray, *x + 4);
     addRegions(panel, &segments[i], *x);
     *x += segments[i].width;
@@ -511,7 +516,8 @@ static int drawMarkup(NativePanel *panel, const char *markup) {
 
 int nativePanelDraw(NativePanel *panel, const PanelState *state) {
   PanelState rendered = *state;
-  if (nativeTrayAvailable(panel->tray)) {
+  if (moduleModeActive(panel->config.moduleTray,
+                       nativeTrayAvailable(panel->tray))) {
     int width = nativeTrayWidth(panel->tray);
     snprintf(rendered.tray,
              sizeof(rendered.tray),
@@ -522,7 +528,8 @@ int nativePanelDraw(NativePanel *panel, const PanelState *state) {
   }
   renderPanel(&rendered, panel->lastMarkup, sizeof(panel->lastMarkup));
   int result = drawMarkup(panel, panel->lastMarkup);
-  if (!result && nativeTrayAvailable(panel->tray))
+  if (!result && moduleModeActive(panel->config.moduleTray,
+                                  nativeTrayAvailable(panel->tray)))
     nativeTrayAcquire(panel->tray);
   if (!result && !panel->mapped) {
     xcb_map_window(panel->connection, panel->window);

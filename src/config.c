@@ -13,15 +13,11 @@ static void copy(char *dst, size_t size, const char *src) {
 
 void configDefaults(PanelConfig *c) {
   memset(c, 0, sizeof(*c));
-  copy(c->font, sizeof(c->font), "JetBrainsMono:style=Regular:size=13");
-  copy(c->iconFont,
-       sizeof(c->iconFont),
-       "Hack Nerd Font Mono:style=Regular:size=13");
+  copy(c->font, sizeof(c->font), "Monospace:style=Regular:size=11");
   copy(c->wmName, sizeof(c->wmName), "sliverbar");
   copy(c->workspaceBackend, sizeof(c->workspaceBackend), "auto");
-  copy(c->terminal, sizeof(c->terminal), "alacritty");
-  copy(c->location, sizeof(c->location), "München");
-  copy(c->language, sizeof(c->language), "de");
+  copy(c->terminal, sizeof(c->terminal), "auto");
+  copy(c->language, sizeof(c->language), "en");
   copy(c->colorPanelBg, 16, "#191A21");
   copy(c->colorBg, 16, "#282A36");
   copy(c->colorFg, 16, "#ff5555");
@@ -55,6 +51,10 @@ void configDefaults(PanelConfig *c) {
   c->weatherInterval = 1800;
   c->networkInterval = 60;
   c->titleMax = 45;
+}
+
+bool moduleModeActive(ModuleMode mode, bool available) {
+  return mode == MODULE_ENABLED || (mode == MODULE_AUTO && available);
 }
 
 static char *trim(char *s) {
@@ -101,6 +101,33 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   STR("power_menu", powerMenu);
   STR("weather_cache", weatherCache);
   STR("weather_image", weatherImage);
+#define MODULE(key, field)                                                     \
+  do {                                                                         \
+    if (!strcmp(k, "module_" key)) {                                           \
+      if (!strcmp(v, "auto"))                                                  \
+        c->field = MODULE_AUTO;                                                \
+      else if (!strcmp(v, "enabled"))                                          \
+        c->field = MODULE_ENABLED;                                             \
+      else if (!strcmp(v, "disabled"))                                         \
+        c->field = MODULE_DISABLED;                                            \
+      else                                                                     \
+        return -1;                                                             \
+      return 0;                                                                \
+    }                                                                          \
+  } while (0)
+  MODULE("clock", moduleClock);
+  MODULE("title", moduleTitle);
+  MODULE("cpu", moduleCpu);
+  MODULE("battery", moduleBattery);
+  MODULE("screencast", moduleScreencast);
+  MODULE("volume", moduleVolume);
+  MODULE("network", moduleNetwork);
+  MODULE("brightness", moduleBrightness);
+  MODULE("weather", moduleWeather);
+  MODULE("launcher", moduleLauncher);
+  MODULE("tray", moduleTray);
+  MODULE("power", modulePower);
+#undef MODULE
   STR("color_panel_bg", colorPanelBg);
   STR("color_bg", colorBg);
   STR("color_fg", colorFg);

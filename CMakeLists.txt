@@ -32,6 +32,10 @@ target_compile_options(sliverbar_core PRIVATE -Wall -Wextra -Wpedantic -Wconvers
 add_executable(sliverbar src/main.c)
 target_link_libraries(sliverbar PRIVATE sliverbar_core)
 target_compile_definitions(sliverbar PRIVATE _GNU_SOURCE _POSIX_C_SOURCE=200809L)
+target_compile_definitions(
+    sliverbar PRIVATE
+    SLIVERBAR_SYSTEM_CONFIG="${CMAKE_INSTALL_FULL_SYSCONFDIR}/sliverbar/panel.conf"
+)
 configure_file(include/version.h.in generated/version.h @ONLY)
 target_include_directories(sliverbar PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 if(SLIVERBAR_WITH_XCB AND XCB_FOUND AND CAIRO_XCB_FOUND AND PANGOCAIRO_FOUND)

@@ -106,6 +106,9 @@ static void storeTitle(const char *title,
                        unsigned max,
                        PanelState *s,
                        const PanelConfig *c) {
+  s->title[0] = '\0';
+  if (!moduleModeActive(c->moduleTitle, true))
+    return;
   char clipped[512], safe[512];
   const char *display = title && *title ? title : "Desktop";
   snprintf(clipped, sizeof(clipped), "%.*s", (int)max, display);
@@ -490,6 +493,9 @@ static void refreshWeatherImage(const PanelConfig *c) {
 }
 
 static pid_t startWeatherRefresh(const PanelConfig *c) {
+  if (!moduleModeActive(c->moduleWeather, c->location[0] != '\0') ||
+      !c->location[0] || !commandExists("curl"))
+    return 0;
   pid_t pid = fork();
   if (pid == 0) {
     sigset_t empty;
@@ -666,6 +672,7 @@ int main(int argc, char **argv) {
   PanelConfig cfg;
   configDefaults(&cfg);
   const char *config = NULL;
+  char defaultConfig[PANEL_PATH_MAX];
   bool check = false, smokeTest = false;
   signal(SIGPIPE, SIG_IGN);
   for (int i = 1; i < argc; i++) {
@@ -685,8 +692,33 @@ int main(int argc, char **argv) {
   }
   if (!config) {
     config = getenv("SLIVERBAR_CONFIG");
-    if (!config)
-      config = "panel.conf";
+    if (!config) {
+      const char *configHome = getenv("XDG_CONFIG_HOME");
+      const char *home = getenv("HOME");
+      bool userConfigFound = false;
+      if (configHome &&
+          !joinPath(defaultConfig,
+                    sizeof(defaultConfig),
+                    configHome,
+                    "/sliverbar/panel.conf") &&
+          access(defaultConfig, R_OK) == 0)
+        userConfigFound = true;
+      if (!userConfigFound && home &&
+          !joinPath(defaultConfig,
+                    sizeof(defaultConfig),
+                    home,
+                    "/.config/sliverbar/panel.conf") &&
+          access(defaultConfig, R_OK) == 0)
+        userConfigFound = true;
+      if (userConfigFound)
+        config = defaultConfig;
+      else if (access(SLIVERBAR_SYSTEM_CONFIG, R_OK) == 0)
+        config = SLIVERBAR_SYSTEM_CONFIG;
+      else if (access("panel.conf", R_OK) == 0)
+        config = "panel.conf";
+      else
+        config = "config/panel.conf";
+    }
   }
   char error[512];
   if (configLoad(&cfg, config, error, sizeof(error))) {
@@ -699,22 +731,12 @@ int main(int argc, char **argv) {
   if (!cache && home &&
       !joinPath(cacheDefault, sizeof(cacheDefault), home, "/.cache"))
     cache = cacheDefault;
-  if (home && !*cfg.launcher)
-    joinPath(cfg.launcher,
-             sizeof(cfg.launcher),
-             home,
-             "/.config/bspwm/rofi/launcher/launcher.sh");
-  if (home && !*cfg.powerMenu)
-    joinPath(cfg.powerMenu,
-             sizeof(cfg.powerMenu),
-             home,
-             "/.config/bspwm/rofi/powermenu/powermenu.sh");
-  if (cache && !*cfg.weatherCache) {
-    snprintf(suffix, sizeof(suffix), "/weather/%s.json", cfg.location);
+  if (cache && cfg.location[0] && !*cfg.weatherCache) {
+    snprintf(suffix, sizeof(suffix), "/sliverbar/weather/forecast.json");
     joinPath(cfg.weatherCache, sizeof(cfg.weatherCache), cache, suffix);
   }
-  if (cache && !*cfg.weatherImage) {
-    snprintf(suffix, sizeof(suffix), "/weather/%s_3days.png", cfg.location);
+  if (cache && cfg.location[0] && !*cfg.weatherImage) {
+    snprintf(suffix, sizeof(suffix), "/sliverbar/weather/forecast.png");
     joinPath(cfg.weatherImage, sizeof(cfg.weatherImage), cache, suffix);
   }
   if (check) {
@@ -1009,7 +1031,7 @@ int main(int argc, char **argv) {
     return 1;
   }
   Child networkEvents = {.readFd = -1, .writeFd = -1};
-  if (commandExists("nmcli")) {
+  if (cfg.moduleNetwork != MODULE_DISABLED && commandExists("nmcli")) {
     char *nm[] = {"nmcli", "monitor", NULL};
     if (childPipe(nm, false, &networkEvents))
       logMessage("ERROR", "cannot start nmcli monitor");
@@ -1073,7 +1095,8 @@ int main(int argc, char **argv) {
         moduleNetwork(&cfg, &state);
       if (ticks % cfg.weatherInterval == 0 && weatherPid <= 0)
         weatherPid = startWeatherRefresh(&cfg);
-      if (networkEvents.pid <= 0 && commandExists("nmcli")) {
+      if (cfg.moduleNetwork != MODULE_DISABLED && networkEvents.pid <= 0 &&
+          commandExists("nmcli")) {
         char *nm[] = {"nmcli", "monitor", NULL};
         if (childPipe(nm, false, &networkEvents))
           logMessage("ERROR", "cannot restart nmcli monitor");

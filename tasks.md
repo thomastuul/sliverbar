@@ -83,7 +83,7 @@ bleibt aktiv und zeigt alle vom Window Manager unabhaengigen Module an.
 
 ## Prioritaet 2: Neutrale Konfiguration und optionale Module
 
-- [ ] Benutzerspezifische Standardwerte entfernen oder neutralisieren:
+- [x] Benutzerspezifische Standardwerte entfernen oder neutralisieren:
   - keine Pfade unter `~/.config/bspwm` automatisch einsetzen;
   - keinen bestimmten Terminalemulator voraussetzen;
   - Wetterort und Sprache nicht fest auf Muenchen und Deutsch setzen;
@@ -91,16 +91,16 @@ bleibt aktiv und zeigt alle vom Window Manager unabhaengigen Module an.
     verwenden;
   - Icon-Schrift optional machen, damit fehlende Nerd Fonts den Betrieb nicht
     unbrauchbar machen.
-- [ ] Module einzeln per Konfiguration aktivieren, deaktivieren oder automatisch
+- [x] Module einzeln per Konfiguration aktivieren, deaktivieren oder automatisch
   erkennen lassen.
-- [ ] Fehlende optionale Programme wie `pactl`, `amixer`, `nmcli`, `xrandr`,
+- [x] Fehlende optionale Programme wie `pactl`, `amixer`, `nmcli`, `xrandr`,
   `curl`, `notify-send` und `xdg-open` als normale Laufzeitsituation behandeln.
 - [ ] Fuer jedes Modul festlegen, welche Backends und externen Programme
   optional beziehungsweise zwingend sind.
 - [ ] Eine Diagnoseoption wie `sliverbar --diagnose` vorsehen, die erkannte
   Backends, fehlende optionale Programme, Display, Window-Manager-Backend,
   Schriften und Konfigurationspfad ausgibt.
-- [ ] Tests sicherstellen, dass fehlende optionale Programme weder Absturz noch
+- [x] Tests sicherstellen, dass fehlende optionale Programme weder Absturz noch
   Beendigung des Panels verursachen.
 
 Akzeptanzkriterium: Eine minimale Konfiguration startet nur Uhr und Fenstertitel

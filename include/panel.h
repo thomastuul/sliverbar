@@ -11,6 +11,12 @@
 #define PANEL_ARG_MAX 16
 #define PANEL_WORKSPACE_MAX 32
 
+typedef enum {
+  MODULE_AUTO,
+  MODULE_ENABLED,
+  MODULE_DISABLED,
+} ModuleMode;
+
 typedef struct {
   char font[128], iconFont[128], geometry[64], wmName[64];
   char workspaceBackend[16];
@@ -29,6 +35,9 @@ typedef struct {
   char colorWarning[16], colorCritical[16], colorBrightness[16];
   int height, clickableAreas, underline, volumeStep, brightnessStep;
   unsigned weatherInterval, networkInterval, titleMax;
+  ModuleMode moduleClock, moduleTitle, moduleCpu, moduleBattery;
+  ModuleMode moduleScreencast, moduleVolume, moduleNetwork, moduleBrightness;
+  ModuleMode moduleWeather, moduleLauncher, moduleTray, modulePower;
 } PanelConfig;
 
 typedef struct {
@@ -57,6 +66,7 @@ typedef struct {
 } WorkspaceSnapshot;
 
 void configDefaults(PanelConfig *cfg);
+bool moduleModeActive(ModuleMode mode, bool available);
 int configLoad(PanelConfig *cfg,
                const char *path,
                char *error,

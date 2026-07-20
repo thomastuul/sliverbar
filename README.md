@@ -117,6 +117,26 @@ invalid keys fail validation. Paths are derived from `HOME`, `XDG_CACHE_HOME`
 and `XDG_RUNTIME_DIR` unless explicitly configured. Run
 `sliverbar --check-config --config PATH` before starting a panel.
 
+Without `--config` or `SLIVERBAR_CONFIG`, configuration is searched in
+`$XDG_CONFIG_HOME/sliverbar/panel.conf`, then
+`$HOME/.config/sliverbar/panel.conf`, the installed system configuration, and
+finally the local development configuration. No bspwm-specific path is
+implicitly selected.
+
+Each main block has a `module_NAME=auto|enabled|disabled` switch. `auto` hides
+blocks whose data source or optional runtime command is unavailable. The
+supported names are `clock`, `title`, `cpu`, `battery`, `screencast`, `volume`,
+`network`, `brightness`, `weather`, `launcher`, `tray`, and `power`. For
+example, a deliberately minimal panel can start from the example configuration
+and set every module except `clock` and `title` to `disabled`, plus
+`workspace_backend=none`.
+
+The default text font is the generic Pango `Monospace` family. An empty
+`icon_font` uses the regular font and Pango's installed fallback fonts; a Nerd
+Font remains an optional visual enhancement. Weather is disabled automatically
+until `location` is configured. The example assumes neither a terminal nor a
+launcher or power-menu script.
+
 `workspace_backend=auto` prefers bspwm's report stream when a reachable `bspc`
 is available and otherwise uses EWMH. `ewmh` forces the portable backend,
 `bspwm` requests bspwm with an automatic EWMH fallback, and `none` hides the

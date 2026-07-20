@@ -41,13 +41,21 @@ int main(int argc, char **argv) {
   CHECK(strcmp(cfg.colorBg, "#282A36") == 0);
   CHECK(strcmp(cfg.wmName, "sliverbar") == 0);
   CHECK(strcmp(cfg.workspaceBackend, "auto") == 0);
-  CHECK(strstr(cfg.font, "size=13") != NULL);
-  CHECK(strstr(cfg.iconFont, "size=13") != NULL);
+  CHECK(strstr(cfg.font, "Monospace") != NULL);
+  CHECK(cfg.iconFont[0] == '\0');
+  CHECK(strcmp(cfg.terminal, "auto") == 0);
+  CHECK(cfg.location[0] == '\0');
+  CHECK(cfg.moduleClock == MODULE_AUTO);
+  CHECK(moduleModeActive(MODULE_AUTO, true));
+  CHECK(!moduleModeActive(MODULE_AUTO, false));
+  CHECK(moduleModeActive(MODULE_ENABLED, false));
+  CHECK(!moduleModeActive(MODULE_DISABLED, true));
 
   char path[] = "/tmp/sliverbar-test-XXXXXX";
   int fd = mkstemp(path);
   CHECK(fd >= 0);
-  const char TEXT[] = "height=31\nvolume_step=4\ncolor_bg=#000000\n";
+  const char TEXT[] =
+      "height=31\nvolume_step=4\ncolor_bg=#000000\nmodule_cpu=disabled\n";
   CHECK(write(fd, TEXT, sizeof(TEXT) - 1) == (ssize_t)(sizeof(TEXT) - 1));
   CHECK(close(fd) == 0);
 
@@ -57,6 +65,7 @@ int main(int argc, char **argv) {
   CHECK(cfg.volumeStep == 4);
   CHECK(strcmp(cfg.colorBg, "#000000") == 0);
   CHECK(strcmp(cfg.colorOccupied, "#ff5555") == 0);
+  CHECK(cfg.moduleCpu == MODULE_DISABLED);
   CHECK(unlink(path) == 0);
 
   char quoted[32];
@@ -187,6 +196,16 @@ int main(int argc, char **argv) {
   CHECK(close(fd) == 0);
   CHECK(configLoad(&cfg, invalidBackendPath, error, sizeof(error)) != 0);
   CHECK(unlink(invalidBackendPath) == 0);
+
+  char invalidModulePath[] = "/tmp/sliverbar-invalid-module-XXXXXX";
+  fd = mkstemp(invalidModulePath);
+  CHECK(fd >= 0);
+  const char INVALID_MODULE[] = "module_clock=sometimes\n";
+  CHECK(write(fd, INVALID_MODULE, sizeof(INVALID_MODULE) - 1) ==
+        (ssize_t)(sizeof(INVALID_MODULE) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&cfg, invalidModulePath, error, sizeof(error)) != 0);
+  CHECK(unlink(invalidModulePath) == 0);
   puts("ok");
   return 0;
 }
