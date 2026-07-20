@@ -334,16 +334,21 @@ Hibernate und Suspend-then-Hibernate getrennte, korrekt benannte Aktionen sein.
 
 ### Aktionen und Glyphs
 
-| Aktion | Glyph | Bedeutung |
-| --- | --- | --- |
-| Bildschirm sperren | `` | Lock |
-| Abmelden | `` | Logout |
-| Standby/Suspend | `` | Schlafmodus im RAM |
-| Hibernate | `` | Ruhezustand auf Datentraeger |
-| Suspend, dann Hibernate | `` `` | zweistufiger Schlafmodus |
-| Hybrid Sleep | `` | Suspend und Hibernate kombiniert |
-| Neustart | `` | Reboot |
-| Ausschalten | `` | Poweroff |
+Die Laufzeit-Glyphen stammen aus der Private Use Area von Font Awesome
+beziehungsweise Nerd Fonts. Da GitHub diese Icon-Schriften nicht laedt, werden
+hier statt der nicht portabel darstellbaren Zeichen ihre eindeutigen Codepoints
+und eine semantische Unicode-Vorschau gezeigt.
+
+| Aktion | Laufzeit-Glyph | Unicode-Vorschau | Bedeutung |
+| --- | --- | --- | --- |
+| Bildschirm sperren | Font Awesome `U+F023` | 🔒 | Lock |
+| Abmelden | Font Awesome `U+F08B` | ⇥ | Logout |
+| Standby/Suspend | Font Awesome `U+F186` | 🌙 | Schlafmodus im RAM |
+| Hibernate | Font Awesome `U+F236` | 🛏 | Ruhezustand auf Datentraeger |
+| Suspend, dann Hibernate | Font Awesome `U+F186`, `U+F236` | 🌙 → 🛏 | zweistufiger Schlafmodus |
+| Hybrid Sleep | Font Awesome `U+F2DC` | ❄ | Suspend und Hibernate kombiniert |
+| Neustart | Font Awesome `U+F01E` | ↻ | Reboot |
+| Ausschalten | Font Awesome `U+F011` | ⏻ | Poweroff |
 
 - [x] Im Menue neben dem Glyph immer eine lokalisierbare Textbezeichnung
   anzeigen; gefaehrliche Aktionen duerfen nicht nur anhand eines Symbols
@@ -549,9 +554,9 @@ Grenze gesetzt.
 
 - [x] Einen eigenen Inhibitor-Block links vom Wetterblock einfuegen; Wetter und
   Batterie- beziehungsweise AC-Anzeige folgen rechts davon.
-- [x] Als Glyph die Kaffeetasse `` (Font Awesome/Nerd Font, U+F0F4)
-  verwenden. Fuer Installationen ohne Icon-Schrift einen darstellbaren
-  Text- oder Unicode-Fallback vorsehen.
+- [x] Als Glyph die Kaffeetasse aus Font Awesome/Nerd Font (`U+F0F4`,
+  portable Unicode-Vorschau: ☕) verwenden. Fuer Installationen ohne
+  Icon-Schrift einen darstellbaren Text- oder Unicode-Fallback vorsehen.
 - [x] Inaktiven Zustand mit `color_free` und aktive Inhibition mit
   `color_warning` darstellen. Spaeter optional eigene konfigurierbare Farben
   `color_inhibit_inactive` und `color_inhibit_active` anbieten.
