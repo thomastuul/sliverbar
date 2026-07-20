@@ -1,5 +1,5 @@
-#ifndef LEMONBAR_C_NATIVE_PANEL_H
-#define LEMONBAR_C_NATIVE_PANEL_H
+#ifndef SLIVERBAR_NATIVE_PANEL_H
+#define SLIVERBAR_NATIVE_PANEL_H
 
 #include "panel.h"
 

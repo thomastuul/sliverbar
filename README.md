@@ -1,9 +1,8 @@
-# lemonbar-c
+# Sliverbar
 
-Portable C17 implementation of the panel logic in `../lemonbar`. It creates,
-draws, and controls its X11 dock window directly; the Lemonbar program is not a
-build-time or runtime dependency. The existing Bash implementation remains an
-independent reference and fallback.
+Sliverbar is a lightweight C17 panel for Linux desktops running X11 and bspwm.
+It creates, draws, and controls its dock window directly. The existing Bash
+panel remains an independent reference and fallback.
 
 ## Supported platform
 
@@ -24,7 +23,7 @@ The reproducible development build runs in Docker (or rootless Podman) and
 keeps compilers, development headers, XCB, and analysis tools out of the host:
 
 ```sh
-./lemonbar_c/scripts/container-build.sh
+./scripts/container-build.sh
 ```
 
 Set `CONTAINER_ENGINE=podman` to use Podman. The script builds and tests three
@@ -34,22 +33,22 @@ left-, right-, and scroll-action routing is tested automatically.
 The host-owned release binary is written to:
 
 ```text
-lemonbar_c/build/container-release/lemonbar-panel
+build/container-release/sliverbar
 ```
 
 For a local build without the container:
 
 ```sh
-cmake -S lemonbar_c -B build/lemonbar_c -DCMAKE_BUILD_TYPE=RelWithDebInfo
-cmake --build build/lemonbar_c --parallel
-ctest --test-dir build/lemonbar_c --output-on-failure
+cmake -S . -B build/local -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build/local --parallel
+ctest --test-dir build/local --output-on-failure
 ```
 
-Sanitizers can be enabled with `-DLEMONBAR_C_SANITIZERS=ON`. Install with
-`cmake --install build/lemonbar_c`.
+Sanitizers can be enabled with `-DSLIVERBAR_SANITIZERS=ON`. Install with
+`cmake --install build/local`.
 
 The native release is dynamically linked. Inspect it with `ldd` before
-distributing it to another system. `-DLEMONBAR_C_WITH_XCB=OFF` intentionally
+distributing it to another system. `-DSLIVERBAR_WITH_XCB=OFF` intentionally
 builds the CLI-only variant used to verify that configuration and version
 operations remain available without native development headers.
 
@@ -59,7 +58,7 @@ The repository contains project-local `clang-format` and `clang-tidy`
 configuration files. Both tools run inside the container as part of:
 
 ```sh
-./lemonbar_c/scripts/container-build.sh
+./scripts/container-build.sh
 ```
 
 The same command also runs the release, CLI-only, and sanitizer CTest suites.
@@ -69,20 +68,19 @@ host.
 ## Run
 
 ```sh
-lemonbar_c/build/container-release/lemonbar-panel \
-  --config lemonbar_c/config/panel.conf
+build/container-release/sliverbar --config config/panel.conf
 ```
 
 Print the centrally managed project version with:
 
 ```sh
-lemonbar_c/build/container-release/lemonbar-panel --version
+build/container-release/sliverbar --version
 ```
 
 The program owns its X11 dock window and the `_NET_SYSTEM_TRAY_S0` selection,
 subscribes to bspwm and X11 events, embeds tray clients through XEmbed, handles
 clicks through a private action protocol, and shuts down all direct children.
-It uses `$XDG_RUNTIME_DIR/lemonbar-c` for its lock. It does not evaluate shell
+It uses `$XDG_RUNTIME_DIR/sliverbar` for its lock. It does not evaluate shell
 code.
 
 The Bash panel and C panel must not be displayed simultaneously during visual
@@ -90,17 +88,17 @@ testing. The external `trayer` process must also be stopped before starting the
 C panel because X11 permits only one system-tray manager per screen. `autostart`
 is intentionally not changed by this project.
 
-`super + b` continues to work because the native panel publishes the
-`lemonbar-c` application name. A dedicated top-level tray host gives XEmbed
-clients correct screen coordinates for their popups and follows the panel's
-visibility internally. The renderer reserves the host's measured width. The C
-panel does not require the external `trayer` package.
+Visibility keybindings should target the `sliverbar` application name. A
+dedicated top-level tray host gives XEmbed clients correct screen coordinates
+for their popups and follows the panel's visibility internally. The renderer
+reserves the host's measured width. Sliverbar does not require the external
+`trayer` package.
 
 ## Architecture
 
 - one `poll(2)` loop handles `timerfd`, `signalfd`, native mouse actions, bspwm,
   NetworkManager and X11;
-- an XCB window with EWMH dock and strut properties replaces Lemonbar;
+- an XCB window with EWMH dock and strut properties provides the panel surface;
 - Cairo and Pango render the existing block model with measured left, centered,
   and right-aligned regions;
 - mouse actions use a private `|`-separated protocol and are never evaluated by
@@ -115,7 +113,7 @@ panel does not require the external `trayer` package.
 The installed example is an intentionally simple `key=value` file. Unknown or
 invalid keys fail validation. Paths are derived from `HOME`, `XDG_CACHE_HOME`
 and `XDG_RUNTIME_DIR` unless explicitly configured. Run
-`lemonbar-panel --check-config --config PATH` before starting a panel.
+`sliverbar --check-config --config PATH` before starting a panel.
 
 ## Feature mapping
 
@@ -131,4 +129,4 @@ and `XDG_RUNTIME_DIR` unless explicitly configured. Run
 | trayer block | native XEmbed tray manager and direct child-window layout |
 | launcher, power and terminal clicks | detached, argument-based exec |
 
-The Bash directory is not read or executed by `lemonbar-panel`.
+The Bash directory is not read or executed by `sliverbar`.

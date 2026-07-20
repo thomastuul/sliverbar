@@ -17,7 +17,7 @@ void configDefaults(PanelConfig *c) {
   copy(c->iconFont,
        sizeof(c->iconFont),
        "Hack Nerd Font Mono:style=Regular:size=13");
-  copy(c->wmName, sizeof(c->wmName), "lemonbar-c");
+  copy(c->wmName, sizeof(c->wmName), "sliverbar");
   copy(c->terminal, sizeof(c->terminal), "alacritty");
   copy(c->location, sizeof(c->location), "München");
   copy(c->language, sizeof(c->language), "de");

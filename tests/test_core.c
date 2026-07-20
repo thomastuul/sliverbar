@@ -39,10 +39,11 @@ int main(int argc, char **argv) {
   CHECK(cfg.volumeStep == 2);
   CHECK(strcmp(cfg.colorPanelBg, "#191A21") == 0);
   CHECK(strcmp(cfg.colorBg, "#282A36") == 0);
+  CHECK(strcmp(cfg.wmName, "sliverbar") == 0);
   CHECK(strstr(cfg.font, "size=13") != NULL);
   CHECK(strstr(cfg.iconFont, "size=13") != NULL);
 
-  char path[] = "/tmp/lemonbar-c-test-XXXXXX";
+  char path[] = "/tmp/sliverbar-test-XXXXXX";
   int fd = mkstemp(path);
   CHECK(fd >= 0);
   const char TEXT[] = "height=31\nvolume_step=4\ncolor_bg=#000000\n";
@@ -61,7 +62,7 @@ int main(int argc, char **argv) {
   shellQuoteAction("a:b|c%\n", quoted, sizeof(quoted));
   CHECK(strcmp(quoted, "a_b_c__") == 0);
 
-  char signalPath[] = "/tmp/lemonbar-c-signals-XXXXXX";
+  char signalPath[] = "/tmp/sliverbar-signals-XXXXXX";
   fd = mkstemp(signalPath);
   CHECK(fd >= 0);
   CHECK(close(fd) == 0);
@@ -129,7 +130,7 @@ int main(int argc, char **argv) {
   CHECK(state.focusedWorkspaceKnown);
   CHECK(!state.focusedWorkspaceOccupied);
 
-  char invalidPath[] = "/tmp/lemonbar-c-invalid-XXXXXX";
+  char invalidPath[] = "/tmp/sliverbar-invalid-XXXXXX";
   fd = mkstemp(invalidPath);
   CHECK(fd >= 0);
   const char INVALID[] = "unknown_key=value\n";

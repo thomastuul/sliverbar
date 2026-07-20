@@ -212,7 +212,7 @@ void logMessage(const char *level, const char *fmt, ...) {
   struct tm tm;
   localtime_r(&now, &tm);
   strftime(ts, sizeof(ts), "%F %T", &tm);
-  fprintf(stderr, "%s\tlemonbar-c\t%s: ", ts, level);
+  fprintf(stderr, "%s\tsliverbar\t%s: ", ts, level);
   va_list ap;
   va_start(ap, fmt);
   vfprintf(stderr, fmt, ap);

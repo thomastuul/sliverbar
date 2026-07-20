@@ -233,7 +233,7 @@ NativeTray *nativeTrayCreate(xcb_connection_t *connection,
                     XCB_CW_BACK_PIXEL | XCB_CW_OVERRIDE_REDIRECT |
                         XCB_CW_EVENT_MASK,
                     hostValues);
-  static const char WINDOW_CLASS[] = "lemonbar-c\0lemonbar-c";
+  static const char WINDOW_CLASS[] = "sliverbar\0Sliverbar";
   xcb_change_property(connection,
                       XCB_PROP_MODE_REPLACE,
                       tray->hostWindow,

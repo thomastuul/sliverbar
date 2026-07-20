@@ -3,10 +3,10 @@ set -eu
 
 project_dir=$(cd -- "$(dirname -- "$0")/.." && pwd)
 engine=${CONTAINER_ENGINE:-docker}
-image=${LEMONBAR_C_BUILD_IMAGE:-lemonbar-c-dev}
+image=${SLIVERBAR_BUILD_IMAGE:-sliverbar-dev}
 
 if [ "$engine" = docker ]; then
-    docker_config=${LEMONBAR_C_DOCKER_CONFIG:-${XDG_RUNTIME_DIR:-/tmp}/lemonbar-c-docker}
+    docker_config=${SLIVERBAR_DOCKER_CONFIG:-${XDG_RUNTIME_DIR:-/tmp}/sliverbar-docker}
     mkdir -p "$docker_config"
     if [ ! -e "$docker_config/config.json" ]; then
         printf '{}\n' >"$docker_config/config.json"

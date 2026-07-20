@@ -115,7 +115,7 @@ static void storeTitle(const char *title,
            c->colorBg,
            c->colorFree,
            safe);
-  if (getenv("LEMONBAR_C_DEBUG"))
+  if (getenv("SLIVERBAR_DEBUG"))
     logMessage("DEBUG", "title=%s", clipped);
 }
 
@@ -514,7 +514,7 @@ static void doAction(const PanelConfig *c,
        *arg = strtok_r(NULL, "|", &save);
   if (!kind)
     return;
-  if (getenv("LEMONBAR_C_DEBUG"))
+  if (getenv("SLIVERBAR_DEBUG"))
     logMessage("DEBUG", "action=%s arg=%s", kind, arg ? arg : "");
   if (!strcmp(kind, "volume") && arg) {
     setVolume(c, arg);
@@ -676,7 +676,7 @@ int main(int argc, char **argv) {
     else if (!strcmp(argv[i], "--smoke-test"))
       smokeTest = true;
     else if (!strcmp(argv[i], "--version")) {
-      puts("lemonbar-panel " LEMONBAR_C_VERSION);
+      puts("sliverbar " SLIVERBAR_VERSION);
       return 0;
     } else {
       usage(stderr, argv[0]);
@@ -684,7 +684,7 @@ int main(int argc, char **argv) {
     }
   }
   if (!config) {
-    config = getenv("LEMONBAR_C_CONFIG");
+    config = getenv("SLIVERBAR_CONFIG");
     if (!config)
       config = "panel.conf";
   }
@@ -730,11 +730,11 @@ int main(int argc, char **argv) {
   const char *runtime = getenv("XDG_RUNTIME_DIR");
   char fallback[64];
   if (!runtime) {
-    snprintf(fallback, sizeof(fallback), "/tmp/lemonbar-c-%ld", (long)getuid());
+    snprintf(fallback, sizeof(fallback), "/tmp/sliverbar-%ld", (long)getuid());
     runtime = fallback;
   }
   char dir[PANEL_PATH_MAX], lockpath[PANEL_PATH_MAX];
-  if (joinPath(dir, sizeof(dir), runtime, "/lemonbar-c") ||
+  if (joinPath(dir, sizeof(dir), runtime, "/sliverbar") ||
       joinPath(lockpath, sizeof(lockpath), dir, "/panel.lock")) {
     logMessage("ERROR", "runtime path is too long");
     return 1;
