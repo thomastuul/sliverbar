@@ -1,13 +1,17 @@
 #include "native_panel.h"
+#include "native_popup.h"
 #include "panel.h"
+#include "power_actions.h"
 #include "version.h"
 #include "workspace_backend.h"
 
 #include "app_launcher.h"
+#include "inhibitor.h"
 
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <locale.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdio.h>
@@ -510,11 +514,151 @@ static pid_t startWeatherRefresh(const PanelConfig *c) {
   return pid;
 }
 
-static void doAction(const PanelConfig *c,
+static void updateWeatherPaths(PanelConfig *config) {
+  if (!config->weatherCacheRoot[0] || !config->weatherLocationCount)
+    return;
+  const char *id = config->weatherLocations[config->activeWeatherLocation].id;
+  char suffix[96];
+  snprintf(suffix, sizeof(suffix), "/%s.json", id);
+  joinPath(config->weatherCache,
+           sizeof(config->weatherCache),
+           config->weatherCacheRoot,
+           suffix);
+  snprintf(suffix, sizeof(suffix), "/%s.png", id);
+  joinPath(config->weatherImage,
+           sizeof(config->weatherImage),
+           config->weatherCacheRoot,
+           suffix);
+}
+
+static bool selectWeatherLocation(PanelConfig *config, const char *id) {
+  for (size_t i = 0; i < config->weatherLocationCount; i++) {
+    if (strcmp(config->weatherLocations[i].id, id) != 0)
+      continue;
+    config->activeWeatherLocation = i;
+    snprintf(config->location,
+             sizeof(config->location),
+             "%s",
+             config->weatherLocations[i].query);
+    updateWeatherPaths(config);
+    return true;
+  }
+  return false;
+}
+
+static int openApplicationLauncher(NativePopup *popup) {
+  if (!popup || !appLauncherHasGio())
+    return -1;
+  AppEntry *applications = calloc(POPUP_ITEM_MAX, sizeof(*applications));
+  PopupItem *items = calloc(POPUP_ITEM_MAX, sizeof(*items));
+  if (!applications || !items) {
+    free(items);
+    free(applications);
+    return -1;
+  }
+  size_t count = appCatalogLoad(applications, POPUP_ITEM_MAX);
+  for (size_t i = 0; i < count; i++) {
+    snprintf(
+        items[i].label, sizeof(items[i].label), "%s", applications[i].name);
+    snprintf(
+        items[i].search, sizeof(items[i].search), "%s", applications[i].search);
+    char safeId[240];
+    shellQuoteAction(applications[i].desktopId, safeId, sizeof(safeId));
+    snprintf(items[i].action, sizeof(items[i].action), "app|%s", safeId);
+  }
+  int result = nativePopupOpen(popup, items, count, true, false);
+  free(items);
+  free(applications);
+  return result;
+}
+
+static int openPowerMenu(NativePopup *popup, const PanelConfig *config) {
+  PowerAction actions[16];
+  PopupItem items[16] = {0};
+  size_t count = powerActionList(
+      config->powerActions, actions, sizeof(actions) / sizeof(actions[0]));
+  if (count > sizeof(actions) / sizeof(actions[0]))
+    count = sizeof(actions) / sizeof(actions[0]);
+  for (size_t i = 0; i < count; i++) {
+    snprintf(items[i].label,
+             sizeof(items[i].label),
+             "%.15s  %.63s",
+             actions[i].glyph,
+             actions[i].label);
+    snprintf(items[i].search,
+             sizeof(items[i].search),
+             "%.15s %.63s",
+             actions[i].glyph,
+             actions[i].label);
+    snprintf(items[i].action,
+             sizeof(items[i].action),
+             "power_action|%.31s",
+             actions[i].id);
+  }
+  return nativePopupOpen(popup, items, count, false, true);
+}
+
+static bool sleepPowerAction(const char *id) {
+  return !strcmp(id, "suspend") || !strcmp(id, "hibernate") ||
+         !strcmp(id, "suspend_then_hibernate") || !strcmp(id, "hybrid_sleep");
+}
+
+static int openPowerConfirmation(NativePopup *popup,
+                                 const char *id,
+                                 bool inhibitorConflict) {
+  PopupItem items[2] = {0};
+  snprintf(items[0].label, sizeof(items[0].label), "Cancel");
+  snprintf(items[0].search, sizeof(items[0].search), "cancel no");
+  snprintf(items[0].action, sizeof(items[0].action), "power_cancel|cancel");
+  snprintf(items[1].label,
+           sizeof(items[1].label),
+           "%s%s",
+           inhibitorConflict ? "Release inhibitor and " : "Confirm ",
+           id);
+  snprintf(items[1].search, sizeof(items[1].search), "confirm yes %s", id);
+  snprintf(items[1].action, sizeof(items[1].action), "power_confirm|%.31s", id);
+  return nativePopupOpen(popup, items, 2, false, true);
+}
+
+static int openWeatherLocations(NativePopup *popup, const PanelConfig *config) {
+  PopupItem items[PANEL_WEATHER_LOCATION_MAX] = {0};
+  for (size_t i = 0; i < config->weatherLocationCount; i++) {
+    snprintf(items[i].label,
+             sizeof(items[i].label),
+             "%s %s",
+             i == config->activeWeatherLocation ? "●" : " ",
+             config->weatherLocations[i].label);
+    snprintf(items[i].search,
+             sizeof(items[i].search),
+             "%s",
+             config->weatherLocations[i].label);
+    snprintf(items[i].action,
+             sizeof(items[i].action),
+             "weather_location|%s",
+             config->weatherLocations[i].id);
+  }
+  return nativePopupOpen(
+      popup, items, config->weatherLocationCount, false, true);
+}
+
+static void
+restartWeather(PanelConfig *config, PanelState *state, pid_t *weatherPid) {
+  if (*weatherPid > 0) {
+    kill(*weatherPid, SIGTERM);
+    waitpid(*weatherPid, NULL, 0);
+  }
+  moduleWeather(config, state);
+  *weatherPid = startWeatherRefresh(config);
+}
+
+static void doAction(PanelConfig *c,
                      PanelState *s,
                      const char *line,
                      bool *volumeDirty,
-                     WorkspaceBackend *workspaceBackend) {
+                     WorkspaceBackend *workspaceBackend,
+                     NativePopup *popup,
+                     pid_t *weatherPid,
+                     Inhibitor *inhibitor) {
   char copybuf[1024];
   snprintf(copybuf, sizeof(copybuf), "%s", line);
   char *nl = strpbrk(copybuf, "\r\n");
@@ -531,6 +675,10 @@ static void doAction(const PanelConfig *c,
     *volumeDirty = true;
   } else if (!strcmp(kind, "workspace") && arg) {
     workspaceBackendSwitch(workspaceBackend, arg);
+  } else if (!strcmp(kind, "inhibitor") && arg && !strcmp(arg, "toggle")) {
+    inhibitorToggle(inhibitor);
+    moduleInhibitor(
+        c, s, inhibitorAvailable(inhibitor), inhibitorActive(inhibitor));
   } else if (!strcmp(kind, "terminal") && arg) {
     char *av[] = {arg, NULL};
     appLaunchTerminal(c, av);
@@ -543,10 +691,60 @@ static void doAction(const PanelConfig *c,
       appLaunchRole(c, APP_ROLE_VOLUME_SETTINGS);
     else if (!strcmp(arg, "calendar"))
       appLaunchRole(c, APP_ROLE_CALENDAR);
-  } else if (!strcmp(kind, "launcher") && *c->launcher) {
-    appLaunchSpec(c, c->launcher);
-  } else if (!strcmp(kind, "power") && *c->powerMenu) {
-    appLaunchSpec(c, c->powerMenu);
+  } else if (!strcmp(kind, "app") && arg) {
+    char spec[320];
+    snprintf(spec, sizeof(spec), "desktop:%s", arg);
+    appLaunchSpec(c, spec);
+  } else if (!strcmp(kind, "power_action") && arg) {
+    if (!powerActionAllowed(c->powerActions, arg))
+      return;
+    if (!powerActionAllowed(c->powerConfirm, arg))
+      powerActionExecute(arg);
+    else
+      openPowerConfirmation(
+          popup, arg, sleepPowerAction(arg) && inhibitorActive(inhibitor));
+  } else if (!strcmp(kind, "power_confirm") && arg) {
+    if (!powerActionAllowed(c->powerActions, arg) ||
+        !powerActionAllowed(c->powerConfirm, arg))
+      return;
+    bool restoreInhibitor = sleepPowerAction(arg) && inhibitorActive(inhibitor);
+    if (restoreInhibitor)
+      inhibitorSetActive(inhibitor, false);
+    if (powerActionExecute(arg)) {
+      if (restoreInhibitor)
+        inhibitorSetActive(inhibitor, true);
+      if (commandExists("notify-send")) {
+        char *arguments[] = {
+            "notify-send", "Sliverbar", "Power action failed", NULL};
+        spawnDetached(arguments);
+      }
+    }
+    moduleInhibitor(
+        c, s, inhibitorAvailable(inhibitor), inhibitorActive(inhibitor));
+  } else if (!strcmp(kind, "power_cancel")) {
+    nativePopupClose(popup);
+  } else if (!strcmp(kind, "weather_location") && arg) {
+    if (selectWeatherLocation(c, arg)) {
+      if (c->weatherState[0])
+        writeAtomic(c->weatherState, arg, 0600);
+      restartWeather(c, s, weatherPid);
+    }
+  } else if (!strcmp(kind, "launcher")) {
+    if (nativePopupIsOpen(popup))
+      nativePopupClose(popup);
+    else if (c->internalLauncherAvailable &&
+             strcmp(c->applicationLauncher, "external") != 0)
+      openApplicationLauncher(popup);
+    else if (*c->launcher)
+      appLaunchSpec(c, c->launcher);
+  } else if (!strcmp(kind, "power")) {
+    if (nativePopupIsOpen(popup))
+      nativePopupClose(popup);
+    else if (c->internalPowerAvailable &&
+             strcmp(c->powerMenuMode, "external") != 0)
+      openPowerMenu(popup, c);
+    else if (*c->powerMenu)
+      appLaunchSpec(c, c->powerMenu);
   } else if (!strcmp(kind, "notify") && arg && commandExists("notify-send")) {
     char *message = strtok_r(NULL, "", &save);
     char *av[] = {"notify-send", arg, message ? message : "", NULL};
@@ -554,15 +752,13 @@ static void doAction(const PanelConfig *c,
   } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "open") &&
              *c->weatherImage) {
     appOpenFile(c->weatherImage);
-  } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "notify") &&
-             commandExists("notify-send")) {
-    char summary[128];
-    snprintf(summary, sizeof(summary), "Weather: %.118s", c->location);
-    char *av[] = {"notify-send",
-                  summary,
-                  "Left-click opens the three-day forecast.",
-                  NULL};
-    spawnDetached(av);
+  } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "locations")) {
+    if (nativePopupIsOpen(popup))
+      nativePopupClose(popup);
+    else
+      openWeatherLocations(popup, c);
+  } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "refresh")) {
+    restartWeather(c, s, weatherPid);
   } else if (!strcmp(kind, "brightness") && arg) {
     setBrightness(c, s, arg);
   }
@@ -570,10 +766,119 @@ static void doAction(const PanelConfig *c,
 #endif
 
 static void usage(FILE *f, const char *name) {
-  fprintf(
-      f,
-      "Usage: %s [--config PATH] [--check-config] [--smoke-test] [--version]\n",
-      name);
+  fprintf(f,
+          "Usage: %s [--config PATH] [--check-config] [--diagnose] "
+          "[--smoke-test] [--version]\n",
+          name);
+}
+
+static int runDiagnostics(const PanelConfig *config,
+                          const char *configPath,
+                          const char *executable) {
+  printf("version=%s\n", SLIVERBAR_VERSION);
+  printf("config=%s\n", configPath ? configPath : "internal-defaults");
+  printf("display=%s\n", getenv("DISPLAY") ? getenv("DISPLAY") : "unavailable");
+  printf("font=%s\n", config->font);
+  printf("icon_font=%s\n",
+         config->iconFont[0] ? config->iconFont : "system-fallback");
+  printf("gio=%s\n", appLauncherHasGio() ? "yes" : "no");
+  printf("launcher.mode=%s\n", config->applicationLauncher);
+  const size_t DIAGNOSTIC_APP_CAPACITY = 512;
+  AppEntry *catalog = calloc(DIAGNOSTIC_APP_CAPACITY, sizeof(*catalog));
+  size_t catalogCount =
+      catalog ? appCatalogLoad(catalog, DIAGNOSTIC_APP_CAPACITY) : 0;
+  free(catalog);
+  printf("launcher.applications=%zu\n", catalogCount);
+  printf("launcher.external=%s\n",
+         config->launcher[0]
+             ? (appSpecAvailable(config, config->launcher) ? config->launcher
+                                                           : "unavailable")
+             : "unconfigured");
+#ifdef HAVE_NATIVE_PANEL
+  printf("native_x11=yes\n");
+#ifdef HAVE_XKBCOMMON_X11
+  printf("xkbcommon_x11=yes\n");
+#else
+  printf("xkbcommon_x11=no\n");
+#endif
+  int screenNumber = 0;
+  xcb_connection_t *connection = xcb_connect(NULL, &screenNumber);
+  if (!xcb_connection_has_error(connection)) {
+    const xcb_setup_t *setup = xcb_get_setup(connection);
+    xcb_screen_iterator_t screens = xcb_setup_roots_iterator(setup);
+    for (int i = 0; i < screenNumber && screens.rem; i++)
+      xcb_screen_next(&screens);
+    if (screens.rem) {
+      WorkspaceBackend *backend =
+          workspaceBackendCreate(connection, screens.data->root, config);
+      printf("workspace_backend=%s\n", workspaceBackendName(backend));
+      workspaceBackendDestroy(backend);
+    } else {
+      printf("workspace_backend=unavailable\n");
+    }
+  } else {
+    printf("workspace_backend=unavailable\n");
+  }
+  xcb_disconnect(connection);
+#else
+  printf("native_x11=no\n");
+  printf("xkbcommon_x11=no\n");
+  printf("workspace_backend=unavailable\n");
+#endif
+  static const char *const PROGRAMS[] = {"pactl",
+                                         "amixer",
+                                         "nmcli",
+                                         "xrandr",
+                                         "curl",
+                                         "notify-send",
+                                         "xdg-open",
+                                         "systemd-inhibit",
+                                         "xdg-terminal-exec"};
+  for (size_t i = 0; i < sizeof(PROGRAMS) / sizeof(PROGRAMS[0]); i++)
+    printf("program.%s=%s\n",
+           PROGRAMS[i],
+           commandExists(PROGRAMS[i]) ? "yes" : "no");
+  WifiDiagnostic wifi;
+  if (!wifiDiagnostic(&wifi)) {
+    printf("wifi.interface=%s\n", wifi.interface);
+    printf("wifi.backend=%s\n", wifi.backend);
+    printf("wifi.raw=%.1f\n", wifi.rawValue);
+    printf("wifi.percent=%d\n", wifi.percent);
+  } else {
+    printf("wifi.interface=unavailable\n");
+    printf("wifi.backend=unavailable\n");
+    printf("wifi.raw=unavailable\n");
+    printf("wifi.percent=unavailable\n");
+  }
+  char description[512];
+  appDescribeTerminal(config, description, sizeof(description));
+  printf("terminal=%s\n", description);
+  for (AppRole role = APP_ROLE_SYSTEM_MONITOR; role <= APP_ROLE_CALENDAR;
+       role++) {
+    appDescribeRole(config, role, description, sizeof(description));
+    printf("role.%s=%s\n", appRoleName(role), description);
+  }
+  printf("weather.locations=%zu\n", config->weatherLocationCount);
+  if (config->weatherLocationCount)
+    printf("weather.active=%s\n",
+           config->weatherLocations[config->activeWeatherLocation].id);
+  PowerAction powerActions[16];
+  size_t powerActionCount =
+      powerActionList(config->powerActions,
+                      powerActions,
+                      sizeof(powerActions) / sizeof(powerActions[0]));
+  printf("power.backend=%s\n",
+         powerActionCount ? "logind-dbus" : "unavailable");
+  printf("power.actions=%zu\n", powerActionCount);
+  for (size_t i = 0; i < powerActionCount; i++)
+    printf("power.action.%s=%s\n",
+           powerActions[i].id,
+           powerActions[i].authorization);
+  Inhibitor *inhibitor = inhibitorCreate(executable);
+  printf("inhibitor.backend=%s\n", inhibitorBackendName(inhibitor));
+  printf("inhibitor.active=no\n");
+  inhibitorDestroy(inhibitor);
+  return 0;
 }
 
 #ifdef HAVE_NATIVE_PANEL
@@ -678,17 +983,24 @@ static int smokeTestNativeTray(NativePanel *panel,
 #endif
 
 int main(int argc, char **argv) {
+  setlocale(LC_ALL, "");
+  if (argc == 2 && !strcmp(argv[1], "--inhibit-holder")) {
+    for (;;)
+      pause();
+  }
   PanelConfig cfg;
   configDefaults(&cfg);
   const char *config = NULL;
   char defaultConfig[PANEL_PATH_MAX];
-  bool check = false, smokeTest = false;
+  bool check = false, diagnose = false, smokeTest = false;
   signal(SIGPIPE, SIG_IGN);
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--config") && i + 1 < argc)
       config = argv[++i];
     else if (!strcmp(argv[i], "--check-config"))
       check = true;
+    else if (!strcmp(argv[i], "--diagnose"))
+      diagnose = true;
     else if (!strcmp(argv[i], "--smoke-test"))
       smokeTest = true;
     else if (!strcmp(argv[i], "--version")) {
@@ -735,24 +1047,53 @@ int main(int argc, char **argv) {
     logMessage("ERROR", "%s", error);
     return 1;
   }
+#ifdef HAVE_NATIVE_PANEL
   const char *home = getenv("HOME");
   const char *cache = getenv("XDG_CACHE_HOME");
-  char cacheDefault[PANEL_PATH_MAX], suffix[512];
+  const char *stateHome = getenv("XDG_STATE_HOME");
+  char cacheDefault[PANEL_PATH_MAX], stateDefault[PANEL_PATH_MAX];
   if (!cache && home &&
       !joinPath(cacheDefault, sizeof(cacheDefault), home, "/.cache"))
     cache = cacheDefault;
-  if (cache && cfg.location[0] && !*cfg.weatherCache) {
-    snprintf(suffix, sizeof(suffix), "/sliverbar/weather/forecast.json");
-    joinPath(cfg.weatherCache, sizeof(cfg.weatherCache), cache, suffix);
+  if (!stateHome && home &&
+      !joinPath(stateDefault, sizeof(stateDefault), home, "/.local/state"))
+    stateHome = stateDefault;
+  if (stateHome && cfg.weatherLocationCount)
+    joinPath(cfg.weatherState,
+             sizeof(cfg.weatherState),
+             stateHome,
+             "/sliverbar/weather-location");
+  char savedWeatherLocation[64];
+  if (cfg.weatherState[0] && !readTextFile(cfg.weatherState,
+                                           savedWeatherLocation,
+                                           sizeof(savedWeatherLocation)))
+    selectWeatherLocation(&cfg, savedWeatherLocation);
+  if (cache && cfg.location[0] && !cfg.weatherCache[0] &&
+      !cfg.weatherImage[0]) {
+    joinPath(cfg.weatherCacheRoot,
+             sizeof(cfg.weatherCacheRoot),
+             cache,
+             "/sliverbar/weather");
+    updateWeatherPaths(&cfg);
   }
-  if (cache && cfg.location[0] && !*cfg.weatherImage) {
-    snprintf(suffix, sizeof(suffix), "/sliverbar/weather/forecast.png");
-    joinPath(cfg.weatherImage, sizeof(cfg.weatherImage), cache, suffix);
-  }
+#endif
   if (check) {
     puts("configuration valid");
     return 0;
   }
+  if (diagnose)
+    return runDiagnostics(&cfg, config, argv[0]);
+#ifdef HAVE_NATIVE_PANEL
+  if (cfg.weatherState[0]) {
+    char stateDirectory[PANEL_PATH_MAX];
+    snprintf(stateDirectory, sizeof(stateDirectory), "%s", cfg.weatherState);
+    char *slash = strrchr(stateDirectory, '/');
+    if (slash) {
+      *slash = '\0';
+      mkdirP(stateDirectory, 0700);
+    }
+  }
+#endif
 #ifndef HAVE_NATIVE_PANEL
   (void)smokeTest;
   logMessage("ERROR",
@@ -783,13 +1124,21 @@ int main(int argc, char **argv) {
   ftruncate(lock, 0);
   dprintf(lock, "%ld\n", (long)getpid());
   int xfd = -1;
-  xcb_connection_t *x = xcb_connect(NULL, NULL);
+  int screenNumber = 0;
+  xcb_connection_t *x = xcb_connect(NULL, &screenNumber);
   if (xcb_connection_has_error(x)) {
     logMessage("ERROR", "cannot connect to X11");
     return 1;
   }
   const xcb_setup_t *setup = xcb_get_setup(x);
   xcb_screen_iterator_t it = xcb_setup_roots_iterator(setup);
+  for (int i = 0; i < screenNumber && it.rem; i++)
+    xcb_screen_next(&it);
+  if (!it.rem) {
+    logMessage("ERROR", "X11 selected an unavailable screen");
+    xcb_disconnect(x);
+    return 1;
+  }
   xcb_screen_t *screen = it.data;
   xcb_window_t root = screen->root;
   snprintf(cfg.geometry,
@@ -1018,12 +1367,66 @@ int main(int argc, char **argv) {
       close(lock);
       return 1;
     }
+    NativePopup *smokePopup = nativePopupCreate(x, screen, &cfg);
+    int smokeX = 0, smokeY = 0, smokeWidth = 0, smokeHeight = 0;
+    nativePanelBounds(panel, &smokeX, &smokeY, &smokeWidth, &smokeHeight);
+    nativePopupSetBounds(smokePopup, smokeX, smokeY, smokeWidth, smokeHeight);
+    PopupItem popupItems[2] = {
+        {.label = "First", .search = "first", .action = "popup|first"},
+        {.label = "Second", .search = "second", .action = "popup|second"},
+    };
+    if (!nativePopupAvailable(smokePopup) ||
+        nativePopupOpen(smokePopup, popupItems, 2, false, false)) {
+      logMessage("ERROR", "native popup smoke-test could not open");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    xcb_button_press_event_t popupClick = {0};
+    popupClick.response_type = XCB_BUTTON_PRESS;
+    popupClick.event = screen->root;
+    popupClick.detail = 1;
+    popupClick.root_x = (int16_t)(smokeX + 5);
+    popupClick.root_y = (int16_t)(smokeY + cfg.height + 5);
+    char popupAction[64] = "";
+    bool popupRedraw = false;
+    if (!nativePopupHandleEvent(smokePopup,
+                                (xcb_generic_event_t *)&popupClick,
+                                popupAction,
+                                sizeof(popupAction),
+                                &popupRedraw) ||
+        strcmp(popupAction, "popup|first") != 0 ||
+        nativePopupIsOpen(smokePopup)) {
+      logMessage("ERROR", "native popup smoke-test routing failed");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    nativePopupDestroy(smokePopup);
     usleep(100000);
     nativePanelDestroy(panel);
     xcb_disconnect(x);
     close(lock);
     return 0;
   }
+  NativePopup *popup = nativePopupCreate(x, screen, &cfg);
+  int popupX = 0, popupY = 0, popupWidth = 0, popupPanelHeight = 0;
+  nativePanelBounds(panel, &popupX, &popupY, &popupWidth, &popupPanelHeight);
+  nativePopupSetBounds(popup, popupX, popupY, popupWidth, popupPanelHeight);
+  Inhibitor *inhibitor = inhibitorCreate(argv[0]);
+  cfg.internalLauncherAvailable =
+      nativePopupAvailable(popup) && appLauncherHasGio();
+  PowerAction availablePowerActions[16];
+  cfg.internalPowerAvailable =
+      nativePopupAvailable(popup) &&
+      powerActionList(cfg.powerActions,
+                      availablePowerActions,
+                      sizeof(availablePowerActions) /
+                          sizeof(availablePowerActions[0])) > 0;
   sigset_t signals;
   sigemptyset(&signals);
   sigaddset(&signals, SIGINT);
@@ -1065,6 +1468,8 @@ int main(int argc, char **argv) {
   moduleNetwork(&cfg, &state);
   moduleBrightness(&cfg, &state);
   moduleWeather(&cfg, &state);
+  moduleInhibitor(
+      &cfg, &state, inhibitorAvailable(inhibitor), inhibitorActive(inhibitor));
   workspaceBackendRefresh(workspaceBackend, &state);
   updateTitleXcb(x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
   char action[1024] = "";
@@ -1137,6 +1542,10 @@ int main(int argc, char **argv) {
             } else if (workspaceBackendChildExited(
                            workspaceBackend, reaped, status, &state)) {
               dirty = true;
+            } else if (inhibitorChildExited(inhibitor, reaped)) {
+              moduleInhibitor(
+                  &cfg, &state, inhibitorAvailable(inhibitor), false);
+              dirty = true;
             } else if (reaped == networkEvents.pid) {
               networkEvents.pid = 0;
               if (networkEvents.readFd >= 0)
@@ -1168,10 +1577,53 @@ int main(int argc, char **argv) {
       xcb_generic_event_t *ev;
       while ((ev = xcb_poll_for_event(x))) {
         bool redraw = false;
+        action[0] = '\0';
+        if (nativePopupHandleEvent(
+                popup, ev, action, sizeof(action), &redraw)) {
+          if (action[0])
+            doAction(&cfg,
+                     &state,
+                     action,
+                     &vd,
+                     workspaceBackend,
+                     popup,
+                     &weatherPid,
+                     inhibitor);
+          free(ev);
+          continue;
+        }
         if (nativePanelHandleEvent(
                 panel, ev, action, sizeof(action), &redraw)) {
-          doAction(&cfg, &state, action, &vd, workspaceBackend);
+          doAction(&cfg,
+                   &state,
+                   action,
+                   &vd,
+                   workspaceBackend,
+                   popup,
+                   &weatherPid,
+                   inhibitor);
           dirty = true;
+        }
+        if ((ev->response_type & 0x7fU) == XCB_UNMAP_NOTIFY &&
+            ((xcb_unmap_notify_event_t *)ev)->window ==
+                nativePanelWindow(panel))
+          nativePopupClose(popup);
+        int nextPopupX = 0, nextPopupY = 0, nextPopupWidth = 0,
+            nextPopupPanelHeight = 0;
+        nativePanelBounds(panel,
+                          &nextPopupX,
+                          &nextPopupY,
+                          &nextPopupWidth,
+                          &nextPopupPanelHeight);
+        if (nextPopupX != popupX || nextPopupY != popupY ||
+            nextPopupWidth != popupWidth ||
+            nextPopupPanelHeight != popupPanelHeight) {
+          popupX = nextPopupX;
+          popupY = nextPopupY;
+          popupWidth = nextPopupWidth;
+          popupPanelHeight = nextPopupPanelHeight;
+          nativePopupSetBounds(
+              popup, popupX, popupY, popupWidth, popupPanelHeight);
         }
         if ((ev->response_type & 0x7fU) == XCB_PROPERTY_NOTIFY) {
           workspaceBackendRefresh(workspaceBackend, &state);
@@ -1249,6 +1701,8 @@ int main(int argc, char **argv) {
   stopChild(&titleWindow);
   stopChild(&titleRoot);
   workspaceBackendDestroy(workspaceBackend);
+  inhibitorDestroy(inhibitor);
+  nativePopupDestroy(popup);
   nativePanelDestroy(panel);
   xcb_disconnect(x);
   close(lock);

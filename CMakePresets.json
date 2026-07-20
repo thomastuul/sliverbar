@@ -42,12 +42,23 @@
         "SLIVERBAR_SANITIZERS": "ON",
         "SLIVERBAR_WITH_XCB": "ON"
       }
+    },
+    {
+      "name": "container-clang",
+      "inherits": "container-base",
+      "binaryDir": "${sourceDir}/build/container-clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_C_COMPILER": "clang",
+        "SLIVERBAR_WITH_XCB": "ON"
+      }
     }
   ],
   "buildPresets": [
     { "name": "container-release", "configurePreset": "container-release" },
     { "name": "container-fallback", "configurePreset": "container-fallback" },
-    { "name": "container-sanitizers", "configurePreset": "container-sanitizers" }
+    { "name": "container-sanitizers", "configurePreset": "container-sanitizers" },
+    { "name": "container-clang", "configurePreset": "container-clang" }
   ],
   "testPresets": [
     {
@@ -64,6 +75,11 @@
       "name": "container-sanitizers",
       "configurePreset": "container-sanitizers",
       "environment": { "ASAN_OPTIONS": "detect_leaks=0" },
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "container-clang",
+      "configurePreset": "container-clang",
       "output": { "outputOnFailure": true }
     }
   ]

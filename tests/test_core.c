@@ -1,12 +1,15 @@
 #include "panel.h"
 
 #include "app_launcher.h"
+#include "inhibitor.h"
+#include "power_actions.h"
 
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #define CHECK(condition)                                                       \
@@ -22,6 +25,10 @@
   } while (0)
 
 int main(int argc, char **argv) {
+  if (argc == 2 && strcmp(argv[1], "--inhibit-holder") == 0) {
+    for (;;)
+      pause();
+  }
   if (argc == 3 && strcmp(argv[1], "--signal-probe") == 0) {
     sigset_t mask;
     struct sigaction action;
@@ -44,6 +51,10 @@ int main(int argc, char **argv) {
   CHECK(strcmp(cfg.colorBg, "#282A36") == 0);
   CHECK(strcmp(cfg.wmName, "sliverbar") == 0);
   CHECK(strcmp(cfg.workspaceBackend, "auto") == 0);
+  CHECK(strcmp(cfg.applicationLauncher, "auto") == 0);
+  CHECK(strcmp(cfg.powerMenuMode, "auto") == 0);
+  CHECK(powerActionAllowed(cfg.powerActions, "reboot"));
+  CHECK(!powerActionAllowed(cfg.powerConfirm, "lock"));
   CHECK(strstr(cfg.font, "Monospace") != NULL);
   CHECK(cfg.iconFont[0] == '\0');
   CHECK(strcmp(cfg.terminal, "auto") == 0);
@@ -58,7 +69,8 @@ int main(int argc, char **argv) {
   int fd = mkstemp(path);
   CHECK(fd >= 0);
   const char TEXT[] =
-      "height=31\nvolume_step=4\ncolor_bg=#000000\nmodule_cpu=disabled\n";
+      "height=31\nvolume_step=4\ncolor_bg=#000000\nmodule_cpu=disabled\n"
+      "power_actions=lock,reboot,poweroff\npower_confirm=reboot,poweroff\n";
   CHECK(write(fd, TEXT, sizeof(TEXT) - 1) == (ssize_t)(sizeof(TEXT) - 1));
   CHECK(close(fd) == 0);
 
@@ -69,11 +81,23 @@ int main(int argc, char **argv) {
   CHECK(strcmp(cfg.colorBg, "#000000") == 0);
   CHECK(strcmp(cfg.colorOccupied, "#ff5555") == 0);
   CHECK(cfg.moduleCpu == MODULE_DISABLED);
+  CHECK(powerActionAllowed(cfg.powerActions, "reboot"));
+  CHECK(!powerActionAllowed(cfg.powerActions, "hibernate"));
   CHECK(unlink(path) == 0);
 
   CHECK(appSpecAvailable(&cfg, "command:/bin/true"));
   CHECK(!appSpecAvailable(&cfg, "command:/definitely/missing/sliverbar"));
   CHECK(!appSpecAvailable(&cfg, "command:'unterminated"));
+  if (appLauncherHasGio()) {
+    CHECK(appSearchRank("Überwachung", "Überwachung System", "ÜBER") == 0);
+    CHECK(appSearchRank("System Monitor", "System Monitor", "monitor") == 1);
+    CHECK(appSearchRank("MySystemTool", "MySystemTool", "system") == 2);
+    CHECK(appSearchRank("Network Settings",
+                        "Network Settings control center",
+                        "network center") == 2);
+    CHECK(appSearchRank("Terminal", "Terminal emulator", "browser") < 0);
+  }
+  CHECK(appSearchRank("Terminal", "Terminal emulator", "") == 3);
   snprintf(cfg.terminal, sizeof(cfg.terminal), "/bin/true");
   CHECK(appTerminalAvailable(&cfg));
   char *terminalProbe[] = {"/bin/true", NULL};
@@ -97,18 +121,63 @@ int main(int argc, char **argv) {
                 "Exec=/bin/true\n",
                 desktop) >= 0);
     CHECK(fclose(desktop) == 0);
+    char hiddenPath[256], invalidPath[256];
+    snprintf(hiddenPath,
+             sizeof(hiddenPath),
+             "%s/sliverbar-hidden.desktop",
+             applications);
+    desktop = fopen(hiddenPath, "w");
+    CHECK(desktop != NULL);
+    CHECK(fputs("[Desktop Entry]\nType=Application\nName=Hidden App\n"
+                "Exec=/bin/true\nNoDisplay=true\n",
+                desktop) >= 0);
+    CHECK(fclose(desktop) == 0);
+    snprintf(invalidPath,
+             sizeof(invalidPath),
+             "%s/sliverbar-invalid.desktop",
+             applications);
+    desktop = fopen(invalidPath, "w");
+    CHECK(desktop != NULL);
+    CHECK(fputs("this is not a desktop entry\n", desktop) >= 0);
+    CHECK(fclose(desktop) == 0);
     const char *oldDataHome = getenv("XDG_DATA_HOME");
+    const char *oldDataDirs = getenv("XDG_DATA_DIRS");
     char oldDataHomeCopy[PANEL_PATH_MAX] = "";
+    char oldDataDirsCopy[PANEL_PATH_MAX] = "";
     if (oldDataHome)
       snprintf(oldDataHomeCopy, sizeof(oldDataHomeCopy), "%s", oldDataHome);
+    if (oldDataDirs)
+      snprintf(oldDataDirsCopy, sizeof(oldDataDirsCopy), "%s", oldDataDirs);
     CHECK(setenv("XDG_DATA_HOME", dataHome, 1) == 0);
+    CHECK(setenv("XDG_DATA_DIRS", dataHome, 1) == 0);
     CHECK(appSpecAvailable(&cfg, "desktop:sliverbar-test.desktop"));
     CHECK(appLaunchSpec(&cfg, "desktop:sliverbar-test.desktop") == 0);
+    AppEntry catalog[16];
+    size_t catalogCount = appCatalogLoad(catalog, 16);
+    bool catalogContainsTest = false;
+    bool catalogContainsHidden = false;
+    for (size_t i = 0; i < catalogCount; i++)
+      if (strcmp(catalog[i].desktopId, "sliverbar-test.desktop") == 0) {
+        catalogContainsTest = true;
+        CHECK(strstr(catalog[i].search, "Sliverbar Test") != NULL);
+        CHECK(strstr(catalog[i].search, "/bin/true") != NULL);
+      } else if (strcmp(catalog[i].desktopId, "sliverbar-hidden.desktop") ==
+                 0) {
+        catalogContainsHidden = true;
+      }
+    CHECK(catalogContainsTest);
+    CHECK(!catalogContainsHidden);
     if (oldDataHome)
       CHECK(setenv("XDG_DATA_HOME", oldDataHomeCopy, 1) == 0);
     else
       CHECK(unsetenv("XDG_DATA_HOME") == 0);
+    if (oldDataDirs)
+      CHECK(setenv("XDG_DATA_DIRS", oldDataDirsCopy, 1) == 0);
+    else
+      CHECK(unsetenv("XDG_DATA_DIRS") == 0);
     CHECK(unlink(desktopPath) == 0);
+    CHECK(unlink(hiddenPath) == 0);
+    CHECK(unlink(invalidPath) == 0);
     CHECK(rmdir(applications) == 0);
     CHECK(rmdir(dataHome) == 0);
   }
@@ -122,6 +191,50 @@ int main(int argc, char **argv) {
   CHECK(fd >= 0);
   CHECK(close(fd) == 0);
   CHECK(unlink(signalPath) == 0);
+
+  char inhibitorDirectory[] = "/tmp/sliverbar-inhibitor-XXXXXX";
+  CHECK(mkdtemp(inhibitorDirectory) != NULL);
+  char inhibitorBackend[256];
+  snprintf(inhibitorBackend,
+           sizeof(inhibitorBackend),
+           "%s/systemd-inhibit",
+           inhibitorDirectory);
+  FILE *backend = fopen(inhibitorBackend, "w");
+  CHECK(backend != NULL);
+  CHECK(fputs("#!/bin/sh\nexec \"$5\" \"$6\"\n", backend) >= 0);
+  CHECK(fclose(backend) == 0);
+  CHECK(chmod(inhibitorBackend, 0700) == 0);
+  const char *oldPath = getenv("PATH");
+  char oldPathCopy[PANEL_PATH_MAX] = "";
+  if (oldPath)
+    snprintf(oldPathCopy, sizeof(oldPathCopy), "%s", oldPath);
+  CHECK(setenv("PATH", inhibitorDirectory, 1) == 0);
+  Inhibitor *inhibitor = inhibitorCreate(argv[0]);
+  CHECK(inhibitorAvailable(inhibitor));
+  CHECK(strcmp(inhibitorBackendName(inhibitor), "systemd-inhibit") == 0);
+  CHECK(!inhibitorActive(inhibitor));
+  CHECK(inhibitorToggle(inhibitor) == 0);
+  pid_t inhibitorChild = inhibitorPid(inhibitor);
+  CHECK(inhibitorChild > 0);
+  for (int i = 0; i < 20 && !inhibitorActive(inhibitor); i++)
+    usleep(10000);
+  CHECK(inhibitorActive(inhibitor));
+  CHECK(kill(inhibitorChild, SIGKILL) == 0);
+  CHECK(waitpid(inhibitorChild, NULL, 0) == inhibitorChild);
+  CHECK(inhibitorChildExited(inhibitor, inhibitorChild));
+  CHECK(!inhibitorActive(inhibitor));
+  CHECK(inhibitorSetActive(inhibitor, true) == 0);
+  CHECK(inhibitorActive(inhibitor));
+  CHECK(inhibitorSetActive(inhibitor, true) == 0);
+  CHECK(inhibitorSetActive(inhibitor, false) == 0);
+  CHECK(!inhibitorActive(inhibitor));
+  inhibitorDestroy(inhibitor);
+  if (oldPath)
+    CHECK(setenv("PATH", oldPathCopy, 1) == 0);
+  else
+    CHECK(unsetenv("PATH") == 0);
+  CHECK(unlink(inhibitorBackend) == 0);
+  CHECK(rmdir(inhibitorDirectory) == 0);
   sigset_t blocked, oldMask;
   sigemptyset(&blocked);
   sigaddset(&blocked, SIGCHLD);
@@ -139,10 +252,15 @@ int main(int argc, char **argv) {
   CHECK(readTextFile(signalPath, signalResult, sizeof(signalResult)) == 0);
   CHECK(strcmp(signalResult, "ok") == 0);
   CHECK(unlink(signalPath) == 0);
-
   PanelState brightnessState = {0};
   moduleBrightnessValue(&cfg, &brightnessState, 42);
   CHECK(strstr(brightnessState.brightness, "  42%") != NULL);
+  moduleInhibitor(&cfg, &brightnessState, false, false);
+  CHECK(brightnessState.inhibitor[0] == '\0');
+  moduleInhibitor(&cfg, &brightnessState, true, false);
+  CHECK(strstr(brightnessState.inhibitor, cfg.colorFree) != NULL);
+  moduleInhibitor(&cfg, &brightnessState, true, true);
+  CHECK(strstr(brightnessState.inhibitor, cfg.colorWarning) != NULL);
 
   PanelState state = {0};
   strcpy(state.launcher, "L");
@@ -166,11 +284,30 @@ int main(int argc, char **argv) {
   CHECK(strength == 88);
   CHECK(parseNmcliWifi("*:broken:unknown\n", ssid, sizeof(ssid), &strength) !=
         0);
+  CHECK(parseNmcliWifi(" :shared:20\n*:shared:81\n :shared:90\n",
+                       ssid,
+                       sizeof(ssid),
+                       &strength) == 0);
+  CHECK(strength == 81);
   CHECK(wifiQualityPercent(51.0) == 73);
+  CHECK(wifiQualityPercent(34.5) == 49);
   CHECK(wifiQualityPercent(0.0) == 0);
   CHECK(wifiQualityPercent(70.0) == 100);
   CHECK(wifiQualityPercent(90.0) == 100);
   CHECK(wifiQualityPercent(-1.0) == -1);
+  const char WIRELESS[] =
+      "Inter-| sta-|   Quality        |   Discarded packets\n"
+      " face | tus | link level noise |  nwid  crypt   frag\n"
+      " wlan0: 0000   12.  -80.  -256        0      0      0\n"
+      " wlo1: 0000   51.  -59.  -256        0      0      0\n";
+  double rawQuality = 0.0;
+  CHECK(parseWirelessQuality(WIRELESS, "wlo1", &rawQuality, &strength) == 0);
+  CHECK(rawQuality == 51.0);
+  CHECK(strength == 73);
+  CHECK(parseWirelessQuality(WIRELESS, "missing", &rawQuality, &strength) != 0);
+  CHECK(parseWirelessQuality(
+            " wlo1: 0000 nan -59. -256\n", "wlo1", &rawQuality, &strength) !=
+        0);
 
   const char ROUTES[] =
       "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n"
@@ -221,6 +358,41 @@ int main(int argc, char **argv) {
   moduleWorkspace(&cfg, &state, "WMDP-3:F1:o2:f3:LT:TT:G");
   CHECK(state.focusedWorkspaceKnown);
   CHECK(!state.focusedWorkspaceOccupied);
+
+  PanelConfig weatherConfig;
+  configDefaults(&weatherConfig);
+  char weatherPath[] = "/tmp/sliverbar-weather-XXXXXX";
+  fd = mkstemp(weatherPath);
+  CHECK(fd >= 0);
+  const char WEATHER_CONFIG[] =
+      "weather_location=munich|München|Munich\n"
+      "weather_location=berlin|Berlin|Berlin, Germany\n"
+      "weather_default=berlin\n";
+  CHECK(write(fd, WEATHER_CONFIG, sizeof(WEATHER_CONFIG) - 1) ==
+        (ssize_t)(sizeof(WEATHER_CONFIG) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&weatherConfig, weatherPath, error, sizeof(error)) == 0);
+  CHECK(weatherConfig.weatherLocationCount == 2);
+  CHECK(weatherConfig.activeWeatherLocation == 1);
+  CHECK(strcmp(weatherConfig.location, "Berlin, Germany") == 0);
+  CHECK(strcmp(weatherConfig.weatherLocations[0].label, "München") == 0);
+  CHECK(unlink(weatherPath) == 0);
+
+  PanelConfig duplicateWeatherConfig;
+  configDefaults(&duplicateWeatherConfig);
+  char duplicateWeatherPath[] = "/tmp/sliverbar-weather-duplicate-XXXXXX";
+  fd = mkstemp(duplicateWeatherPath);
+  CHECK(fd >= 0);
+  const char DUPLICATE_WEATHER[] = "weather_location=home|Home|Munich\n"
+                                   "weather_location=home|Duplicate|Berlin\n";
+  CHECK(write(fd, DUPLICATE_WEATHER, sizeof(DUPLICATE_WEATHER) - 1) ==
+        (ssize_t)(sizeof(DUPLICATE_WEATHER) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&duplicateWeatherConfig,
+                   duplicateWeatherPath,
+                   error,
+                   sizeof(error)) != 0);
+  CHECK(unlink(duplicateWeatherPath) == 0);
 
   char invalidPath[] = "/tmp/sliverbar-invalid-XXXXXX";
   fd = mkstemp(invalidPath);

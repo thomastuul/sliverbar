@@ -18,6 +18,8 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
                                size_t errorSize);
 void nativePanelDestroy(NativePanel *panel);
 int nativePanelDraw(NativePanel *panel, const PanelState *state);
+void nativePanelBounds(
+    const NativePanel *panel, int *x, int *y, int *width, int *height);
 bool nativePanelHandleEvent(NativePanel *panel,
                             const xcb_generic_event_t *event,
                             char *action,

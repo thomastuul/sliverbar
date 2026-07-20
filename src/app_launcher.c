@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #ifdef HAVE_GIO
 #include <gio/gdesktopappinfo.h>
@@ -40,6 +41,11 @@ static const Candidate NETWORK_SETTINGS[] = {
     {NULL, "nm-connection-editor", false},
     {NULL, "nmtui", true},
 };
+
+static bool networkManagerActive(void) {
+  return commandExists("nmcli") && (!access("/run/NetworkManager", F_OK) ||
+                                    !access("/var/run/NetworkManager", F_OK));
+}
 
 static const Candidate VOLUME_SETTINGS[] = {
     {"pavucontrol.desktop", NULL, false},
@@ -230,6 +236,8 @@ static const char *desktopIdFromSpec(const char *spec) {
   return length > 8 && !strcmp(spec + length - 8, ".desktop") ? spec : NULL;
 }
 
+static const char *terminalExecutable(void);
+
 bool appTerminalAvailable(const PanelConfig *config) {
   if (strcmp(config->terminal, "auto") != 0) {
     ParsedCommand parsed;
@@ -249,6 +257,20 @@ bool appTerminalAvailable(const PanelConfig *config) {
     if (commandExists(TERMINALS[i]))
       return true;
   return false;
+}
+
+void appDescribeTerminal(const PanelConfig *config,
+                         char *output,
+                         size_t outputSize) {
+  if (strcmp(config->terminal, "auto") != 0) {
+    snprintf(output,
+             outputSize,
+             "%s",
+             appTerminalAvailable(config) ? config->terminal : "unavailable");
+    return;
+  }
+  const char *terminal = terminalExecutable();
+  snprintf(output, outputSize, "%s", terminal ? terminal : "unavailable");
 }
 
 static const char *terminalExecutable(void) {
@@ -367,6 +389,8 @@ bool appRoleAvailable(const PanelConfig *config, AppRole role) {
     return appSpecAvailable(config, spec);
   if (role == APP_ROLE_CALENDAR && defaultTypeAvailable("text/calendar"))
     return true;
+  if (role == APP_ROLE_NETWORK_SETTINGS && !networkManagerActive())
+    return false;
   const Candidate *candidates = NULL;
   size_t count = 0;
   roleCandidates(role, &candidates, &count);
@@ -384,6 +408,8 @@ int appLaunchRole(const PanelConfig *config, AppRole role) {
     return appLaunchSpec(config, spec);
   if (role == APP_ROLE_CALENDAR && defaultTypeAvailable("text/calendar"))
     return launchDefaultType("text/calendar");
+  if (role == APP_ROLE_NETWORK_SETTINGS && !networkManagerActive())
+    return -1;
   const Candidate *candidates = NULL;
   size_t count = 0;
   roleCandidates(role, &candidates, &count);
@@ -397,6 +423,50 @@ int appLaunchRole(const PanelConfig *config, AppRole role) {
                                   : spawnDetached(argv);
   }
   return -1;
+}
+
+void appDescribeRole(const PanelConfig *config,
+                     AppRole role,
+                     char *output,
+                     size_t outputSize) {
+  const char *spec = roleSpec(config, role);
+  if (!spec || !*spec || !strcmp(spec, "disabled")) {
+    snprintf(output, outputSize, "disabled");
+    return;
+  }
+  if (strcmp(spec, "auto") != 0) {
+    snprintf(output,
+             outputSize,
+             "%s%s",
+             appSpecAvailable(config, spec) ? "override:" : "unavailable:",
+             spec);
+    return;
+  }
+  if (role == APP_ROLE_CALENDAR && defaultTypeAvailable("text/calendar")) {
+    snprintf(output, outputSize, "mime:text/calendar");
+    return;
+  }
+  if (role == APP_ROLE_NETWORK_SETTINGS && !networkManagerActive()) {
+    snprintf(output, outputSize, "unavailable:no-active-NetworkManager");
+    return;
+  }
+  const Candidate *candidates = NULL;
+  size_t count = 0;
+  roleCandidates(role, &candidates, &count);
+  for (size_t i = 0; i < count; i++) {
+    if (!candidateAvailable(config, &candidates[i]))
+      continue;
+    snprintf(output,
+             outputSize,
+             "%s:%s",
+             candidates[i].desktopId  ? "desktop"
+             : candidates[i].terminal ? "terminal"
+                                      : "command",
+             candidates[i].desktopId ? candidates[i].desktopId
+                                     : candidates[i].command);
+    return;
+  }
+  snprintf(output, outputSize, "unavailable");
 }
 
 bool appCanOpenFile(const char *path) {
@@ -429,5 +499,102 @@ int appOpenFile(const char *path) {
 #else
   char *argv[] = {"xdg-open", (char *)path, NULL};
   return commandExists("xdg-open") ? spawnDetached(argv) : -1;
+#endif
+}
+
+#ifdef HAVE_GIO
+static int compareAppEntries(const void *left, const void *right) {
+  const AppEntry *a = left;
+  const AppEntry *b = right;
+  int result = g_utf8_collate(a->name, b->name);
+  return result ? result : strcmp(a->desktopId, b->desktopId);
+}
+#endif
+
+size_t appCatalogLoad(AppEntry *entries, size_t capacity) {
+  if (!entries || capacity == 0)
+    return 0;
+#ifdef HAVE_GIO
+  GList *applications = g_app_info_get_all();
+  size_t count = 0;
+  for (GList *node = applications; node && count < capacity;
+       node = node->next) {
+    GAppInfo *info = G_APP_INFO(node->data);
+    const char *id = g_app_info_get_id(info);
+    if (!id || !*id || !g_app_info_should_show(info))
+      continue;
+    const char *name = g_app_info_get_display_name(info);
+    const char *generic = g_app_info_get_name(info);
+    const char *description = g_app_info_get_description(info);
+    const char *executable = g_app_info_get_executable(info);
+    snprintf(entries[count].name,
+             sizeof(entries[count].name),
+             "%s",
+             name && *name ? name : id);
+    snprintf(
+        entries[count].desktopId, sizeof(entries[count].desktopId), "%s", id);
+    snprintf(entries[count].search,
+             sizeof(entries[count].search),
+             "%s %s %s %s %s",
+             name ? name : "",
+             generic ? generic : "",
+             description ? description : "",
+             id,
+             executable ? executable : "");
+    count++;
+  }
+  g_list_free_full(applications, g_object_unref);
+  qsort(entries, count, sizeof(*entries), compareAppEntries);
+  return count;
+#else
+  (void)capacity;
+  return 0;
+#endif
+}
+
+int appSearchRank(const char *label, const char *search, const char *query) {
+  if (!label || !search || !query)
+    return -1;
+  if (!*query)
+    return 3;
+#ifdef HAVE_GIO
+  char *foldedLabel = g_utf8_casefold(label, -1);
+  char *foldedSearch = g_utf8_casefold(search, -1);
+  char *foldedQuery = g_utf8_casefold(query, -1);
+  char **tokens = g_strsplit_set(foldedQuery, " \t", -1);
+  bool matches = true;
+  for (size_t i = 0; tokens[i]; i++)
+    if (*tokens[i] && !strstr(foldedSearch, tokens[i])) {
+      matches = false;
+      break;
+    }
+  int rank = -1;
+  if (matches) {
+    if (g_str_has_prefix(foldedLabel, foldedQuery)) {
+      rank = 0;
+    } else {
+      const char *match = foldedLabel;
+      while ((match = strstr(match, foldedQuery))) {
+        if (match == foldedLabel ||
+            g_unichar_isspace(
+                g_utf8_get_char(g_utf8_find_prev_char(foldedLabel, match))) ||
+            strchr("-_/.", match[-1])) {
+          rank = 1;
+          break;
+        }
+        match++;
+      }
+      if (rank < 0)
+        rank = 2;
+    }
+  }
+  g_strfreev(tokens);
+  g_free(foldedQuery);
+  g_free(foldedSearch);
+  g_free(foldedLabel);
+  return rank;
+#else
+  return strstr(search, query) ? (strncmp(label, query, strlen(query)) ? 2 : 0)
+                               : -1;
 #endif
 }

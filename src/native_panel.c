@@ -5,6 +5,9 @@
 
 #include <cairo/cairo-xcb.h>
 #include <pango/pangocairo.h>
+#ifdef HAVE_XCB_RANDR
+#include <xcb/randr.h>
+#endif
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -55,11 +58,91 @@ struct NativePanel {
   PangoFontDescription *iconFont;
   NativeTray *tray;
   PanelConfig config;
+  int x;
+  int y;
+  int width;
+#ifdef HAVE_XCB_RANDR
+  int randrEventBase;
+#endif
   bool mapped;
   ActionRegion regions[MAX_REGIONS];
   size_t regionCount;
   char lastMarkup[32768];
 };
+
+static void useRootBounds(NativePanel *panel) {
+  panel->x = 0;
+  panel->y = 0;
+  panel->width = panel->screen->width_in_pixels;
+}
+
+#ifdef HAVE_XCB_RANDR
+static bool monitorNameMatches(NativePanel *panel,
+                               xcb_atom_t name,
+                               const char *configured) {
+  xcb_get_atom_name_reply_t *reply = xcb_get_atom_name_reply(
+      panel->connection, xcb_get_atom_name(panel->connection, name), NULL);
+  if (!reply)
+    return false;
+  int length = xcb_get_atom_name_name_length(reply);
+  bool matches =
+      length >= 0 && length == (int)strlen(configured) &&
+      !memcmp(xcb_get_atom_name_name(reply), configured, (size_t)length);
+  free(reply);
+  return matches;
+}
+
+static void resolveMonitorBounds(NativePanel *panel) {
+  useRootBounds(panel);
+  if (!strcmp(panel->config.monitor, "all"))
+    return;
+  xcb_randr_get_monitors_reply_t *reply = xcb_randr_get_monitors_reply(
+      panel->connection,
+      xcb_randr_get_monitors(panel->connection, panel->screen->root, 1),
+      NULL);
+  if (!reply)
+    return;
+  char *end = NULL;
+  long requestedIndex = strtol(panel->config.monitor, &end, 10);
+  bool useIndex =
+      end != panel->config.monitor && *end == '\0' && requestedIndex >= 0;
+  int index = 0;
+  xcb_randr_monitor_info_iterator_t monitors =
+      xcb_randr_get_monitors_monitors_iterator(reply);
+  for (; monitors.rem; xcb_randr_monitor_info_next(&monitors), index++) {
+    xcb_randr_monitor_info_t *monitor = monitors.data;
+    bool selected =
+        (!strcmp(panel->config.monitor, "primary") && monitor->primary) ||
+        (useIndex && requestedIndex == index) ||
+        (!useIndex && strcmp(panel->config.monitor, "primary") != 0 &&
+         monitorNameMatches(panel, monitor->name, panel->config.monitor));
+    if (!selected)
+      continue;
+    panel->x = monitor->x;
+    panel->y = monitor->y;
+    panel->width = monitor->width;
+    break;
+  }
+  free(reply);
+}
+
+static void subscribeRandr(NativePanel *panel) {
+  const xcb_query_extension_reply_t *extension =
+      xcb_get_extension_data(panel->connection, &xcb_randr_id);
+  if (!extension || !extension->present)
+    return;
+  panel->randrEventBase = extension->first_event;
+  xcb_randr_select_input(panel->connection,
+                         panel->screen->root,
+                         XCB_RANDR_NOTIFY_MASK_SCREEN_CHANGE |
+                             XCB_RANDR_NOTIFY_MASK_CRTC_CHANGE |
+                             XCB_RANDR_NOTIFY_MASK_OUTPUT_CHANGE);
+}
+#else
+static void resolveMonitorBounds(NativePanel *panel) {
+  useRootBounds(panel);
+}
+#endif
 
 static xcb_atom_t internAtom(xcb_connection_t *connection, const char *name) {
   xcb_intern_atom_cookie_t cookie =
@@ -184,9 +267,9 @@ static void configureEwmh(NativePanel *panel) {
                       sizeof(CLASS_NAME) - 1,
                       CLASS_NAME);
   uint32_t strut[12] = {0};
-  strut[2] = (uint32_t)panel->config.height;
-  strut[8] = 0;
-  strut[9] = panel->screen->width_in_pixels - 1U;
+  strut[2] = (uint32_t)(panel->y + panel->config.height);
+  strut[8] = (uint32_t)panel->x;
+  strut[9] = (uint32_t)(panel->x + panel->width - 1);
   setCardinal(connection,
               window,
               internAtom(connection, "_NET_WM_STRUT_PARTIAL"),
@@ -214,6 +297,10 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
   panel->connection = connection;
   panel->screen = screen;
   panel->config = *config;
+  resolveMonitorBounds(panel);
+#ifdef HAVE_XCB_RANDR
+  subscribeRandr(panel);
+#endif
   panel->window = xcb_generate_id(connection);
   uint32_t values[] = {
       screen->black_pixel,
@@ -224,9 +311,9 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
                     screen->root_depth,
                     panel->window,
                     screen->root,
-                    0,
-                    0,
-                    screen->width_in_pixels,
+                    (int16_t)panel->x,
+                    (int16_t)panel->y,
+                    (uint16_t)panel->width,
                     (uint16_t)config->height,
                     0,
                     XCB_WINDOW_CLASS_INPUT_OUTPUT,
@@ -241,11 +328,8 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
     nativePanelDestroy(panel);
     return NULL;
   }
-  panel->surface = cairo_xcb_surface_create(connection,
-                                            panel->window,
-                                            visual,
-                                            screen->width_in_pixels,
-                                            config->height);
+  panel->surface = cairo_xcb_surface_create(
+      connection, panel->window, visual, panel->width, config->height);
   panel->cairo = cairo_create(panel->surface);
   panel->layout = pango_cairo_create_layout(panel->cairo);
   char description[256];
@@ -492,10 +576,9 @@ static int drawMarkup(NativePanel *panel, const char *markup) {
       segments[i].width = textWidth(panel, segments[i].text);
     widths[segments[i].align] += segments[i].width;
   }
-  int positions[3] = {
-      0,
-      ((int)panel->screen->width_in_pixels - widths[ALIGN_CENTER]) / 2,
-      (int)panel->screen->width_in_pixels - widths[ALIGN_RIGHT]};
+  int positions[3] = {0,
+                      (panel->width - widths[ALIGN_CENTER]) / 2,
+                      panel->width - widths[ALIGN_RIGHT]};
   setColor(panel->cairo, panel->config.colorPanelBg, "#000000");
   cairo_paint(panel->cairo);
   panel->regionCount = 0;
@@ -545,6 +628,31 @@ bool nativePanelHandleEvent(NativePanel *panel,
                             size_t actionSize,
                             bool *redraw) {
   uint8_t type = event->response_type & 0x7fU;
+#ifdef HAVE_XCB_RANDR
+  if (panel->randrEventBase &&
+      (type == panel->randrEventBase + XCB_RANDR_SCREEN_CHANGE_NOTIFY ||
+       type == panel->randrEventBase + XCB_RANDR_NOTIFY)) {
+    int oldX = panel->x, oldY = panel->y, oldWidth = panel->width;
+    resolveMonitorBounds(panel);
+    if (panel->x != oldX || panel->y != oldY || panel->width != oldWidth) {
+      uint32_t geometry[] = {(uint32_t)panel->x,
+                             (uint32_t)panel->y,
+                             (uint32_t)panel->width,
+                             (uint32_t)panel->config.height};
+      xcb_configure_window(panel->connection,
+                           panel->window,
+                           XCB_CONFIG_WINDOW_X | XCB_CONFIG_WINDOW_Y |
+                               XCB_CONFIG_WINDOW_WIDTH |
+                               XCB_CONFIG_WINDOW_HEIGHT,
+                           geometry);
+      cairo_xcb_surface_set_size(
+          panel->surface, panel->width, panel->config.height);
+      configureEwmh(panel);
+      *redraw = true;
+    }
+    return false;
+  }
+#endif
   if (nativeTrayHandleEvent(panel->tray, event)) {
     *redraw = true;
     return false;
@@ -582,6 +690,20 @@ bool nativePanelHandleEvent(NativePanel *panel,
 
 xcb_window_t nativePanelWindow(const NativePanel *panel) {
   return panel->window;
+}
+
+void nativePanelBounds(
+    const NativePanel *panel, int *x, int *y, int *width, int *height) {
+  if (!panel)
+    return;
+  if (x)
+    *x = panel->x;
+  if (y)
+    *y = panel->y;
+  if (width)
+    *width = panel->width;
+  if (height)
+    *height = panel->config.height;
 }
 
 bool nativePanelOwnsTray(const NativePanel *panel) {

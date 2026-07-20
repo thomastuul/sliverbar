@@ -310,60 +310,140 @@ static void defaultRouteInterface(char *interface, size_t interfaceSize) {
     parseDefaultRouteInterface(routes, interface, interfaceSize);
 }
 
-static int wirelessStrength(const char *interface) {
-  FILE *file = fopen("/proc/net/wireless", "r");
-  if (!file)
+int parseWirelessQuality(const char *contents,
+                         const char *interface,
+                         double *quality,
+                         int *percent) {
+  if (!contents || !interface || !quality || !percent)
     return -1;
-  char line[512], name[128];
-  double quality;
-  int strength = -1;
-  while (fgets(line, sizeof(line), file)) {
-    if (sscanf(line, " %127[^:]: %*s %lf", name, &quality) == 2 &&
+  const char *line = contents;
+  while (*line) {
+    const char *end = strchr(line, '\n');
+    size_t length = end ? (size_t)(end - line) : strlen(line);
+    char copy[512], name[128];
+    if (length >= sizeof(copy))
+      length = sizeof(copy) - 1;
+    memcpy(copy, line, length);
+    copy[length] = '\0';
+    double value = 0.0;
+    if (sscanf(copy, " %127[^:]: %*s %lf", name, &value) == 2 &&
         !strcmp(name, interface)) {
-      strength = wifiQualityPercent(quality);
-      break;
+      int converted = wifiQualityPercent(value);
+      if (converted < 0)
+        return -1;
+      *quality = value;
+      *percent = converted;
+      return 0;
+    }
+    line = end ? end + 1 : line + length;
+  }
+  return -1;
+}
+
+static int wirelessStrength(const char *interface, double *rawValue) {
+  char contents[16384];
+  int strength = -1;
+  if (readTextFile("/proc/net/wireless", contents, sizeof(contents)) ||
+      parseWirelessQuality(contents, interface, rawValue, &strength))
+    return -1;
+  return strength;
+}
+
+static void findNetworkInterfaces(bool *ethernet,
+                                  bool *wifi,
+                                  char *wifiInterface,
+                                  size_t wifiInterfaceSize) {
+  *ethernet = false;
+  *wifi = false;
+  wifiInterface[0] = '\0';
+  char preferredInterface[256];
+  defaultRouteInterface(preferredInterface, sizeof(preferredInterface));
+  DIR *directory = opendir("/sys/class/net");
+  if (!directory)
+    return;
+  struct dirent *entry;
+  while ((entry = readdir(directory))) {
+    if (entry->d_name[0] == '.' || !strcmp(entry->d_name, "lo"))
+      continue;
+    char path[PANEL_PATH_MAX], state[32];
+    snprintf(path, sizeof(path), "/sys/class/net/%s/operstate", entry->d_name);
+    if (readTextFile(path, state, sizeof(state)) || strcmp(state, "up") != 0)
+      continue;
+    snprintf(path, sizeof(path), "/sys/class/net/%s/wireless", entry->d_name);
+    char phy[PANEL_PATH_MAX];
+    snprintf(phy, sizeof(phy), "/sys/class/net/%s/phy80211", entry->d_name);
+    if (!access(path, F_OK) || !access(phy, F_OK)) {
+      *wifi = true;
+      if (!wifiInterface[0] || !strcmp(entry->d_name, preferredInterface))
+        snprintf(wifiInterface, wifiInterfaceSize, "%s", entry->d_name);
+    } else {
+      snprintf(path, sizeof(path), "/sys/class/net/%s/device", entry->d_name);
+      if (!access(path, F_OK))
+        *ethernet = true;
     }
   }
-  fclose(file);
-  return strength;
+  closedir(directory);
+}
+
+int wifiDiagnostic(WifiDiagnostic *diagnostic) {
+  if (!diagnostic)
+    return -1;
+  memset(diagnostic, 0, sizeof(*diagnostic));
+  diagnostic->percent = -1;
+  bool ethernet = false, wifi = false;
+  findNetworkInterfaces(
+      &ethernet, &wifi, diagnostic->interface, sizeof(diagnostic->interface));
+  (void)ethernet;
+  if (!wifi)
+    return -1;
+  double rawValue = 0.0;
+  int kernelStrength = wirelessStrength(diagnostic->interface, &rawValue);
+  if (kernelStrength >= 0) {
+    snprintf(diagnostic->backend, sizeof(diagnostic->backend), "kernel-proc");
+    diagnostic->rawValue = rawValue;
+    diagnostic->percent = kernelStrength;
+    return 0;
+  }
+  if (!commandExists("nmcli"))
+    return -1;
+  char output[2048], ssid[128];
+  int nmcliStrength = -1;
+  char *arguments[] = {"nmcli",
+                       "--terse",
+                       "--escape",
+                       "no",
+                       "--fields",
+                       "IN-USE,SSID,SIGNAL",
+                       "device",
+                       "wifi",
+                       "list",
+                       "--rescan",
+                       "no",
+                       "ifname",
+                       diagnostic->interface,
+                       NULL};
+  if (runCapture(arguments, output, sizeof(output), 1500) ||
+      parseNmcliWifi(output, ssid, sizeof(ssid), &nmcliStrength))
+    return -1;
+  snprintf(diagnostic->backend, sizeof(diagnostic->backend), "nmcli");
+  diagnostic->rawValue = nmcliStrength;
+  diagnostic->percent = nmcliStrength;
+  return 0;
 }
 
 void moduleNetwork(const PanelConfig *c, PanelState *s) {
   s->network[0] = '\0';
   if (c->moduleNetwork == MODULE_DISABLED)
     return;
-  DIR *d = opendir("/sys/class/net");
   bool eth = false, wifi = false;
-  char ssid[128] = "-", wifiInterface[256] = "", preferredInterface[256];
+  char ssid[128] = "-", wifiInterface[256] = "";
   int strength = -1;
-  defaultRouteInterface(preferredInterface, sizeof(preferredInterface));
-  if (d) {
-    struct dirent *e;
-    while ((e = readdir(d))) {
-      if (e->d_name[0] == '.' || !strcmp(e->d_name, "lo"))
-        continue;
-      char p[PANEL_PATH_MAX], v[32];
-      snprintf(p, sizeof(p), "/sys/class/net/%s/operstate", e->d_name);
-      if (readTextFile(p, v, sizeof(v)) || strcmp(v, "up") != 0)
-        continue;
-      snprintf(p, sizeof(p), "/sys/class/net/%s/wireless", e->d_name);
-      char phy[PANEL_PATH_MAX];
-      snprintf(phy, sizeof(phy), "/sys/class/net/%s/phy80211", e->d_name);
-      if (!access(p, F_OK) || !access(phy, F_OK)) {
-        wifi = true;
-        if (!wifiInterface[0] || !strcmp(e->d_name, preferredInterface))
-          snprintf(wifiInterface, sizeof(wifiInterface), "%s", e->d_name);
-      } else {
-        snprintf(p, sizeof(p), "/sys/class/net/%s/device", e->d_name);
-        if (!access(p, F_OK))
-          eth = true;
-      }
-    }
-    closedir(d);
-  }
+  findNetworkInterfaces(&eth, &wifi, wifiInterface, sizeof(wifiInterface));
   if (!moduleModeActive(c->moduleNetwork, eth || wifi))
     return;
-  int kernelStrength = wifi ? wirelessStrength(wifiInterface) : -1;
+  double rawKernelStrength = 0.0;
+  int kernelStrength =
+      wifi ? wirelessStrength(wifiInterface, &rawKernelStrength) : -1;
   int nmcliStrength = -1;
   if (wifi && commandExists("nmcli")) {
     char out[2048];
@@ -495,14 +575,18 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   min = jsonInteger(p);
   p = strstr(data, "\"maxtempC\"");
   max = jsonInteger(p);
-  char text[96], body[256], tmp[512];
+  char text[96], body[256], right[512], middle[768];
   snprintf(text, sizeof(text), "爫%3d%% %3d° %3d°", rain, min, max);
   block(body, sizeof(body), c->colorBg, c->colorWeather, text);
-  action(tmp, sizeof(tmp), 3, "weather|notify", body);
   if (*c->weatherImage && appCanOpenFile(c->weatherImage))
-    action(s->weather, sizeof(s->weather), 1, "weather|open", tmp);
+    action(right, sizeof(right), 3, "weather|open", body);
   else
-    snprintf(s->weather, sizeof(s->weather), "%s", tmp);
+    snprintf(right, sizeof(right), "%s", body);
+  action(middle, sizeof(middle), 2, "weather|refresh", right);
+  if (c->weatherLocationCount > 1)
+    action(s->weather, sizeof(s->weather), 1, "weather|locations", middle);
+  else
+    snprintf(s->weather, sizeof(s->weather), "%s", middle);
 }
 
 void moduleWorkspace(const PanelConfig *c, PanelState *s, const char *report) {
@@ -630,25 +714,55 @@ void moduleStatic(const PanelConfig *c, PanelState *s) {
   char body[128];
   s->launcher[0] = '\0';
   s->power[0] = '\0';
-  if (moduleModeActive(c->moduleLauncher, appSpecAvailable(c, c->launcher))) {
+  bool internalLauncher = strcmp(c->applicationLauncher, "external") != 0 &&
+                          strcmp(c->applicationLauncher, "disabled") != 0 &&
+                          c->internalLauncherAvailable;
+  bool externalLauncher = strcmp(c->applicationLauncher, "internal") != 0 &&
+                          strcmp(c->applicationLauncher, "disabled") != 0 &&
+                          appSpecAvailable(c, c->launcher);
+  if (moduleModeActive(c->moduleLauncher,
+                       internalLauncher || externalLauncher)) {
     block(body, sizeof(body), c->colorBg, c->colorFg, "");
     action(s->launcher, sizeof(s->launcher), 1, "launcher", body);
   }
-  if (moduleModeActive(c->modulePower, appSpecAvailable(c, c->powerMenu))) {
+  bool internalPower = strcmp(c->powerMenuMode, "external") != 0 &&
+                       strcmp(c->powerMenuMode, "disabled") != 0 &&
+                       c->internalPowerAvailable;
+  bool externalPower = strcmp(c->powerMenuMode, "internal") != 0 &&
+                       strcmp(c->powerMenuMode, "disabled") != 0 &&
+                       appSpecAvailable(c, c->powerMenu);
+  if (moduleModeActive(c->modulePower, internalPower || externalPower)) {
     block(body, sizeof(body), c->colorBg, c->colorFg, "");
     action(s->power, sizeof(s->power), 1, "power", body);
   }
 }
 
+void moduleInhibitor(const PanelConfig *c,
+                     PanelState *s,
+                     bool available,
+                     bool active) {
+  s->inhibitor[0] = '\0';
+  if (!moduleModeActive(c->moduleInhibitor, available) || !available)
+    return;
+  char body[128];
+  block(body,
+        sizeof(body),
+        c->colorBg,
+        active ? c->colorWarning : c->colorFree,
+        c->iconFont[0] ? "" : "☕");
+  action(s->inhibitor, sizeof(s->inhibitor), 1, "inhibitor|toggle", body);
+}
+
 void renderPanel(const PanelState *s, char *out, size_t n) {
   snprintf(out,
            n,
-           "%%{l}%s%s%%{c}%s%%{r}%s%s%s%s%s%s%s%s%s%s\n",
+           "%%{l}%s%s%%{c}%s%%{r}%s%s%s%s%s%s%s%s%s%s%s\n",
            s->launcher,
            s->workspace,
            s->title,
            s->screencast,
            s->weather,
+           s->inhibitor,
            s->battery,
            s->network,
            s->brightness,

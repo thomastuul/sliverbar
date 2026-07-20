@@ -15,7 +15,17 @@ void configDefaults(PanelConfig *c) {
   memset(c, 0, sizeof(*c));
   copy(c->font, sizeof(c->font), "Monospace:style=Regular:size=11");
   copy(c->wmName, sizeof(c->wmName), "sliverbar");
+  copy(c->monitor, sizeof(c->monitor), "primary");
   copy(c->workspaceBackend, sizeof(c->workspaceBackend), "auto");
+  copy(c->applicationLauncher, sizeof(c->applicationLauncher), "auto");
+  copy(c->powerMenuMode, sizeof(c->powerMenuMode), "auto");
+  copy(c->powerActions,
+       sizeof(c->powerActions),
+       "lock,suspend,hibernate,suspend_then_hibernate,hybrid_sleep,reboot,"
+       "poweroff");
+  copy(c->powerConfirm,
+       sizeof(c->powerConfirm),
+       "suspend,hibernate,suspend_then_hibernate,hybrid_sleep,reboot,poweroff");
   copy(c->terminal, sizeof(c->terminal), "auto");
   copy(c->systemMonitor, sizeof(c->systemMonitor), "auto");
   copy(c->networkSettings, sizeof(c->networkSettings), "auto");
@@ -80,6 +90,42 @@ static int number(const char *s, long min, long max, long *out) {
   return 0;
 }
 
+static bool validLocationId(const char *id) {
+  if (!id || !*id)
+    return false;
+  for (const char *cursor = id; *cursor; cursor++)
+    if (!isalnum((unsigned char)*cursor) && *cursor != '_' && *cursor != '-')
+      return false;
+  return true;
+}
+
+static int addWeatherLocation(PanelConfig *c, const char *value) {
+  if (c->weatherLocationCount >= PANEL_WEATHER_LOCATION_MAX)
+    return -1;
+  char copybuf[384];
+  copy(copybuf, sizeof(copybuf), value);
+  char *first = strchr(copybuf, '|');
+  if (!first)
+    return -1;
+  *first++ = '\0';
+  char *second = strchr(first, '|');
+  if (second)
+    *second++ = '\0';
+  char *id = trim(copybuf);
+  char *label = trim(first);
+  char *query = second ? trim(second) : label;
+  if (!validLocationId(id) || !*label || !*query)
+    return -1;
+  for (size_t i = 0; i < c->weatherLocationCount; i++)
+    if (!strcmp(c->weatherLocations[i].id, id))
+      return -1;
+  WeatherLocation *location = &c->weatherLocations[c->weatherLocationCount++];
+  copy(location->id, sizeof(location->id), id);
+  copy(location->label, sizeof(location->label), label);
+  copy(location->query, sizeof(location->query), query);
+  return 0;
+}
+
 static int assign(PanelConfig *c, const char *k, const char *v) {
 #define STR(key, field)                                                        \
   do {                                                                         \
@@ -91,6 +137,7 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   STR("font", font);
   STR("icon_font", iconFont);
   STR("wm_name", wmName);
+  STR("monitor", monitor);
   if (!strcmp(k, "workspace_backend")) {
     if (strcmp(v, "auto") != 0 && strcmp(v, "bspwm") != 0 &&
         strcmp(v, "ewmh") != 0 && strcmp(v, "none") != 0)
@@ -98,12 +145,28 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
     copy(c->workspaceBackend, sizeof(c->workspaceBackend), v);
     return 0;
   }
+  if (!strcmp(k, "application_launcher") || !strcmp(k, "power_menu_mode")) {
+    if (strcmp(v, "auto") != 0 && strcmp(v, "internal") != 0 &&
+        strcmp(v, "external") != 0 && strcmp(v, "disabled") != 0)
+      return -1;
+    bool launcher = !strcmp(k, "application_launcher");
+    char *destination = launcher ? c->applicationLauncher : c->powerMenuMode;
+    size_t destinationSize =
+        launcher ? sizeof(c->applicationLauncher) : sizeof(c->powerMenuMode);
+    copy(destination, destinationSize, v);
+    return 0;
+  }
   STR("terminal", terminal);
   STR("system_monitor", systemMonitor);
   STR("network_settings", networkSettings);
   STR("volume_settings", volumeSettings);
   STR("calendar", calendar);
+  STR("power_actions", powerActions);
+  STR("power_confirm", powerConfirm);
   STR("location", location);
+  if (!strcmp(k, "weather_location"))
+    return addWeatherLocation(c, v);
+  STR("weather_default", defaultWeatherLocation);
   STR("language", language);
   STR("launcher", launcher);
   STR("power_menu", powerMenu);
@@ -135,6 +198,7 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   MODULE("launcher", moduleLauncher);
   MODULE("tray", moduleTray);
   MODULE("power", modulePower);
+  MODULE("inhibitor", moduleInhibitor);
 #undef MODULE
   STR("color_panel_bg", colorPanelBg);
   STR("color_bg", colorBg);
@@ -235,5 +299,70 @@ int configLoad(PanelConfig *c,
     rc = -1;
   }
   fclose(f);
+  const char *const POWER_LISTS[] = {c->powerActions, c->powerConfirm};
+  static const char *const POWER_IDS[] = {"lock",
+                                          "suspend",
+                                          "hibernate",
+                                          "suspend_then_hibernate",
+                                          "hybrid_sleep",
+                                          "reboot",
+                                          "poweroff"};
+  for (size_t listIndex = 0; !rc && listIndex < 2; listIndex++) {
+    char list[256];
+    copy(list, sizeof(list), POWER_LISTS[listIndex]);
+    char *save = NULL;
+    bool seen[7] = {0};
+    for (char *id = strtok_r(list, ",", &save); id;
+         id = strtok_r(NULL, ",", &save)) {
+      id = trim(id);
+      bool found = false;
+      for (size_t i = 0; i < 7; i++)
+        if (!strcmp(id, POWER_IDS[i])) {
+          if (seen[i])
+            break;
+          seen[i] = true;
+          found = true;
+          break;
+        }
+      if (!found) {
+        snprintf(error,
+                 errorSize,
+                 "%s: invalid %s",
+                 path,
+                 listIndex == 0 ? "power_actions" : "power_confirm");
+        rc = -1;
+        break;
+      }
+    }
+  }
+  if (!rc && c->weatherLocationCount) {
+    size_t selected = 0;
+    if (c->defaultWeatherLocation[0]) {
+      bool found = false;
+      for (size_t i = 0; i < c->weatherLocationCount; i++)
+        if (!strcmp(c->weatherLocations[i].id, c->defaultWeatherLocation)) {
+          selected = i;
+          found = true;
+          break;
+        }
+      if (!found) {
+        snprintf(error, errorSize, "%s: unknown weather_default", path);
+        return -1;
+      }
+    }
+    c->activeWeatherLocation = selected;
+    copy(c->location, sizeof(c->location), c->weatherLocations[selected].query);
+  } else if (!rc && c->location[0]) {
+    c->weatherLocationCount = 1;
+    copy(c->weatherLocations[0].id,
+         sizeof(c->weatherLocations[0].id),
+         "default");
+    copy(c->weatherLocations[0].label,
+         sizeof(c->weatherLocations[0].label),
+         c->location);
+    copy(c->weatherLocations[0].query,
+         sizeof(c->weatherLocations[0].query),
+         c->location);
+  }
   return rc;
 }
