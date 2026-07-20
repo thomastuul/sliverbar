@@ -1298,11 +1298,22 @@ int main(int argc, char **argv) {
                         1,
                         &windowDesktop);
     WorkspaceBackend *smokeWorkspace = workspaceBackendCreate(x, root, &cfg);
-    if (!smokeWorkspace || !workspaceBackendRefresh(smokeWorkspace, &smoke) ||
-        strcmp(workspaceBackendName(smokeWorkspace), "ewmh") != 0 ||
-        !smoke.focusedWorkspaceKnown || !smoke.focusedWorkspaceOccupied ||
-        !strstr(smoke.workspace, "workspace|1") ||
-        workspaceBackendSwitch(smokeWorkspace, "2")) {
+    bool workspaceOk = smokeWorkspace != NULL;
+    if (workspaceOk && !strcmp(cfg.workspaceBackend, "none")) {
+      workspaceBackendRefresh(smokeWorkspace, &smoke);
+      workspaceOk = !strcmp(workspaceBackendName(smokeWorkspace), "none") &&
+                    !smoke.workspace[0] && !smoke.focusedWorkspaceKnown;
+    } else if (workspaceOk && !strcmp(cfg.workspaceBackend, "bspwm")) {
+      workspaceOk = !strcmp(workspaceBackendName(smokeWorkspace), "bspwm");
+    } else if (workspaceOk) {
+      workspaceOk = workspaceBackendRefresh(smokeWorkspace, &smoke) &&
+                    !strcmp(workspaceBackendName(smokeWorkspace), "ewmh") &&
+                    smoke.focusedWorkspaceKnown &&
+                    smoke.focusedWorkspaceOccupied &&
+                    strstr(smoke.workspace, "workspace|1") &&
+                    !workspaceBackendSwitch(smokeWorkspace, "2");
+    }
+    if (!workspaceOk) {
       logMessage("ERROR", "EWMH workspace backend smoke-test failed");
       workspaceBackendDestroy(smokeWorkspace);
       xcb_destroy_window(x, titleWindow);

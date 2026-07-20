@@ -118,6 +118,11 @@ if(BUILD_TESTING)
     add_test(NAME check_config COMMAND sliverbar --config ${CMAKE_CURRENT_BINARY_DIR}/panel.conf --check-config)
     add_test(NAME version COMMAND sliverbar --version)
     add_test(NAME diagnose COMMAND sliverbar --config ${CMAKE_CURRENT_BINARY_DIR}/panel.conf --diagnose)
+    add_test(
+        NAME config_search
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/config-search.sh
+                $<TARGET_FILE:sliverbar>
+    )
     set_tests_properties(version PROPERTIES
         PASS_REGULAR_EXPRESSION "^sliverbar ${PROJECT_VERSION}"
     )
@@ -139,6 +144,13 @@ if(BUILD_TESTING)
                 NAME native_second_xscreen
                 COMMAND ${XVFB_RUN} -a -s "-screen 0 800x600x24 -screen 1 1024x768x24"
                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/xvfb-second-screen.sh
+                        $<TARGET_FILE:sliverbar>
+                        ${CMAKE_CURRENT_BINARY_DIR}/panel.conf
+            )
+            add_test(
+                NAME native_workspace_backends
+                COMMAND ${XVFB_RUN} -a
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/xvfb-workspace-backends.sh
                         $<TARGET_FILE:sliverbar>
                         ${CMAKE_CURRENT_BINARY_DIR}/panel.conf
             )

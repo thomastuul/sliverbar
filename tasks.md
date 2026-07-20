@@ -609,7 +609,7 @@ Zeitblock sichtbar und Sliverbar laeuft unveraendert weiter.
 - [x] Festlegen, ob ohne vorhandene Konfigurationsdatei interne Defaults
   verwendet werden oder mit einer klaren Fehlermeldung abgebrochen wird.
 - [x] Den tatsaechlich verwendeten Pfad in `--diagnose` ausgeben.
-- [ ] Tests fuer Prioritaet, Fallback und fehlende Umgebungsvariablen anlegen.
+- [x] Tests fuer Prioritaet, Fallback und fehlende Umgebungsvariablen anlegen.
 
 Akzeptanzkriterium: Ein ueber CMake installiertes Sliverbar kann ohne Wechsel in
 das Quell- oder Buildverzeichnis gestartet werden.
