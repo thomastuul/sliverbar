@@ -445,6 +445,68 @@ int main(int argc, char **argv) {
   CHECK(strcmp(weatherConfig.weatherLocations[0].label, "München") == 0);
   CHECK(unlink(weatherPath) == 0);
 
+  PanelConfig boundedWeatherConfig;
+  configDefaults(&boundedWeatherConfig);
+  char boundedWeatherPath[] = "/tmp/sliverbar-weather-bounds-XXXXXX";
+  fd = mkstemp(boundedWeatherPath);
+  CHECK(fd >= 0);
+  const char BOUNDED_WEATHER[] = "weather_location=one|One|One\n"
+                                 "weather_location=two|Two|Two\n"
+                                 "weather_location=three|Three|Three\n"
+                                 "weather_location=four|Four|Four\n"
+                                 "weather_interval=900\n";
+  CHECK(write(fd, BOUNDED_WEATHER, sizeof(BOUNDED_WEATHER) - 1) ==
+        (ssize_t)(sizeof(BOUNDED_WEATHER) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(
+            &boundedWeatherConfig, boundedWeatherPath, error, sizeof(error)) ==
+        0);
+  CHECK(boundedWeatherConfig.weatherLocationCount ==
+        PANEL_WEATHER_LOCATION_MAX);
+  CHECK(boundedWeatherConfig.weatherInterval == PANEL_WEATHER_INTERVAL_MIN);
+  CHECK(unlink(boundedWeatherPath) == 0);
+
+  PanelConfig maximumWeatherIntervalConfig;
+  configDefaults(&maximumWeatherIntervalConfig);
+  char maximumWeatherIntervalPath[] = "/tmp/sliverbar-weather-maximum-XXXXXX";
+  fd = mkstemp(maximumWeatherIntervalPath);
+  CHECK(fd >= 0);
+  const char MAXIMUM_WEATHER_INTERVAL[] = "weather_interval=42000\n";
+  CHECK(write(fd,
+              MAXIMUM_WEATHER_INTERVAL,
+              sizeof(MAXIMUM_WEATHER_INTERVAL) - 1) ==
+        (ssize_t)(sizeof(MAXIMUM_WEATHER_INTERVAL) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&maximumWeatherIntervalConfig,
+                   maximumWeatherIntervalPath,
+                   error,
+                   sizeof(error)) == 0);
+  CHECK(maximumWeatherIntervalConfig.weatherInterval ==
+        PANEL_WEATHER_INTERVAL_MAX);
+  CHECK(unlink(maximumWeatherIntervalPath) == 0);
+
+  PanelConfig tooManyWeatherLocationsConfig;
+  configDefaults(&tooManyWeatherLocationsConfig);
+  char tooManyWeatherLocationsPath[] = "/tmp/sliverbar-weather-too-many-XXXXXX";
+  fd = mkstemp(tooManyWeatherLocationsPath);
+  CHECK(fd >= 0);
+  const char TOO_MANY_WEATHER_LOCATIONS[] =
+      "weather_location=one|One|One\n"
+      "weather_location=two|Two|Two\n"
+      "weather_location=three|Three|Three\n"
+      "weather_location=four|Four|Four\n"
+      "weather_location=five|Five|Five\n";
+  CHECK(write(fd,
+              TOO_MANY_WEATHER_LOCATIONS,
+              sizeof(TOO_MANY_WEATHER_LOCATIONS) - 1) ==
+        (ssize_t)(sizeof(TOO_MANY_WEATHER_LOCATIONS) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&tooManyWeatherLocationsConfig,
+                   tooManyWeatherLocationsPath,
+                   error,
+                   sizeof(error)) != 0);
+  CHECK(unlink(tooManyWeatherLocationsPath) == 0);
+
   PanelConfig duplicateWeatherConfig;
   configDefaults(&duplicateWeatherConfig);
   char duplicateWeatherPath[] = "/tmp/sliverbar-weather-duplicate-XXXXXX";

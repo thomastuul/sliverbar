@@ -256,12 +256,17 @@ exists.
 
 ### Weather and inhibitor
 
-Repeat `weather_location=safe-id|Display name|service query` for up to 16
+Repeat `weather_location=safe-id|Display name|service query` for up to 4
 locations and set `weather_default=safe-id`. Legacy `location=query` remains a
-single-location form. Empty, duplicate, overlong, or unsafe IDs fail
-`--check-config`. Selection state is stored below `$XDG_STATE_HOME/sliverbar`;
-JSON and PNG caches are isolated by safe ID below
+single-location form. A fifth location and empty, duplicate, overlong, or unsafe
+IDs fail `--check-config`. Selection state is stored below
+`$XDG_STATE_HOME/sliverbar`; JSON and PNG caches are isolated by safe ID below
 `$XDG_CACHE_HOME/sliverbar/weather`.
+
+`weather_interval` is specified in seconds and is limited to 1800–14400 seconds
+(30–240 minutes). Values below or above that range are clamped to the nearest
+limit and produce a warning in the log; for example, 900 seconds becomes 1800
+seconds and 42000 seconds becomes 14400 seconds.
 
 `language=auto` selects German when the system language is German and English
 for every other system language. The same selection is used for Sliverbar's

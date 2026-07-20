@@ -2,6 +2,7 @@
 
 #include <ctype.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -277,13 +278,34 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   NUM("volume_step", volumeStep, 1, 100);
   NUM("brightness_step", brightnessStep, 1, 100);
 #undef NUM
-  if (!strcmp(k, "weather_interval") || !strcmp(k, "network_interval") ||
-      !strcmp(k, "title_max")) {
+  if (!strcmp(k, "weather_interval")) {
+    if (number(v, LONG_MIN, LONG_MAX, &n))
+      return -1;
+    if (n < (long)PANEL_WEATHER_INTERVAL_MIN) {
+      logMessage("WARNING",
+                 "weather_interval=%ld is below the minimum of %u seconds; "
+                 "using %u seconds",
+                 n,
+                 PANEL_WEATHER_INTERVAL_MIN,
+                 PANEL_WEATHER_INTERVAL_MIN);
+      c->weatherInterval = PANEL_WEATHER_INTERVAL_MIN;
+    } else if (n > (long)PANEL_WEATHER_INTERVAL_MAX) {
+      logMessage("WARNING",
+                 "weather_interval=%ld exceeds the maximum of %u seconds; "
+                 "using %u seconds",
+                 n,
+                 PANEL_WEATHER_INTERVAL_MAX,
+                 PANEL_WEATHER_INTERVAL_MAX);
+      c->weatherInterval = PANEL_WEATHER_INTERVAL_MAX;
+    } else {
+      c->weatherInterval = (unsigned)n;
+    }
+    return 0;
+  }
+  if (!strcmp(k, "network_interval") || !strcmp(k, "title_max")) {
     if (number(v, 1, 86400, &n))
       return -1;
-    if (!strcmp(k, "weather_interval"))
-      c->weatherInterval = (unsigned)n;
-    else if (!strcmp(k, "network_interval"))
+    if (!strcmp(k, "network_interval"))
       c->networkInterval = (unsigned)n;
     else
       c->titleMax = (unsigned)n;
