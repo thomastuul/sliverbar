@@ -456,22 +456,29 @@ Rofi- oder `systemctl`-Aufrufe ausgefuehrt.
 
 ## Feature: Mehrere Wetterorte und Ortsauswahl
 
-- [x] In der Konfiguration eine Liste mehrerer Wetterorte erlauben. Im
-  bestehenden `key=value`-Format vorzugsweise denselben Schluessel mehrfach
-  zulassen, zum Beispiel:
+- [x] In der Konfiguration eine Liste von maximal vier Wetterorten erlauben. Im
+  bestehenden `key=value`-Format denselben Schluessel mehrfach zulassen und
+  sichere ID, Anzeigename und Suchwert getrennt angeben, zum Beispiel:
 
   ```ini
-  weather_location=Muenchen
-  weather_location=Berlin
-  weather_location=London
-  weather_default=Berlin
+  weather_location=munich|Muenchen|Munich
+  weather_location=berlin|Berlin|Berlin, Germany
+  weather_location=london|London|London, United Kingdom
+  weather_default=berlin
   ```
 
 - [x] Optional getrennte Anzeigenamen und Suchwerte ermoeglichen, falls der
   Wetterdienst fuer einen eindeutigen Ort einen ausfuehrlicheren Suchbegriff
   benoetigt.
-- [x] Leere, doppelte und zu lange Ortseintraege bei `--check-config` ablehnen;
-  Anzahl und Laenge der Eintraege muessen feste, dokumentierte Grenzen haben.
+- [x] Leere, doppelte, zu lange oder unsichere Ortseintraege sowie einen
+  fuenften Wetterort bei `--check-config` ablehnen. Die Grenze von vier Orten
+  und die zulaessigen sicheren IDs dokumentieren.
+- [x] `weather_interval` in Sekunden auf minimal 1800 Sekunden (30 Minuten) und
+  maximal 14400 Sekunden (240 Minuten) begrenzen.
+- [x] Syntaktisch gueltige Intervallwerte ausserhalb dieses Bereichs nicht als
+  Konfigurationsfehler behandeln, sondern auf die naechste Grenze setzen und
+  den konfigurierten sowie den verwendeten Wert als `WARNING` protokollieren,
+  beispielsweise 900 -> 1800 und 42000 -> 14400 Sekunden.
 - [x] Den aktiven Wetterort als Laufzeitzustand fuehren, statt die eingelesene
   Konfiguration beim Umschalten zu veraendern.
 - [x] Den zuletzt ausgewaehlten Ort optional unter
@@ -517,18 +524,26 @@ Rofi- oder `systemctl`-Aufrufe ausgefuehrt.
 
 ### Tests und Dokumentation
 
-- [x] Parser-Tests fuer einen Ort, mehrere Orte, Standardort, ungueltige Listen
-  und doppelte Orte ergaenzen.
+- [x] Parser-Tests fuer einen Ort, mehrere Orte, Standardort, ungueltige Listen,
+  doppelte Orte, die Grenze von vier Orten und einen abgelehnten fuenften Ort
+  ergaenzen.
+- [x] Parser-Tests fuer Wetterintervalle unterhalb und oberhalb des erlaubten
+  Bereichs ergaenzen und die Begrenzung auf 1800 beziehungsweise 14400 Sekunden
+  pruefen.
 - [ ] Tests fuer Auswahl, Zustandswiederherstellung, getrennte Cache-Dateien und
   den Wechsel waehrend einer laufenden Wetteranfrage hinzufuegen.
 - [ ] Das X11-Menue unter Xvfb testen: Oeffnen, Auswahl, Abbruch, Klick
   ausserhalb und korrekte Positionierung am Bildschirmrand.
-- [x] Konfigurationsbeispiel und Mausbelegung in der README dokumentieren.
+- [x] Konfigurationsbeispiel, Vier-Orte-Grenze, Intervallgrenzen,
+  Warn-/Clamp-Verhalten und Mausbelegung in der README dokumentieren.
 
-Akzeptanzkriterium: Mehrere Orte koennen in der Konfiguration hinterlegt
+Akzeptanzkriterium: Bis zu vier Orte koennen in der Konfiguration hinterlegt
 werden. Ein Linksklick oeffnet ohne externen Menueprozess die Ortsliste; nach
 der Auswahl zeigt die Leiste den gewaehlten Ort an, aktualisiert dessen Daten
-asynchron und stellt die Auswahl beim naechsten Start optional wieder her.
+asynchron und stellt die Auswahl beim naechsten Start optional wieder her. Das
+Aktualisierungsintervall liegt wirksam immer zwischen 30 und 240 Minuten;
+abweichende Konfigurationswerte werden mit einer Warnung auf die naechste
+Grenze gesetzt.
 
 ## Feature: Standby- und Hibernation-Inhibitor
 
