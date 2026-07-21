@@ -1,0 +1,271 @@
+.TH SLIVERBAR 1 "July 2026" "sliverbar @PROJECT_VERSION@" "User Commands"
+.SH NAME
+sliverbar \- lightweight native X11 panel
+.SH SYNOPSIS
+.B sliverbar
+.RI [ \-\-config\ PATH ]
+.RB [ \-\-check-config ]
+.RB [ \-\-diagnose ]
+.RB [ \-\-version ]
+.SH DESCRIPTION
+.B sliverbar
+is a C17 panel for Linux desktops running X11 and an EWMH-compatible window
+manager.  It creates and draws its own dock window, reserves screen space,
+handles mouse actions, and hosts XEmbed system-tray clients.
+.PP
+The panel provides workspaces, active-window title, clock, CPU, battery,
+screencast, volume, network, brightness, weather, sleep inhibitor, application
+launcher, system tray, and power modules.  Each optional module can hide itself
+when its data source or helper program is unavailable.  An enhanced bspwm
+workspace backend is available, with a portable EWMH backend as the fallback.
+.SH OPTIONS
+.TP
+.BI \-\-config\  PATH
+Read configuration from
+.IR PATH .
+.TP
+.B \-\-check-config
+Validate the selected configuration without starting the panel.  Unknown or
+invalid keys cause failure.
+.TP
+.B \-\-diagnose
+Print the selected configuration, display and workspace backend, optional
+programs, fonts, application roles, launcher catalog, WLAN source, weather
+locations, power actions, and inhibitor backend without starting the panel.
+.TP
+.B \-\-version
+Print the program name and version, then exit successfully.
+.SH CONFIGURATION
+The configuration format consists of one
+.I key=value
+assignment per line.  Empty lines and lines beginning with
+.B #
+are ignored.  Start with the installed example rather than an empty file:
+.PP
+.EX
+install -Dm644 /etc/sliverbar/panel.conf \
+  "$HOME/.config/sliverbar/panel.conf"
+sliverbar --config "$HOME/.config/sliverbar/panel.conf" --check-config
+.EE
+.PP
+Without
+.BR \-\-config
+or
+.BR SLIVERBAR_CONFIG ,
+Sliverbar searches
+.IR $XDG_CONFIG_HOME/sliverbar/panel.conf ,
+.IR $HOME/.config/sliverbar/panel.conf ,
+the installed system configuration, and finally a local development
+configuration.
+.SS Display and workspace
+.TP
+.B font, icon_font
+Pango font descriptions.  An empty
+.B icon_font
+uses the regular font and installed fallback fonts.
+.TP
+.B monitor
+.B primary
+selects the primary RandR monitor.  A monitor name or zero-based index selects
+one output;
+.B all
+spans the X screen.
+.TP
+.B workspace_backend
+One of
+.BR auto ,
+.BR bspwm ,
+.BR ewmh ,
+or
+.BR none .
+.B auto
+prefers bspwm when a reachable
+.B bspc
+is available and otherwise uses EWMH.
+.TP
+.B height, underline, title_max
+Set panel height, underline thickness, and the maximum active-title length.
+.TP
+.B language
+.BR auto ,
+.BR de ,
+or
+.BR en .
+.B auto
+selects German for a German locale and English otherwise.
+.SS Modules
+Each main block has a
+.BI module_ NAME
+key whose value is
+.BR auto ,
+.BR enabled ,
+or
+.BR disabled .
+Supported names are
+.BR clock ,
+.BR title ,
+.BR cpu ,
+.BR battery ,
+.BR screencast ,
+.BR volume ,
+.BR network ,
+.BR brightness ,
+.BR weather ,
+.BR inhibitor ,
+.BR launcher ,
+.BR tray ,
+and
+.BR power .
+.B auto
+hides a block when its required data or runtime helper is unavailable.
+.SS Applications and menus
+.TP
+.B terminal
+Terminal selection.  The default
+.B auto
+uses the system terminal preference and known portable fallbacks.
+.TP
+.B system_monitor, network_settings, volume_settings, calendar
+Application roles.  Values may be
+.BR auto ,
+.BI desktop: ID.desktop ,
+.BI command: PROGRAM\ ARGUMENTS ,
+or
+.BI terminal: PROGRAM\ ARGUMENTS .
+Arguments are parsed but never evaluated as shell code.
+.TP
+.B application_launcher
+.BR auto ,
+.BR internal ,
+.BR external ,
+or
+.BR disabled .
+The internal launcher uses the registered desktop-application catalog.  An
+external launcher is configured with
+.BR launcher= .
+.TP
+.B power_menu_mode
+.BR auto ,
+.BR internal ,
+.BR external ,
+or
+.BR disabled .
+The internal menu obtains available actions from systemd-logind.  An external
+menu is configured with
+.BR power_menu= .
+.TP
+.B power_actions, power_confirm
+Comma-separated ordered subsets of
+.BR lock ,
+.BR suspend ,
+.BR hibernate ,
+.BR suspend_then_hibernate ,
+.BR hybrid_sleep ,
+.BR reboot ,
+and
+.BR poweroff .
+.SS Weather
+.TP
+.B weather_location
+May be repeated up to four times.  Its format is
+.IR safe-id|Display\ name|service\ query .
+.TP
+.B weather_default
+Selects the default weather location by its safe ID.
+.TP
+.B location
+Legacy single-location weather query.
+.TP
+.B weather_interval
+Refresh interval in seconds.  Values are limited to 1800 through 14400.
+.PP
+Left click selects among configured locations, middle click refreshes, and
+right click opens the forecast image with the registered default application.
+.SS Other commonly changed keys
+.B volume_step
+and
+.B brightness_step
+set scroll-wheel increments.
+.B network_interval
+sets the network refresh period.
+Keys beginning with
+.B color_
+configure panel and module colors using values such as
+.BR #191A21 .
+See
+.I /etc/sliverbar/panel.conf
+for the complete, validated set of keys and portable defaults.
+.SH EXAMPLES
+A minimal panel containing only clock and title can use:
+.PP
+.EX
+workspace_backend=none
+module_clock=enabled
+module_title=enabled
+module_cpu=disabled
+module_battery=disabled
+module_screencast=disabled
+module_volume=disabled
+module_network=disabled
+module_brightness=disabled
+module_weather=disabled
+module_inhibitor=disabled
+module_launcher=disabled
+module_tray=disabled
+module_power=disabled
+.EE
+.PP
+Enable bspwm workspaces, the portable launcher selection, and tray detection:
+.PP
+.EX
+workspace_backend=bspwm
+monitor=primary
+module_launcher=auto
+module_tray=auto
+.EE
+.SH ENVIRONMENT
+.TP
+.B SLIVERBAR_CONFIG
+Configuration path used when
+.B \-\-config
+is absent.
+.TP
+.B XDG_CONFIG_HOME, HOME
+Used to locate the per-user configuration.
+.TP
+.B XDG_CACHE_HOME, XDG_STATE_HOME, XDG_RUNTIME_DIR
+Used for weather caches, selected weather location, and the single-instance
+lock.  Safe defaults below
+.B HOME
+or
+.I /tmp
+are used where supported.
+.TP
+.B DISPLAY
+Selects the X11 display.
+.SH FILES
+.TP
+.I $XDG_CONFIG_HOME/sliverbar/panel.conf
+Preferred per-user configuration.
+.TP
+.I $HOME/.config/sliverbar/panel.conf
+Per-user fallback when
+.B XDG_CONFIG_HOME
+is unset.
+.TP
+.I /etc/sliverbar/panel.conf
+Installed system configuration and example.
+.SH EXIT STATUS
+Zero indicates successful version output, validation, diagnostics, or normal
+termination.  Invalid arguments return 2.  Configuration and runtime failures
+return a nonzero status.  Starting a second instance returns 200.
+.SH SEE ALSO
+.BR bspc (1),
+.BR nmcli (1),
+.BR pactl (1),
+.BR systemd-inhibit (1),
+.BR xrandr (1)
+.SH AUTHORS
+Thomas Tuul, with development assistance from OpenAI Codex.
+.SH COPYRIGHT
+Copyright \(co 2026 Sliverbar contributors.  License GPLv3: GNU GPL version 3.

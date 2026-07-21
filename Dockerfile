@@ -10,6 +10,7 @@ RUN apt-get update \
         clang-format \
         clang-tidy \
         cmake \
+        dpkg-dev \
         file \
         libcairo2-dev \
         libpango1.0-dev \

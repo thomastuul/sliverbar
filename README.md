@@ -64,10 +64,21 @@ ctest --test-dir build/local --output-on-failure
 ```
 
 Sanitizers can be enabled with `-DSLIVERBAR_SANITIZERS=ON`. Install with
-`cmake --install build/local`. CPack metadata for a Debian package uses those
-same install rules. Package production is deliberately not part of a routine
-build because it first requires a restricted, read-only security review. A full
-Codex Security scan remains optional and requires explicit user approval.
+`cmake --install build/local`. The same CMake install rules place the binary,
+system configuration, and `sliverbar(1)` manual page in both Debian and Fedora
+packages.
+
+After the required restricted, read-only security review, build and validate
+both packages with:
+
+```sh
+SLIVERBAR_STATIC_REVIEWED=1 ./scripts/package-build.sh
+```
+
+Set `CONTAINER_ENGINE=podman` to package with rootless Podman. The resulting
+`.deb` and `.rpm` are host-owned files below `build/package/`, which is ignored
+by Git. Package production is deliberately separate from a routine build. A
+full Codex Security scan remains optional and requires explicit user approval.
 
 The native release is dynamically linked. Inspect it with `ldd` before
 distributing it to another system. `-DSLIVERBAR_WITH_XCB=OFF` intentionally
@@ -108,6 +119,12 @@ Validate configuration or inspect runtime detection without starting a panel:
 ```sh
 sliverbar --config ~/.config/sliverbar/panel.conf --check-config
 sliverbar --config ~/.config/sliverbar/panel.conf --diagnose
+```
+
+The installed usage manual is available with:
+
+```sh
+man sliverbar
 ```
 
 Diagnostics report the selected configuration and display, workspace backend,

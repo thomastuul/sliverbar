@@ -2,6 +2,7 @@ FROM fedora:42
 
 RUN dnf install -y \
         cairo-devel \
+        cpio \
         clang \
         clang-tools-extra \
         cmake \
@@ -13,6 +14,8 @@ RUN dnf install -y \
         ninja-build \
         pango-devel \
         pkgconf-pkg-config \
+        rpm-build \
+        shared-mime-info \
         xorg-x11-server-Xvfb \
         xorg-x11-xauth \
         xrandr \

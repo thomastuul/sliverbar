@@ -86,6 +86,7 @@ if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 configure_file(config/panel.conf panel.conf COPYONLY)
+configure_file(man/sliverbar.1.in sliverbar.1 @ONLY)
 file(READ config/panel.conf SLIVERBAR_TEST_CONFIG)
 string(REPLACE "monitor=primary" "monitor=RIGHT"
        SLIVERBAR_MULTI_MONITOR_CONFIG "${SLIVERBAR_TEST_CONFIG}")
@@ -93,22 +94,36 @@ file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/panel-multi-monitor.conf"
      "${SLIVERBAR_MULTI_MONITOR_CONFIG}")
 install(TARGETS sliverbar RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 install(FILES config/panel.conf DESTINATION ${SLIVERBAR_SYSTEM_CONFIG_DIR})
+install(FILES "${CMAKE_CURRENT_BINARY_DIR}/sliverbar.1"
+        DESTINATION ${CMAKE_INSTALL_MANDIR}/man1)
 
 set(CPACK_PACKAGE_NAME "sliverbar")
 set(CPACK_PACKAGE_VENDOR "Sliverbar contributors")
 set(CPACK_PACKAGE_CONTACT "Sliverbar contributors")
 set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Lightweight native X11 panel with EWMH and optional bspwm support")
+set(CPACK_PACKAGE_DESCRIPTION
+    "Sliverbar is a lightweight native X11 panel with configurable modules, EWMH workspaces, optional bspwm integration, an application launcher, a system tray, and power controls.")
 set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+set(CPACK_PACKAGE_HOMEPAGE_URL "https://github.com/thomastuul/sliverbar")
+set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE")
+set(CPACK_PACKAGE_RELOCATABLE OFF)
 set(CPACK_SET_DESTDIR ON)
 set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
 set(CPACK_DEBIAN_PACKAGE_SECTION "x11")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
 set(CPACK_DEBIAN_PACKAGE_DEPENDS "shared-mime-info")
+set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${CPACK_PACKAGE_HOMEPAGE_URL}")
 file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/conffiles"
      "/etc/sliverbar/panel.conf\n")
 set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
     "${CMAKE_CURRENT_BINARY_DIR}/conffiles")
+set(CPACK_RPM_FILE_NAME RPM-DEFAULT)
+set(CPACK_RPM_PACKAGE_DESCRIPTION "${CPACK_PACKAGE_DESCRIPTION}")
+set(CPACK_RPM_PACKAGE_LICENSE "GPL-3.0-only")
+set(CPACK_RPM_PACKAGE_GROUP "User Interface/Desktops")
+set(CPACK_RPM_PACKAGE_RELOCATABLE OFF)
+set(CPACK_RPM_PACKAGE_REQUIRES "shared-mime-info")
 include(CPack)
 
 if(BUILD_TESTING)
