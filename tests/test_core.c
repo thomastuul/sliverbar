@@ -3,6 +3,7 @@
 #include "app_launcher.h"
 #include "inhibitor.h"
 #include "power_actions.h"
+#include "timer.h"
 
 #include <signal.h>
 #include <stdio.h>
@@ -59,6 +60,7 @@ int main(int argc, char **argv) {
   CHECK(cfg.iconFont[0] == '\0');
   CHECK(strcmp(cfg.terminal, "auto") == 0);
   CHECK(strcmp(cfg.language, "auto") == 0);
+  CHECK(strstr(cfg.timerSound, "alarm-clock-elapsed.oga") != NULL);
   CHECK(cfg.location[0] == '\0');
   CHECK(cfg.moduleClock == MODULE_AUTO);
   CHECK(moduleModeActive(MODULE_AUTO, true));
@@ -116,7 +118,8 @@ int main(int argc, char **argv) {
   CHECK(fd >= 0);
   const char TEXT[] =
       "height=31\nvolume_step=4\ncolor_bg=#000000\nmodule_cpu=disabled\n"
-      "power_actions=lock,reboot,poweroff\npower_confirm=reboot,poweroff\n";
+      "power_actions=lock,reboot,poweroff\npower_confirm=reboot,poweroff\n"
+      "module_timer=enabled\ntimer_sound=/tmp/timer.oga\n";
   CHECK(write(fd, TEXT, sizeof(TEXT) - 1) == (ssize_t)(sizeof(TEXT) - 1));
   CHECK(close(fd) == 0);
 
@@ -127,6 +130,8 @@ int main(int argc, char **argv) {
   CHECK(strcmp(cfg.colorBg, "#000000") == 0);
   CHECK(strcmp(cfg.colorOccupied, "#ff5555") == 0);
   CHECK(cfg.moduleCpu == MODULE_DISABLED);
+  CHECK(cfg.moduleTimer == MODULE_ENABLED);
+  CHECK(strcmp(cfg.timerSound, "/tmp/timer.oga") == 0);
   CHECK(powerActionAllowed(cfg.powerActions, "reboot"));
   CHECK(!powerActionAllowed(cfg.powerActions, "hibernate"));
   CHECK(unlink(path) == 0);
@@ -325,6 +330,46 @@ int main(int argc, char **argv) {
   CHECK(strstr(brightnessState.inhibitor, cfg.colorFree) != NULL);
   moduleInhibitor(&cfg, &brightnessState, true, true);
   CHECK(strstr(brightnessState.inhibitor, cfg.colorWarning) != NULL);
+  PanelState timerPanelState = {0};
+  moduleTimer(&cfg, &timerPanelState, 0, false);
+  CHECK(strstr(timerPanelState.timer, cfg.colorClock) != NULL);
+  CHECK(strstr(timerPanelState.timer, "timer|toggle") != NULL);
+  CHECK(strstr(timerPanelState.timer, "timer|reset") != NULL);
+  CHECK(strstr(timerPanelState.timer, "timer|up") != NULL);
+  CHECK(strstr(timerPanelState.timer, "timer|down") != NULL);
+  moduleTimer(&cfg, &timerPanelState, 12, true);
+  CHECK(strstr(timerPanelState.timer, cfg.colorUrgent) != NULL);
+  CHECK(strstr(timerPanelState.timer, "12 ") != NULL);
+
+  Timer timer = {0};
+  CHECK(timerMinutes(&timer) == 0);
+  CHECK(!timerAdjust(&timer, -1));
+  CHECK(timerAdjust(&timer, 1));
+  CHECK(timerAdjust(&timer, 1));
+  CHECK(timer.status == TIMER_SET);
+  CHECK(timerMinutes(&timer) == 2);
+  CHECK(timerToggle(&timer, UINT64_C(1000000000)) == TIMER_TRANSITION_STARTED);
+  CHECK(timer.status == TIMER_RUNNING);
+  CHECK(!timerAdjust(&timer, 1));
+  CHECK(!timerUpdate(&timer, UINT64_C(62000000000)));
+  CHECK(timerMinutes(&timer) == 1);
+  CHECK(timerToggle(&timer, UINT64_C(62000000000)) == TIMER_TRANSITION_PAUSED);
+  CHECK(timer.status == TIMER_PAUSED);
+  CHECK(!timerUpdate(&timer, UINT64_C(999000000000)));
+  CHECK(timerMinutes(&timer) == 1);
+  CHECK(timerToggle(&timer, UINT64_C(999000000000)) ==
+        TIMER_TRANSITION_RESUMED);
+  CHECK(timerUpdate(&timer, UINT64_C(1058000000000)));
+  CHECK(timer.status == TIMER_EMPTY);
+  CHECK(timerMinutes(&timer) == 0);
+  CHECK(timerAdjust(&timer, 1));
+  timerReset(&timer);
+  CHECK(timer.status == TIMER_EMPTY);
+  for (unsigned i = 0; i < TIMER_MAX_MINUTES; i++)
+    CHECK(timerAdjust(&timer, 1));
+  CHECK(timerMinutes(&timer) == TIMER_MAX_MINUTES);
+  CHECK(!timerAdjust(&timer, 1));
+  timerReset(&timer);
   PanelState batteryState = {0};
   moduleBattery(&cfg, &batteryState);
   if (access("/sys/class/power_supply", R_OK) == 0)
@@ -334,13 +379,14 @@ int main(int argc, char **argv) {
   strcpy(state.launcher, "L");
   strcpy(state.workspace, "W");
   strcpy(state.title, "T");
+  strcpy(state.timer, "M");
   strcpy(state.inhibitor, "I");
   strcpy(state.weather, "R");
   strcpy(state.battery, "B");
   strcpy(state.clock, "C");
   char rendered[128];
   renderPanel(&state, rendered, sizeof(rendered));
-  CHECK(strcmp(rendered, "%{l}LW%{c}T%{r}IRBC\n") == 0);
+  CHECK(strcmp(rendered, "%{l}LW%{c}T%{r}MIRBC\n") == 0);
 
   char ssid[128];
   int strength;

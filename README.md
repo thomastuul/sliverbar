@@ -182,7 +182,7 @@ implicitly selected.
 Each main block has a `module_NAME=auto|enabled|disabled` switch. `auto` hides
 blocks whose data source or optional runtime command is unavailable. The
 supported names are `clock`, `title`, `cpu`, `battery`, `screencast`, `volume`,
-`network`, `brightness`, `weather`, `inhibitor`, `launcher`, `tray`, and
+`network`, `brightness`, `weather`, `timer`, `inhibitor`, `launcher`, `tray`, and
 `power`. For
 example, a deliberately minimal panel can start from the example configuration
 and set every module except `clock` and `title` to `disabled`, plus
@@ -240,6 +240,7 @@ module_volume=disabled
 module_network=disabled
 module_brightness=disabled
 module_weather=disabled
+module_timer=disabled
 module_inhibitor=disabled
 module_launcher=disabled
 module_tray=disabled
@@ -283,7 +284,7 @@ except lock. Lock appears only when a known session ScreenSaver service is
 registered; the logind lock signal alone is not treated as proof that a locker
 exists.
 
-### Weather and inhibitor
+### Weather, timer, and inhibitor
 
 Repeat `weather_location=safe-id|Display name|service query` for up to 4
 locations and set `weather_default=safe-id`. Legacy `location=query` remains a
@@ -306,6 +307,21 @@ Weather mouse bindings are: left opens the native location list when multiple
 locations exist, middle refreshes immediately, and right opens the forecast PNG
 with the registered default image handler. Existing cache data for a newly
 selected location appears before its asynchronous refresh.
+
+The timer block immediately before the coffee-cup inhibitor uses the mouse
+wheel to add or remove one minute while it is being set. Left click starts the
+countdown; subsequent left clicks pause and resume it. Wheel input is ignored
+after the first start. Right click resets a set, running, or paused timer to
+zero without playing a sound or sending an elapsed notification. The idle
+clock glyph uses `color_clock`; a set, running, or paused timer shows its
+remaining whole minutes to the left of the glyph in `color_urgent`.
+
+`timer_sound` selects the audio file played after a natural expiry and defaults
+to `/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga`. Sliverbar
+uses the first available backend from `pw-play`, `paplay`,
+`canberra-gtk-play`, and `aplay`. It also sends localized start and elapsed
+notifications when `notify-send` is available. A missing sound file, playback
+backend, or notification program does not affect the countdown or panel.
 
 The coffee-cup block immediately before weather toggles a real
 `systemd-inhibit --what=sleep` lock. Inactive uses `color_free`, active uses

@@ -33,6 +33,9 @@ void configDefaults(PanelConfig *c) {
   copy(c->networkSettings, sizeof(c->networkSettings), "auto");
   copy(c->volumeSettings, sizeof(c->volumeSettings), "auto");
   copy(c->calendar, sizeof(c->calendar), "auto");
+  copy(c->timerSound,
+       sizeof(c->timerSound),
+       "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga");
   copy(c->language, sizeof(c->language), "auto");
   copy(c->colorPanelBg, 16, "#191A21");
   copy(c->colorBg, 16, "#282A36");
@@ -191,6 +194,7 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   STR("network_settings", networkSettings);
   STR("volume_settings", volumeSettings);
   STR("calendar", calendar);
+  STR("timer_sound", timerSound);
   STR("power_actions", powerActions);
   STR("power_confirm", powerConfirm);
   STR("location", location);
@@ -234,6 +238,7 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   MODULE("tray", moduleTray);
   MODULE("power", modulePower);
   MODULE("inhibitor", moduleInhibitor);
+  MODULE("timer", moduleTimer);
 #undef MODULE
   STR("color_panel_bg", colorPanelBg);
   STR("color_bg", colorBg);

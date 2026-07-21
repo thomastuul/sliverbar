@@ -29,6 +29,7 @@ add_library(sliverbar_core
     src/inhibitor.c
     src/modules.c
     src/power_actions.c
+    src/timer.c
     src/util.c
 )
 target_include_directories(sliverbar_core PUBLIC include)

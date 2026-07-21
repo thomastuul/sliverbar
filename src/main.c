@@ -2,6 +2,7 @@
 #include "native_popup.h"
 #include "panel.h"
 #include "power_actions.h"
+#include "timer.h"
 #include "version.h"
 #include "workspace_backend.h"
 
@@ -36,6 +37,15 @@ joinPath(char *out, size_t size, const char *base, const char *suffix) {
   memcpy(out, base, a);
   memcpy(out + a, suffix, b + 1);
   return 0;
+}
+
+static const char *timerSoundBackend(void) {
+  static const char *const BACKENDS[] = {
+      "pw-play", "paplay", "canberra-gtk-play", "aplay"};
+  for (size_t i = 0; i < sizeof(BACKENDS) / sizeof(BACKENDS[0]); i++)
+    if (commandExists(BACKENDS[i]))
+      return BACKENDS[i];
+  return NULL;
 }
 
 #ifdef HAVE_NATIVE_PANEL
@@ -689,6 +699,57 @@ static void notifyInhibitorState(const PanelConfig *config, bool active) {
   spawnDetached(arguments);
 }
 
+static void playTimerSound(const PanelConfig *config) {
+  if (!config->timerSound[0] || access(config->timerSound, R_OK)) {
+    logMessage(
+        "WARNING", "timer sound is not readable: %s", config->timerSound);
+    return;
+  }
+  const char *backend = timerSoundBackend();
+  if (!backend) {
+    logMessage("WARNING", "no timer sound playback backend is available");
+    return;
+  }
+  char *arguments[] = {
+      (char *)backend,
+      !strcmp(backend, "canberra-gtk-play") ? (char *)"--file"
+                                            : (char *)config->timerSound,
+      !strcmp(backend, "canberra-gtk-play") ? (char *)config->timerSound : NULL,
+      NULL};
+  if (spawnDetached(arguments))
+    logMessage("WARNING", "cannot start timer sound backend %s", backend);
+}
+
+static void notifyTimerStarted(const PanelConfig *config, unsigned minutes) {
+  if (!commandExists("notify-send"))
+    return;
+  bool german = panelLanguageIsGerman(config);
+  char duration[64];
+  snprintf(duration,
+           sizeof(duration),
+           german ? "%u Minute%s" : "%u minute%s",
+           minutes,
+           minutes == 1 ? "" : (german ? "n" : "s"));
+  char *arguments[] = {"notify-send",
+                       german ? "Timer gestartet" : "Timer started",
+                       duration,
+                       NULL};
+  spawnDetached(arguments);
+}
+
+static void notifyTimerExpired(const PanelConfig *config) {
+  if (commandExists("notify-send")) {
+    bool german = panelLanguageIsGerman(config);
+    char *arguments[] = {"notify-send",
+                         german ? "Timer abgelaufen" : "Timer elapsed",
+                         german ? "Die eingestellte Zeit ist abgelaufen."
+                                : "The configured time has elapsed.",
+                         NULL};
+    spawnDetached(arguments);
+  }
+  playTimerSound(config);
+}
+
 static void doAction(PanelConfig *c,
                      PanelState *s,
                      const char *line,
@@ -697,7 +758,8 @@ static void doAction(PanelConfig *c,
                      WorkspaceBackend *workspaceBackend,
                      NativePopup *popup,
                      pid_t *weatherPid,
-                     Inhibitor *inhibitor) {
+                     Inhibitor *inhibitor,
+                     Timer *timer) {
   char copybuf[1024];
   snprintf(copybuf, sizeof(copybuf), "%s", line);
   char *nl = strpbrk(copybuf, "\r\n");
@@ -720,6 +782,22 @@ static void doAction(PanelConfig *c,
       moduleInhibitor(c, s, inhibitorAvailable(inhibitor), active);
       notifyInhibitorState(c, active);
     }
+  } else if (!strcmp(kind, "timer") && arg) {
+    if (!strcmp(arg, "up"))
+      timerAdjust(timer, 1);
+    else if (!strcmp(arg, "down"))
+      timerAdjust(timer, -1);
+    else if (!strcmp(arg, "reset"))
+      timerReset(timer);
+    else if (!strcmp(arg, "toggle")) {
+      unsigned minutes = timerMinutes(timer);
+      TimerTransition transition = timerToggle(timer, timerNowNs());
+      if (transition == TIMER_TRANSITION_STARTED)
+        notifyTimerStarted(c, minutes);
+      else if (transition == TIMER_TRANSITION_EXPIRED)
+        notifyTimerExpired(c);
+    }
+    moduleTimer(c, s, timerMinutes(timer), timer->status != TIMER_EMPTY);
   } else if (!strcmp(kind, "terminal") && arg) {
     char *av[] = {arg, NULL};
     appLaunchTerminal(c, av);
@@ -898,6 +976,10 @@ static int runDiagnostics(const PanelConfig *config,
   printf("terminal=%s\n", description);
   printf("language.mode=%s\n", config->language);
   printf("language=%s\n", panelLanguage(config));
+  printf("timer.sound=%s\n",
+         config->timerSound[0] ? config->timerSound : "disabled");
+  printf("timer.audio_backend=%s\n",
+         timerSoundBackend() ? timerSoundBackend() : "unavailable");
   for (AppRole role = APP_ROLE_SYSTEM_MONITOR; role <= APP_ROLE_CALENDAR;
        role++) {
     appDescribeRole(config, role, description, sizeof(description));
@@ -1629,6 +1711,7 @@ int main(int argc, char **argv) {
     log_message("ERROR", "cannot start window-title watcher");
 #endif
   PanelState state = {0};
+  Timer timer = {0};
   pid_t weatherPid = startWeatherRefresh(&cfg);
   moduleStatic(&cfg, &state);
   moduleClock(&cfg, &state);
@@ -1639,6 +1722,7 @@ int main(int argc, char **argv) {
   moduleNetwork(&cfg, &state);
   moduleBrightness(&cfg, &state);
   moduleWeather(&cfg, &state);
+  moduleTimer(&cfg, &state, timerMinutes(&timer), false);
   moduleInhibitor(
       &cfg, &state, inhibitorAvailable(inhibitor), inhibitorActive(inhibitor));
   workspaceBackendRefresh(workspaceBackend, &state);
@@ -1671,6 +1755,10 @@ int main(int argc, char **argv) {
       updateTitleXcb(
           x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
       moduleScreencast(&cfg, &state, runtime);
+      if (timerUpdate(&timer, timerNowNs()))
+        notifyTimerExpired(&cfg);
+      moduleTimer(
+          &cfg, &state, timerMinutes(&timer), timer.status != TIMER_EMPTY);
       if (ticks % 5 == 0)
         moduleCpu(&cfg, &state);
       if (ticks % 5 == 0)
@@ -1760,7 +1848,8 @@ int main(int argc, char **argv) {
                      workspaceBackend,
                      popup,
                      &weatherPid,
-                     inhibitor);
+                     inhibitor,
+                     &timer);
           free(ev);
           continue;
         }
@@ -1774,7 +1863,8 @@ int main(int argc, char **argv) {
                    workspaceBackend,
                    popup,
                    &weatherPid,
-                   inhibitor);
+                   inhibitor,
+                   &timer);
           dirty = true;
         }
         if ((ev->response_type & 0x7fU) == XCB_UNMAP_NOTIFY &&
