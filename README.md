@@ -5,6 +5,15 @@ EWMH-compatible window manager. bspwm has an optional enhanced backend.
 It creates, draws, and controls its dock window directly. The existing Bash
 panel remains an independent reference and fallback.
 
+## Authors and license
+
+Sliverbar was created and is maintained by Thomas Tuul, with substantial
+development assistance from OpenAI Codex. See `AUTHORS.md` for the
+authorship and acknowledgement notice.
+
+Sliverbar is licensed under the GNU General Public License, version 3. See the
+`LICENSE` file for the full license text.
+
 ## Supported platform
 
 Linux with X11 and an EWMH-compatible window manager. The native window uses
