@@ -813,14 +813,41 @@ void moduleInhibitor(const PanelConfig *c,
   action(s->inhibitor, sizeof(s->inhibitor), 1, "inhibitor|toggle", body);
 }
 
+void moduleTimer(const PanelConfig *c,
+                 PanelState *s,
+                 unsigned minutes,
+                 bool active) {
+  s->timer[0] = '\0';
+  if (!moduleModeActive(c->moduleTimer, true))
+    return;
+  char text[64], body[128];
+  if (active)
+    snprintf(
+        text, sizeof(text), "%u %s", minutes, c->iconFont[0] ? "" : "⏲");
+  else
+    snprintf(text, sizeof(text), "%s", c->iconFont[0] ? "" : "⏲");
+  block(body,
+        sizeof(body),
+        c->colorBg,
+        active ? c->colorUrgent : c->colorClock,
+        text);
+  snprintf(s->timer,
+           sizeof(s->timer),
+           "%%{A1:timer|toggle:}%%{A3:timer|reset:}"
+           "%%{A4:timer|up:}%%{A5:timer|down:}%s"
+           "%%{A}%%{A}%%{A}%%{A}",
+           body);
+}
+
 void renderPanel(const PanelState *s, char *out, size_t n) {
   snprintf(out,
            n,
-           "%%{l}%s%s%%{c}%s%%{r}%s%s%s%s%s%s%s%s%s%s%s\n",
+           "%%{l}%s%s%%{c}%s%%{r}%s%s%s%s%s%s%s%s%s%s%s%s\n",
            s->launcher,
            s->workspace,
            s->title,
            s->screencast,
+           s->timer,
            s->inhibitor,
            s->weather,
            s->battery,

@@ -34,6 +34,7 @@ typedef struct {
   char terminal[64], location[128], language[16];
   char systemMonitor[256], networkSettings[256], volumeSettings[256];
   char calendar[256];
+  char timerSound[PANEL_PATH_MAX];
   char launcher[PANEL_PATH_MAX], powerMenu[PANEL_PATH_MAX];
   char weatherCache[PANEL_PATH_MAX], weatherImage[PANEL_PATH_MAX];
   char weatherCacheRoot[PANEL_PATH_MAX], weatherState[PANEL_PATH_MAX];
@@ -52,7 +53,7 @@ typedef struct {
   ModuleMode moduleClock, moduleTitle, moduleCpu, moduleBattery;
   ModuleMode moduleScreencast, moduleVolume, moduleNetwork, moduleBrightness;
   ModuleMode moduleWeather, moduleLauncher, moduleTray, modulePower;
-  ModuleMode moduleInhibitor;
+  ModuleMode moduleInhibitor, moduleTimer;
   bool internalLauncherAvailable, internalPowerAvailable;
   WeatherLocation weatherLocations[PANEL_WEATHER_LOCATION_MAX];
   size_t weatherLocationCount, activeWeatherLocation;
@@ -75,7 +76,7 @@ typedef struct {
       volume[PANEL_TEXT_MAX];
   char cpu[PANEL_TEXT_MAX], clock[PANEL_TEXT_MAX], tray[PANEL_TEXT_MAX];
   char power[PANEL_TEXT_MAX], screencast[PANEL_TEXT_MAX];
-  char inhibitor[PANEL_TEXT_MAX];
+  char inhibitor[PANEL_TEXT_MAX], timer[PANEL_TEXT_MAX];
 } PanelState;
 
 typedef struct {
@@ -150,6 +151,10 @@ void moduleInhibitor(const PanelConfig *cfg,
                      PanelState *state,
                      bool available,
                      bool active);
+void moduleTimer(const PanelConfig *cfg,
+                 PanelState *state,
+                 unsigned minutes,
+                 bool active);
 void renderPanel(const PanelState *state, char *output, size_t size);
 
 #endif

@@ -550,6 +550,122 @@ Aktualisierungsintervall liegt wirksam immer zwischen 30 und 240 Minuten;
 abweichende Konfigurationswerte werden mit einer Warnung auf die naechste
 Grenze gesetzt.
 
+## Feature: Aufziehbarer Timer im Panel
+
+Ein optionaler Timer-Block soll unmittelbar links vom Inhibitor-Block
+erscheinen. Der Timer wird direkt mit dem Mausrad eingestellt und anschliessend
+per Linksklick gestartet.
+
+### Darstellung und Bedienung
+
+- [x] Einen Timer-Block mit einer Uhr- oder Wecker-Glyphe einfuegen.
+- [x] Den Block unmittelbar links vom Inhibitor-Block positionieren.
+- [x] Ohne eingestellte Zeit nur die Glyphe in `color_clock` beziehungsweise
+  Dracula-Gruen anzeigen.
+- [x] Sobald eine Zeit eingestellt ist, Timeranzeige und Glyphe in
+  `color_urgent` beziehungsweise Dracula-Rot darstellen.
+- [x] Die eingestellte beziehungsweise noch verbleibende Zeit in Minuten links
+  von der Timer-Glyphe anzeigen.
+- [x] Vorwaerts gerichtete Mausradbewegungen erhoehen den Timer in
+  Ein-Minuten-Schritten.
+- [x] Rueckwaerts gerichtete Mausradbewegungen reduzieren den Timer in
+  Ein-Minuten-Schritten, jedoch nie unter null.
+- [x] Mausradbewegungen nur vor dem ersten Start des eingestellten Timers
+  auswerten.
+- [x] Das Mausrad bei einem laufenden oder pausierten Timer ignorieren; die
+  eingestellte Restzeit darf dadurch nicht veraendert werden.
+- [x] Einen eingestellten Timer durch Linksklick auf den Timer-Block starten.
+- [x] Einen laufenden Countdown durch einen weiteren Linksklick pausieren, ohne
+  die Restzeit zu veraendern.
+- [x] Einen pausierten Countdown durch erneuten Linksklick fortsetzen.
+- [x] Laufende und pausierte Timer weiterhin mit Minutenanzeige und in
+  `color_urgent` beziehungsweise Dracula-Rot darstellen.
+- [x] Waehrend des Ablaufs die verbleibende Zeit aktualisieren und angefangene
+  Minuten nachvollziehbar darstellen, beispielsweise auf die naechste volle
+  Minute aufgerundet.
+- [x] Einen eingestellten, laufenden oder pausierten Timer durch Rechtsklick
+  sofort auf null zuruecksetzen.
+- [x] Beim manuellen Zuruecksetzen weder den Ablaufklang abspielen noch eine
+  Ablaufbenachrichtigung erzeugen.
+- [x] Nach dem Zuruecksetzen oder regulaeren Ablauf die Minutenanzeige
+  ausblenden und die Glyphe wieder in `color_clock` beziehungsweise
+  Dracula-Gruen darstellen.
+
+### Zeitmessung und Lebenszyklus
+
+- [x] Fuer den Countdown eine monotone Zeitquelle verwenden, damit Aenderungen
+  der Systemuhr den Timer nicht beeinflussen.
+- [x] Den Countdown in die vorhandene ereignisgesteuerte `poll`-/`timerfd`-
+  Architektur integrieren, ohne blockierende Wartezeiten oder einen
+  sekundenweise gestarteten Hilfsprozess einzufuehren.
+- [x] Einen laufenden oder pausierten Timer beim Beenden oder Neustarten von
+  Sliverbar standardmaessig nicht wiederherstellen.
+- [x] Einen sinnvollen Maximalwert festlegen und Ueberlaeufe auch bei vielen
+  schnellen Mausradbewegungen verhindern.
+
+### Tonsignal und Konfiguration
+
+- [x] Eine Konfigurationsoption `module_timer=auto|enabled|disabled`
+  hinzufuegen.
+- [x] Eine Konfigurationsoption `timer_sound` fuer den Pfad zur abzuspielenden
+  Audiodatei hinzufuegen.
+- [x] `timer_sound` mit einem sinnvollen Systemklang vorbelegen, beispielsweise
+  `/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga`.
+- [x] Fuer die Wiedergabe verfuegbare Audio-Backends wie `pw-play`, `paplay`,
+  `canberra-gtk-play` oder `aplay` in einer dokumentierten Reihenfolge
+  erkennen. Befehle als argv-Liste und ohne Shell-Auswertung starten.
+- [x] Eine fehlende oder unlesbare Sounddatei sowie ein fehlendes
+  Wiedergabeprogramm als normale Laufzeitsituation behandeln. Der Timer muss
+  trotzdem korrekt ablaufen und Sliverbar darf nicht beendet werden.
+- [x] Konfigurierten Soundpfad und erkanntes Wiedergabe-Backend in
+  `sliverbar --diagnose` ausgeben.
+
+### Benachrichtigungen
+
+- [x] Beim Start des Countdowns ueber `notify-send` eine kurze
+  Benachrichtigung ausgeben, beispielsweise
+  `Timer gestartet - 15 Minuten`.
+- [x] Beim Fortsetzen eines pausierten Timers keine weitere
+  Startbenachrichtigung erzeugen.
+- [x] Nach regulaerem Ablauf zusaetzlich zum Tonsignal eine
+  Ablaufbenachrichtigung anzeigen, beispielsweise `Timer abgelaufen`.
+- [x] Benachrichtigungstexte entsprechend der konfigurierten Sprache auf
+  Deutsch oder Englisch ausgeben.
+- [x] Fehlendes `notify-send` und fehlgeschlagene Benachrichtigungen als
+  normale Laufzeitsituation behandeln; Timer und Panelbetrieb duerfen dadurch
+  nicht beeintraechtigt werden.
+
+### Tests und Dokumentation
+
+- [x] Zustandswechsel zwischen leer, eingestellt, laufend, pausiert und
+  abgelaufen testen.
+- [x] Mausradrichtung, Ein-Minuten-Schritte, Untergrenze, Maximalwert und
+  schnelle aufeinanderfolgende Eingaben testen.
+- [x] Sicherstellen, dass das Mausrad einen laufenden oder pausierten Timer
+  nicht veraendert.
+- [x] Blockreihenfolge, Minutenanzeige, Glyphe und Farbwechsel testen.
+- [x] Start, Pause, Fortsetzung und Ablauf mit einer kontrollierten monotonen
+  Testzeit pruefen, ohne reale Minuten warten zu muessen.
+- [ ] Sound- und Benachrichtigungsausloesung mit Test-Backends pruefen, ohne auf
+  dem Entwicklungsrechner einen echten Ton oder eine Desktopbenachrichtigung
+  auszugeben.
+- [x] Sicherstellen, dass ein Rechtsklick den Timer in jedem Zustand auf null
+  setzt und weder Ton noch Ablaufbenachrichtigung ausloest.
+- [ ] Fehlende Sounddatei, fehlende Wiedergabe- und Benachrichtigungsprogramme
+  sowie fehlgeschlagene Starts testen.
+- [x] Timer-Konfiguration, Darstellung und Mausbelegung in der README
+  dokumentieren.
+
+Akzeptanzkriterium: Der Benutzer kann den links vom Inhibitor angeordneten
+Timer mit dem Mausrad minutengenau aufziehen und wieder reduzieren. Nach einem
+Linksklick laeuft die angezeigte Restzeit ab und kann mit weiteren Linksklicks
+pausiert und fortgesetzt werden; das Mausrad veraendert sie dann nicht mehr.
+Der eingestellte, laufende oder pausierte Timer erscheint rot. Ein Rechtsklick
+setzt ihn jederzeit still auf null zurueck. Nur nach regulaerem Ablauf werden
+der konfigurierte Klang und eine Benachrichtigung ausgeloest; danach kehrt der
+Block in seinen gruenen Grundzustand zurueck. Fehler bei Ton oder
+Benachrichtigung beeintraechtigen weder Timer noch Panelbetrieb.
+
 ## Feature: Standby- und Hibernation-Inhibitor
 
 - [x] Einen eigenen Inhibitor-Block links vom Wetterblock einfuegen; Wetter und
