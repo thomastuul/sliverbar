@@ -30,6 +30,7 @@ struct NativePopup {
   cairo_t *cairo;
   PangoLayout *layout;
   PangoFontDescription *font;
+  PangoFontDescription *iconFont;
   PanelConfig config;
   PopupItem items[POPUP_ITEM_MAX];
   size_t itemCount;
@@ -143,10 +144,32 @@ static void updateMatches(NativePopup *popup) {
   popup->top = 0;
 }
 
+static bool iconCodepoint(gunichar codepoint) {
+  return codepoint >= 0xe000U && codepoint <= 0xf8ffU;
+}
+
+static void prepareLayout(NativePopup *popup, const char *text) {
+  pango_layout_set_text(popup->layout, text, -1);
+  PangoAttrList *attributes = pango_attr_list_new();
+  const char *cursor = text;
+  while (*cursor) {
+    const char *next = g_utf8_next_char(cursor);
+    if (iconCodepoint(g_utf8_get_char(cursor))) {
+      PangoAttribute *attribute = pango_attr_font_desc_new(popup->iconFont);
+      attribute->start_index = (guint)(cursor - text);
+      attribute->end_index = (guint)(next - text);
+      pango_attr_list_insert(attributes, attribute);
+    }
+    cursor = next;
+  }
+  pango_layout_set_attributes(popup->layout, attributes);
+  pango_attr_list_unref(attributes);
+}
+
 static void drawText(
     NativePopup *popup, const char *text, int x, int y, const char *color) {
   setColor(popup->cairo, color, "#ffffff");
-  pango_layout_set_text(popup->layout, text, -1);
+  prepareLayout(popup, text);
   cairo_move_to(popup->cairo, x, y);
   pango_cairo_show_layout(popup->cairo, popup->layout);
 }
@@ -278,6 +301,12 @@ NativePopup *nativePopupCreate(xcb_connection_t *connection,
   char description[256];
   fontDescription(config->font, description, sizeof(description));
   popup->font = pango_font_description_from_string(description);
+  if (config->iconFont[0]) {
+    fontDescription(config->iconFont, description, sizeof(description));
+    popup->iconFont = pango_font_description_from_string(description);
+  } else {
+    popup->iconFont = pango_font_description_copy(popup->font);
+  }
   pango_layout_set_font_description(popup->layout, popup->font);
 #ifdef HAVE_XKBCOMMON_X11
   if (!initializeKeyboard(popup)) {
@@ -308,6 +337,8 @@ void nativePopupDestroy(NativePopup *popup) {
     g_object_unref(popup->layout);
   if (popup->font)
     pango_font_description_free(popup->font);
+  if (popup->iconFont)
+    pango_font_description_free(popup->iconFont);
   if (popup->cairo)
     cairo_destroy(popup->cairo);
   if (popup->surface)
@@ -384,6 +415,11 @@ int nativePopupOpen(NativePopup *popup,
                        geometry);
   cairo_xcb_surface_set_size(popup->surface, popup->width, popup->height);
   xcb_map_window(popup->connection, popup->window);
+  const uint32_t STACK_MODE = XCB_STACK_MODE_ABOVE;
+  xcb_configure_window(popup->connection,
+                       popup->window,
+                       XCB_CONFIG_WINDOW_STACK_MODE,
+                       &STACK_MODE);
   xcb_get_input_focus_reply_t *focusReply = xcb_get_input_focus_reply(
       popup->connection, xcb_get_input_focus(popup->connection), NULL);
   popup->focusSaved = focusReply != NULL;
