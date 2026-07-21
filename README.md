@@ -1,5 +1,8 @@
 # Sliverbar
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+![C17](https://img.shields.io/badge/C-C17-blue.svg)
+
 Sliverbar is a lightweight C17 panel for Linux desktops running X11 and an
 EWMH-compatible window manager. bspwm has an optional enhanced backend.
 It creates, draws, and controls its dock window directly. The existing Bash
