@@ -313,15 +313,24 @@ wheel to add or remove one minute while it is being set. Left click starts the
 countdown; subsequent left clicks pause and resume it. Wheel input is ignored
 after the first start. Right click resets a set, running, or paused timer to
 zero without playing a sound or sending an elapsed notification. The idle
-clock glyph uses `color_clock`; a set, running, or paused timer shows its
-remaining whole minutes to the left of the glyph in `color_urgent`.
+glyph is `󰀠` and uses `color_clock`; a set, running, or paused timer uses `󰀡`
+and shows its remaining whole minutes to the left in `color_urgent`. After a
+manual reset, `󰀣` is shown for 1.5 seconds unless the timer is wound again
+first. A right click on an already idle timer does not show reset feedback.
 
 `timer_sound` selects the audio file played after a natural expiry and defaults
 to `/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga`. Sliverbar
 uses the first available backend from `pw-play`, `paplay`,
 `canberra-gtk-play`, and `aplay`. It also sends localized start and elapsed
 notifications when `notify-send` is available. A missing sound file, playback
-backend, or notification program does not affect the countdown or panel.
+backend, or notification program does not affect the countdown or panel. The
+elapsed glyph `󰀢` remains visible while successful sound playback is running.
+If playback cannot be started, it remains visible for 1.5 seconds instead.
+
+The clock glyph immediately to the left of the time follows the current local
+hour, using the twelve Nerd Font clock glyphs `󱑋` through `󱑖` for 1 through 12
+o'clock. Midnight and noon both use the 12 o'clock glyph. Without an
+`icon_font`, the clock and timer use portable Unicode fallbacks.
 
 The coffee-cup block immediately before weather toggles a real
 `systemd-inhibit --what=sleep` lock. Inactive uses `color_free`, active uses

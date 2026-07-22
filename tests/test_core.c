@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/timerfd.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -303,6 +304,23 @@ int main(int argc, char **argv) {
   CHECK(readTextFile(signalPath, signalResult, sizeof(signalResult)) == 0);
   CHECK(strcmp(signalResult, "ok") == 0);
   CHECK(unlink(signalPath) == 0);
+  CHECK(sigprocmask(SIG_BLOCK, &blocked, &oldMask) == 0);
+  CHECK(sigaction(SIGPIPE, &ignored, &oldPipe) == 0);
+  pid_t trackedProbe = spawnTracked(probeArgv);
+  CHECK(trackedProbe > 0);
+  int trackedStatus = 0;
+  CHECK(waitpid(trackedProbe, &trackedStatus, 0) == trackedProbe);
+  CHECK(WIFEXITED(trackedStatus) && WEXITSTATUS(trackedStatus) == 0);
+  CHECK(sigprocmask(SIG_SETMASK, &oldMask, NULL) == 0);
+  CHECK(sigaction(SIGPIPE, &oldPipe, NULL) == 0);
+  CHECK(readTextFile(signalPath, signalResult, sizeof(signalResult)) == 0);
+  CHECK(strcmp(signalResult, "ok") == 0);
+  CHECK(unlink(signalPath) == 0);
+  char *missingArgv[] = {"/sliverbar-test-command-does-not-exist", NULL};
+  pid_t missingProbe = spawnTracked(missingArgv);
+  CHECK(missingProbe > 0);
+  CHECK(waitpid(missingProbe, &trackedStatus, 0) == missingProbe);
+  CHECK(WIFEXITED(trackedStatus) && WEXITSTATUS(trackedStatus) == 127);
   PanelState brightnessState = {0};
   moduleBrightnessValue(&cfg, &brightnessState, 42);
   CHECK(strstr(brightnessState.brightness, "  42%") != NULL);
@@ -330,23 +348,56 @@ int main(int argc, char **argv) {
   CHECK(strstr(brightnessState.inhibitor, cfg.colorFree) != NULL);
   moduleInhibitor(&cfg, &brightnessState, true, true);
   CHECK(strstr(brightnessState.inhibitor, cfg.colorWarning) != NULL);
+  cfg.iconFont[0] = '\0';
+  CHECK(strcmp(moduleClockGlyph(&cfg, 0), "◷") == 0);
+  snprintf(cfg.iconFont, sizeof(cfg.iconFont), "Test Nerd Font");
+  static const char *const CLOCK_GLYPHS[] = {"󱑋",
+                                             "󱑌",
+                                             "󱑍",
+                                             "󱑎",
+                                             "󱑏",
+                                             "󱑐",
+                                             "󱑑",
+                                             "󱑒",
+                                             "󱑓",
+                                             "󱑔",
+                                             "󱑕",
+                                             "󱑖"};
+  for (unsigned hour = 1; hour <= 12; hour++)
+    CHECK(strcmp(moduleClockGlyph(&cfg, hour), CLOCK_GLYPHS[hour - 1]) == 0);
+  CHECK(strcmp(moduleClockGlyph(&cfg, 0), CLOCK_GLYPHS[11]) == 0);
+  CHECK(strcmp(moduleClockGlyph(&cfg, 13), CLOCK_GLYPHS[0]) == 0);
   PanelState timerPanelState = {0};
-  moduleTimer(&cfg, &timerPanelState, 0, false);
+  moduleTimer(&cfg, &timerPanelState, 0, TIMER_DISPLAY_EMPTY);
   CHECK(strstr(timerPanelState.timer, cfg.colorClock) != NULL);
+  CHECK(strstr(timerPanelState.timer, "󰀠") != NULL);
   CHECK(strstr(timerPanelState.timer, "timer|toggle") != NULL);
   CHECK(strstr(timerPanelState.timer, "timer|reset") != NULL);
   CHECK(strstr(timerPanelState.timer, "timer|up") != NULL);
   CHECK(strstr(timerPanelState.timer, "timer|down") != NULL);
-  moduleTimer(&cfg, &timerPanelState, 12, true);
+  moduleTimer(&cfg, &timerPanelState, 12, TIMER_DISPLAY_ACTIVE);
   CHECK(strstr(timerPanelState.timer, cfg.colorUrgent) != NULL);
   CHECK(strstr(timerPanelState.timer, "12 ") != NULL);
+  CHECK(strstr(timerPanelState.timer, "󰀡") != NULL);
+  moduleTimer(&cfg, &timerPanelState, 0, TIMER_DISPLAY_EXPIRED);
+  CHECK(strstr(timerPanelState.timer, cfg.colorClock) != NULL);
+  CHECK(strstr(timerPanelState.timer, "󰀢") != NULL);
+  moduleTimer(&cfg, &timerPanelState, 0, TIMER_DISPLAY_RESET);
+  CHECK(strstr(timerPanelState.timer, cfg.colorClock) != NULL);
+  CHECK(strstr(timerPanelState.timer, "󰀣") != NULL);
+  cfg.iconFont[0] = '\0';
+  moduleTimer(&cfg, &timerPanelState, 0, TIMER_DISPLAY_RESET);
+  CHECK(strstr(timerPanelState.timer, "⏲") != NULL);
 
   Timer timer = {0};
   CHECK(timerMinutes(&timer) == 0);
+  CHECK(timerDisplay(&timer) == TIMER_DISPLAY_EMPTY);
+  CHECK(!timerResetWithFeedback(&timer));
   CHECK(!timerAdjust(&timer, -1));
   CHECK(timerAdjust(&timer, 1));
   CHECK(timerAdjust(&timer, 1));
   CHECK(timer.status == TIMER_SET);
+  CHECK(timerDisplay(&timer) == TIMER_DISPLAY_ACTIVE);
   CHECK(timerMinutes(&timer) == 2);
   CHECK(timerToggle(&timer, UINT64_C(1000000000)) == TIMER_TRANSITION_STARTED);
   CHECK(timer.status == TIMER_RUNNING);
@@ -362,9 +413,33 @@ int main(int argc, char **argv) {
   CHECK(timerUpdate(&timer, UINT64_C(1058000000000)));
   CHECK(timer.status == TIMER_EMPTY);
   CHECK(timerMinutes(&timer) == 0);
+  timerShowExpired(&timer);
+  CHECK(timerDisplay(&timer) == TIMER_DISPLAY_EXPIRED);
+  CHECK(timerSoundFinished(&timer, false) == TIMER_FEEDBACK_TIMEOUT);
+  CHECK(timerDisplay(&timer) == TIMER_DISPLAY_EXPIRED);
+  CHECK(timerSoundFinished(&timer, true) == TIMER_FEEDBACK_CANCEL);
+  CHECK(timerDisplay(&timer) == TIMER_DISPLAY_EMPTY);
+  CHECK(timerSoundFinished(&timer, true) == TIMER_FEEDBACK_NONE);
+  int feedbackTimer = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC);
+  CHECK(feedbackTimer >= 0);
+  CHECK(timerFeedbackTimeoutSet(feedbackTimer, true) == 0);
+  struct itimerspec feedbackTimeout = {0};
+  CHECK(timerfd_gettime(feedbackTimer, &feedbackTimeout) == 0);
+  CHECK(feedbackTimeout.it_value.tv_sec == 1);
+  CHECK(feedbackTimeout.it_value.tv_nsec > 0);
+  CHECK(timerFeedbackTimeoutSet(feedbackTimer, false) == 0);
+  CHECK(timerfd_gettime(feedbackTimer, &feedbackTimeout) == 0);
+  CHECK(feedbackTimeout.it_value.tv_sec == 0);
+  CHECK(feedbackTimeout.it_value.tv_nsec == 0);
+  CHECK(close(feedbackTimer) == 0);
   CHECK(timerAdjust(&timer, 1));
+  CHECK(timerResetWithFeedback(&timer));
+  CHECK(timerDisplay(&timer) == TIMER_DISPLAY_RESET);
+  CHECK(timerAdjust(&timer, 1));
+  CHECK(timerDisplay(&timer) == TIMER_DISPLAY_ACTIVE);
   timerReset(&timer);
   CHECK(timer.status == TIMER_EMPTY);
+  CHECK(timerDisplay(&timer) == TIMER_DISPLAY_EMPTY);
   for (unsigned i = 0; i < TIMER_MAX_MINUTES; i++)
     CHECK(timerAdjust(&timer, 1));
   CHECK(timerMinutes(&timer) == TIMER_MAX_MINUTES);

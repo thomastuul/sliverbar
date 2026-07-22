@@ -500,7 +500,9 @@ parseMarkup(NativePanel *panel, const char *markup, Segment *segments) {
 }
 
 static bool iconCodepoint(gunichar codepoint) {
-  return codepoint >= 0xe000U && codepoint <= 0xf8ffU;
+  return (codepoint >= 0xe000U && codepoint <= 0xf8ffU) ||
+         (codepoint >= 0xf0000U && codepoint <= 0xffffdU) ||
+         (codepoint >= 0x100000U && codepoint <= 0x10fffdU);
 }
 
 static void prepareLayout(NativePanel *panel, const char *text) {
