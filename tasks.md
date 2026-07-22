@@ -672,24 +672,30 @@ Die folgenden Nerd-Font-Glyphen sollen die bisherige Uhr-Glyphe sowie die
 statische Timer-Glyphe ersetzen. Die vorhandenen Farben, Texte und Mausaktionen
 der beiden Bloecke bleiben dabei erhalten.
 
+![Vorschau der Uhr- und Timer-Glyphen](./docs/images/clock-timer-glyphs.png)
+
+Die Vorschau ist als PNG eingebunden, damit die Private-Use-Codepoints auf
+GitHub unabhaengig von lokal installierten Schriften korrekt dargestellt
+werden.
+
 ### Uhr-Glyphe
 
 - [x] Die zwoelf Uhr-Glyphen wie folgt den Stunden 1 Uhr bis 12 Uhr zuordnen:
 
-  | Stunde | Glyph |
-  | ---: | :---: |
-  | 1 Uhr | 󱑋 |
-  | 2 Uhr | 󱑌 |
-  | 3 Uhr | 󱑍 |
-  | 4 Uhr | 󱑎 |
-  | 5 Uhr | 󱑏 |
-  | 6 Uhr | 󱑐 |
-  | 7 Uhr | 󱑑 |
-  | 8 Uhr | 󱑒 |
-  | 9 Uhr | 󱑓 |
-  | 10 Uhr | 󱑔 |
-  | 11 Uhr | 󱑕 |
-  | 12 Uhr | 󱑖 |
+  | Stunde | Nerd-Font-Codepoint | Bedeutung |
+  | ---: | :---: | --- |
+  | 1 Uhr | `U+F144B` | Uhr mit Stundenzeiger auf 1 |
+  | 2 Uhr | `U+F144C` | Uhr mit Stundenzeiger auf 2 |
+  | 3 Uhr | `U+F144D` | Uhr mit Stundenzeiger auf 3 |
+  | 4 Uhr | `U+F144E` | Uhr mit Stundenzeiger auf 4 |
+  | 5 Uhr | `U+F144F` | Uhr mit Stundenzeiger auf 5 |
+  | 6 Uhr | `U+F1450` | Uhr mit Stundenzeiger auf 6 |
+  | 7 Uhr | `U+F1451` | Uhr mit Stundenzeiger auf 7 |
+  | 8 Uhr | `U+F1452` | Uhr mit Stundenzeiger auf 8 |
+  | 9 Uhr | `U+F1453` | Uhr mit Stundenzeiger auf 9 |
+  | 10 Uhr | `U+F1454` | Uhr mit Stundenzeiger auf 10 |
+  | 11 Uhr | `U+F1455` | Uhr mit Stundenzeiger auf 11 |
+  | 12 Uhr | `U+F1456` | Uhr mit Stundenzeiger auf 12 |
 
 - [x] Links neben der Uhrzeit die zur aktuellen lokalen Stunde passende Glyphe
   anzeigen. Minuten und Sekunden beeinflussen die Auswahl nicht; fuer 0 Uhr
@@ -701,19 +707,29 @@ der beiden Bloecke bleiben dabei erhalten.
 
 ### Timer-Glyphen und Zustaende
 
-- [x] Fuer einen leeren Timer die Standard-Glyph `󰀠` anzeigen.
-- [x] Fuer einen eingestellten, laufenden oder pausierten Timer die Glyph `󰀡`
-  anzeigen. Minutenanzeige und bestehende Farbgebung bleiben unveraendert.
-- [x] Nach regulaerem Ablauf die Ablauf-Glyph `󰀢` anzeigen, solange der
+- [x] Die vier Timer-Glyphen wie folgt den Zustaenden zuordnen:
+
+  | Zustand | Nerd-Font-Codepoint | Bedeutung |
+  | --- | :---: | --- |
+  | leer | `U+F0020` | Standard-Timer |
+  | eingestellt, laufend oder pausiert | `U+F0021` | gestellter Timer |
+  | regulaer abgelaufen | `U+F0022` | abgelaufener Timer |
+  | manuell zurueckgesetzt | `U+F0023` | zurueckgesetzter Timer |
+
+- [x] Fuer einen leeren Timer die Standard-Glyph `U+F0020` anzeigen.
+- [x] Fuer einen eingestellten, laufenden oder pausierten Timer die Glyph
+  `U+F0021` anzeigen. Minutenanzeige und bestehende Farbgebung bleiben
+  unveraendert.
+- [x] Nach regulaerem Ablauf die Ablauf-Glyph `U+F0022` anzeigen, solange der
   erfolgreich gestartete Timerklang wiedergegeben wird. Nach Ende des
-  Wiedergabeprozesses wieder zur Standard-Glyph `󰀠` wechseln.
+  Wiedergabeprozesses wieder zur Standard-Glyph `U+F0020` wechseln.
 - [x] Kann der Timerklang wegen einer fehlenden oder unlesbaren Datei, eines
   fehlenden Wiedergabe-Backends oder eines fehlgeschlagenen Prozessstarts nicht
   gestartet werden, die Ablauf-Glyph fuer 1,5 Sekunden anzeigen und danach zur
   Standard-Glyph wechseln.
 - [x] Nach einem Rechtsklick auf einen zuvor eingestellten, laufenden oder
-  pausierten Timer die Ruecksetz-Glyph `󰀣` fuer 1,5 Sekunden anzeigen. Ein
-  Rechtsklick auf einen bereits leeren Timer zeigt keine Ruecksetz-Glyph.
+  pausierten Timer die Ruecksetz-Glyph `U+F0023` fuer 1,5 Sekunden anzeigen.
+  Ein Rechtsklick auf einen bereits leeren Timer zeigt keine Ruecksetz-Glyph.
 - [x] Wird der Timer waehrend der 1,5-sekuendigen Ruecksetzanzeige erneut mit
   dem Mausrad aufgezogen, die Ruecksetz-Glyph sofort durch die Glyph fuer den
   eingestellten Timer ersetzen.
