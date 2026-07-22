@@ -195,6 +195,36 @@ int spawnDetached(char *const argv[]) {
   return waitpid(p, &st, 0) < 0 ? -1 : 0;
 }
 
+pid_t spawnTracked(char *const argv[]) {
+  pid_t pid = fork();
+  if (pid < 0)
+    return -1;
+  if (!pid) {
+    sigset_t empty;
+    sigemptyset(&empty);
+    sigprocmask(SIG_SETMASK, &empty, NULL);
+    struct sigaction defaults = {.sa_handler = SIG_DFL};
+    sigemptyset(&defaults.sa_mask);
+    sigaction(SIGCHLD, &defaults, NULL);
+    sigaction(SIGPIPE, &defaults, NULL);
+    sigaction(SIGINT, &defaults, NULL);
+    sigaction(SIGTERM, &defaults, NULL);
+    sigaction(SIGHUP, &defaults, NULL);
+    setsid();
+    int nullFd = open("/dev/null", O_RDWR);
+    if (nullFd >= 0) {
+      dup2(nullFd, STDIN_FILENO);
+      dup2(nullFd, STDOUT_FILENO);
+      dup2(nullFd, STDERR_FILENO);
+      if (nullFd > STDERR_FILENO)
+        close(nullFd);
+    }
+    execvp(argv[0], argv);
+    _exit(127);
+  }
+  return pid;
+}
+
 void shellQuoteAction(const char *in, char *out, size_t size) {
   size_t n = 0;
   for (; *in && n + 2 < size; in++) {

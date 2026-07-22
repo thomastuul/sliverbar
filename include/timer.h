@@ -14,6 +14,19 @@ typedef enum {
 } TimerStatus;
 
 typedef enum {
+  TIMER_DISPLAY_EMPTY,
+  TIMER_DISPLAY_ACTIVE,
+  TIMER_DISPLAY_EXPIRED,
+  TIMER_DISPLAY_RESET,
+} TimerDisplay;
+
+typedef enum {
+  TIMER_FEEDBACK_NONE,
+  TIMER_FEEDBACK_CANCEL,
+  TIMER_FEEDBACK_TIMEOUT,
+} TimerFeedbackAction;
+
+typedef enum {
   TIMER_TRANSITION_NONE,
   TIMER_TRANSITION_STARTED,
   TIMER_TRANSITION_PAUSED,
@@ -23,6 +36,7 @@ typedef enum {
 
 typedef struct {
   TimerStatus status;
+  TimerDisplay feedback;
   uint64_t remainingNs;
   uint64_t deadlineNs;
 } Timer;
@@ -32,6 +46,12 @@ bool timerAdjust(Timer *timer, int minutes);
 TimerTransition timerToggle(Timer *timer, uint64_t nowNs);
 bool timerUpdate(Timer *timer, uint64_t nowNs);
 void timerReset(Timer *timer);
+bool timerResetWithFeedback(Timer *timer);
+void timerShowExpired(Timer *timer);
+void timerClearFeedback(Timer *timer);
+TimerDisplay timerDisplay(const Timer *timer);
+TimerFeedbackAction timerSoundFinished(Timer *timer, bool succeeded);
+int timerFeedbackTimeoutSet(int timerFd, bool enabled);
 unsigned timerMinutes(const Timer *timer);
 
 #endif

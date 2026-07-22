@@ -666,6 +666,87 @@ der konfigurierte Klang und eine Benachrichtigung ausgeloest; danach kehrt der
 Block in seinen gruenen Grundzustand zurueck. Fehler bei Ton oder
 Benachrichtigung beeintraechtigen weder Timer noch Panelbetrieb.
 
+## Feature: Zeitabhaengige Uhr- und zustandsabhaengige Timer-Glyphen
+
+Die folgenden Nerd-Font-Glyphen sollen die bisherige Uhr-Glyphe sowie die
+statische Timer-Glyphe ersetzen. Die vorhandenen Farben, Texte und Mausaktionen
+der beiden Bloecke bleiben dabei erhalten.
+
+### Uhr-Glyphe
+
+- [x] Die zwoelf Uhr-Glyphen wie folgt den Stunden 1 Uhr bis 12 Uhr zuordnen:
+
+  | Stunde | Glyph |
+  | ---: | :---: |
+  | 1 Uhr | 󱑋 |
+  | 2 Uhr | 󱑌 |
+  | 3 Uhr | 󱑍 |
+  | 4 Uhr | 󱑎 |
+  | 5 Uhr | 󱑏 |
+  | 6 Uhr | 󱑐 |
+  | 7 Uhr | 󱑑 |
+  | 8 Uhr | 󱑒 |
+  | 9 Uhr | 󱑓 |
+  | 10 Uhr | 󱑔 |
+  | 11 Uhr | 󱑕 |
+  | 12 Uhr | 󱑖 |
+
+- [x] Links neben der Uhrzeit die zur aktuellen lokalen Stunde passende Glyphe
+  anzeigen. Minuten und Sekunden beeinflussen die Auswahl nicht; fuer 0 Uhr
+  und 12 Uhr wird die Glyph fuer 12 Uhr verwendet.
+- [x] Die bisherige Kalender-Glyphe links vom Datum sowie die Klickaktion des
+  gesamten Datums- und Uhrzeitblocks unveraendert lassen.
+- [x] Ohne konfigurierte Icon-Schrift weiterhin einen darstellbaren
+  Unicode-Fallback fuer die Uhr verwenden.
+
+### Timer-Glyphen und Zustaende
+
+- [x] Fuer einen leeren Timer die Standard-Glyph `󰀠` anzeigen.
+- [x] Fuer einen eingestellten, laufenden oder pausierten Timer die Glyph `󰀡`
+  anzeigen. Minutenanzeige und bestehende Farbgebung bleiben unveraendert.
+- [x] Nach regulaerem Ablauf die Ablauf-Glyph `󰀢` anzeigen, solange der
+  erfolgreich gestartete Timerklang wiedergegeben wird. Nach Ende des
+  Wiedergabeprozesses wieder zur Standard-Glyph `󰀠` wechseln.
+- [x] Kann der Timerklang wegen einer fehlenden oder unlesbaren Datei, eines
+  fehlenden Wiedergabe-Backends oder eines fehlgeschlagenen Prozessstarts nicht
+  gestartet werden, die Ablauf-Glyph fuer 1,5 Sekunden anzeigen und danach zur
+  Standard-Glyph wechseln.
+- [x] Nach einem Rechtsklick auf einen zuvor eingestellten, laufenden oder
+  pausierten Timer die Ruecksetz-Glyph `󰀣` fuer 1,5 Sekunden anzeigen. Ein
+  Rechtsklick auf einen bereits leeren Timer zeigt keine Ruecksetz-Glyph.
+- [x] Wird der Timer waehrend der 1,5-sekuendigen Ruecksetzanzeige erneut mit
+  dem Mausrad aufgezogen, die Ruecksetz-Glyph sofort durch die Glyph fuer den
+  eingestellten Timer ersetzen.
+- [x] Fuer Installationen ohne konfigurierte Icon-Schrift die bisherigen
+  darstellbaren Unicode-Fallbacks fuer alle Timerzustaende beibehalten.
+
+### Zeitsteuerung und Tests
+
+- [x] Die 1,5-sekuendigen Anzeigen mit einer monotonen Zeitquelle und ohne
+  blockierende Wartezeit in die bestehende `poll`-/`timerfd`-Architektur
+  integrieren.
+- [x] Die Zuordnung aller zwoelf Uhr-Glyphen einschliesslich 0 Uhr, 12 Uhr und
+  des Wechsels zwischen zwei Stunden automatisiert testen.
+- [x] Standard-, eingestellt-, laufend-, pausiert-, abgelaufen- und
+  zurueckgesetzt-Glyph sowie die unveraenderten Farben und Minutenangaben
+  testen.
+- [x] Die Ablaufanzeige sowohl mit einem kontrolliert laufenden
+  Wiedergabeprozess als auch bei nicht startbarem Klang testen.
+- [x] Testen, dass die Ruecksetz-Glyph nur bei einem zuvor aufgezogenen Timer
+  erscheint, nach 1,5 Sekunden verschwindet und beim erneuten Aufziehen sofort
+  ersetzt wird.
+- [x] Die neuen Uhr- und Timer-Glyphen sowie deren Zustaende in der README
+  dokumentieren.
+
+Akzeptanzkriterium: Die Uhr zeigt links neben der Uhrzeit fuer jede lokale
+Stunde die oben festgelegte Glyph. Der Timer verwendet fuer seinen leeren,
+aufgezogenen, regulaer abgelaufenen und manuell zurueckgesetzten Zustand die
+jeweils vorgesehene Glyph. Die Ablauf-Glyph bleibt bei erfolgreicher Wiedergabe
+bis zum Ende des Timerklangs sichtbar und erscheint bei nicht startbarem Klang
+1,5 Sekunden. Die Ruecksetz-Glyph erscheint nur nach dem Zuruecksetzen eines
+zuvor aufgezogenen Timers fuer 1,5 Sekunden und wird durch erneutes Aufziehen
+sofort beendet.
+
 ## Feature: Standby- und Hibernation-Inhibitor
 
 - [x] Einen eigenen Inhibitor-Block links vom Wetterblock einfuegen; Wetter und

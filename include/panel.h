@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <sys/types.h>
 
+#include "timer.h"
+
 #define PANEL_TEXT_MAX 4096
 #define PANEL_PATH_MAX 4096
 #define PANEL_ARG_MAX 16
@@ -108,9 +110,11 @@ int writeAtomic(const char *path, const char *data, mode_t mode);
 bool commandExists(const char *name);
 int runCapture(char *const argv[], char *output, size_t size, int timeoutMs);
 int spawnDetached(char *const argv[]);
+pid_t spawnTracked(char *const argv[]);
 void shellQuoteAction(const char *input, char *output, size_t size);
 void logMessage(const char *level, const char *format, ...);
 
+const char *moduleClockGlyph(const PanelConfig *cfg, unsigned hour);
 void moduleClock(const PanelConfig *cfg, PanelState *state);
 void moduleCpu(const PanelConfig *cfg, PanelState *state);
 void moduleBattery(const PanelConfig *cfg, PanelState *state);
@@ -154,7 +158,7 @@ void moduleInhibitor(const PanelConfig *cfg,
 void moduleTimer(const PanelConfig *cfg,
                  PanelState *state,
                  unsigned minutes,
-                 bool active);
+                 TimerDisplay display);
 void renderPanel(const PanelState *state, char *output, size_t size);
 
 #endif

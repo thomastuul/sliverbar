@@ -699,16 +699,28 @@ static void notifyInhibitorState(const PanelConfig *config, bool active) {
   spawnDetached(arguments);
 }
 
-static void playTimerSound(const PanelConfig *config) {
+static void stopTimerSound(pid_t pid) {
+  if (pid <= 0)
+    return;
+  kill(pid, SIGTERM);
+  for (int i = 0; i < 20 && waitpid(pid, NULL, WNOHANG) == 0; i++)
+    usleep(10000);
+  if (waitpid(pid, NULL, WNOHANG) == 0) {
+    kill(pid, SIGKILL);
+    waitpid(pid, NULL, 0);
+  }
+}
+
+static pid_t playTimerSound(const PanelConfig *config) {
   if (!config->timerSound[0] || access(config->timerSound, R_OK)) {
     logMessage(
         "WARNING", "timer sound is not readable: %s", config->timerSound);
-    return;
+    return -1;
   }
   const char *backend = timerSoundBackend();
   if (!backend) {
     logMessage("WARNING", "no timer sound playback backend is available");
-    return;
+    return -1;
   }
   char *arguments[] = {
       (char *)backend,
@@ -716,8 +728,10 @@ static void playTimerSound(const PanelConfig *config) {
                                             : (char *)config->timerSound,
       !strcmp(backend, "canberra-gtk-play") ? (char *)config->timerSound : NULL,
       NULL};
-  if (spawnDetached(arguments))
+  pid_t pid = spawnTracked(arguments);
+  if (pid < 0)
     logMessage("WARNING", "cannot start timer sound backend %s", backend);
+  return pid;
 }
 
 static void notifyTimerStarted(const PanelConfig *config, unsigned minutes) {
@@ -737,7 +751,7 @@ static void notifyTimerStarted(const PanelConfig *config, unsigned minutes) {
   spawnDetached(arguments);
 }
 
-static void notifyTimerExpired(const PanelConfig *config) {
+static pid_t notifyTimerExpired(const PanelConfig *config) {
   if (commandExists("notify-send")) {
     bool german = panelLanguageIsGerman(config);
     char *arguments[] = {"notify-send",
@@ -747,7 +761,19 @@ static void notifyTimerExpired(const PanelConfig *config) {
                          NULL};
     spawnDetached(arguments);
   }
-  playTimerSound(config);
+  return playTimerSound(config);
+}
+
+static void beginTimerExpiry(const PanelConfig *config,
+                             Timer *timer,
+                             int feedbackTimerFd,
+                             pid_t *soundPid) {
+  timerShowExpired(timer);
+  if (*soundPid > 0)
+    kill(*soundPid, SIGTERM);
+  *soundPid = notifyTimerExpired(config);
+  if (timerFeedbackTimeoutSet(feedbackTimerFd, *soundPid <= 0))
+    logMessage("WARNING", "cannot schedule timer feedback timeout");
 }
 
 static void doAction(PanelConfig *c,
@@ -755,11 +781,13 @@ static void doAction(PanelConfig *c,
                      const char *line,
                      bool *volumeDirty,
                      int brightnessTimerFd,
+                     int timerFeedbackTimerFd,
                      WorkspaceBackend *workspaceBackend,
                      NativePopup *popup,
                      pid_t *weatherPid,
                      Inhibitor *inhibitor,
-                     Timer *timer) {
+                     Timer *timer,
+                     pid_t *timerSoundPid) {
   char copybuf[1024];
   snprintf(copybuf, sizeof(copybuf), "%s", line);
   char *nl = strpbrk(copybuf, "\r\n");
@@ -783,21 +811,26 @@ static void doAction(PanelConfig *c,
       notifyInhibitorState(c, active);
     }
   } else if (!strcmp(kind, "timer") && arg) {
+    bool adjusted = false;
     if (!strcmp(arg, "up"))
-      timerAdjust(timer, 1);
+      adjusted = timerAdjust(timer, 1);
     else if (!strcmp(arg, "down"))
-      timerAdjust(timer, -1);
-    else if (!strcmp(arg, "reset"))
-      timerReset(timer);
-    else if (!strcmp(arg, "toggle")) {
+      adjusted = timerAdjust(timer, -1);
+    else if (!strcmp(arg, "reset")) {
+      if (timerResetWithFeedback(timer) &&
+          timerFeedbackTimeoutSet(timerFeedbackTimerFd, true))
+        logMessage("WARNING", "cannot schedule timer reset feedback");
+    } else if (!strcmp(arg, "toggle")) {
       unsigned minutes = timerMinutes(timer);
       TimerTransition transition = timerToggle(timer, timerNowNs());
       if (transition == TIMER_TRANSITION_STARTED)
         notifyTimerStarted(c, minutes);
       else if (transition == TIMER_TRANSITION_EXPIRED)
-        notifyTimerExpired(c);
+        beginTimerExpiry(c, timer, timerFeedbackTimerFd, timerSoundPid);
     }
-    moduleTimer(c, s, timerMinutes(timer), timer->status != TIMER_EMPTY);
+    if (adjusted && timerFeedbackTimeoutSet(timerFeedbackTimerFd, false))
+      logMessage("WARNING", "cannot cancel timer feedback timeout");
+    moduleTimer(c, s, timerMinutes(timer), timerDisplay(timer));
   } else if (!strcmp(kind, "terminal") && arg) {
     char *av[] = {arg, NULL};
     appLaunchTerminal(c, av);
@@ -1688,6 +1721,23 @@ int main(int argc, char **argv) {
   int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
   int brightnessTfd =
       timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
+  int timerFeedbackTfd =
+      timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
+  if (tfd < 0 || brightnessTfd < 0 || timerFeedbackTfd < 0) {
+    logMessage("ERROR", "cannot create runtime timer: %s", strerror(errno));
+    if (tfd >= 0)
+      close(tfd);
+    if (brightnessTfd >= 0)
+      close(brightnessTfd);
+    if (timerFeedbackTfd >= 0)
+      close(timerFeedbackTfd);
+    inhibitorDestroy(inhibitor);
+    nativePopupDestroy(popup);
+    nativePanelDestroy(panel);
+    xcb_disconnect(x);
+    close(lock);
+    return 1;
+  }
   struct itimerspec tick = {{1, 0}, {0, 1}};
   timerfd_settime(tfd, 0, &tick, NULL);
   WorkspaceBackend *workspaceBackend = workspaceBackendCreate(x, root, &cfg);
@@ -1712,6 +1762,7 @@ int main(int argc, char **argv) {
 #endif
   PanelState state = {0};
   Timer timer = {0};
+  pid_t timerSoundPid = 0;
   pid_t weatherPid = startWeatherRefresh(&cfg);
   moduleStatic(&cfg, &state);
   moduleClock(&cfg, &state);
@@ -1722,7 +1773,7 @@ int main(int argc, char **argv) {
   moduleNetwork(&cfg, &state);
   moduleBrightness(&cfg, &state);
   moduleWeather(&cfg, &state);
-  moduleTimer(&cfg, &state, timerMinutes(&timer), false);
+  moduleTimer(&cfg, &state, timerMinutes(&timer), timerDisplay(&timer));
   moduleInhibitor(
       &cfg, &state, inhibitorAvailable(inhibitor), inhibitorActive(inhibitor));
   workspaceBackendRefresh(workspaceBackend, &state);
@@ -1739,8 +1790,9 @@ int main(int argc, char **argv) {
         {xfd, POLLIN, 0},
         {networkEvents.readFd, POLLIN, 0},
         {titleRoot.readFd, POLLIN, 0},
-        {titleWindow.readFd, POLLIN, 0}};
-    if (poll(fds, 8, -1) < 0) {
+        {titleWindow.readFd, POLLIN, 0},
+        {timerFeedbackTfd, POLLIN, 0}};
+    if (poll(fds, 9, -1) < 0) {
       if (errno == EINTR)
         continue;
       logMessage("ERROR", "poll failed: %s", strerror(errno));
@@ -1756,9 +1808,8 @@ int main(int argc, char **argv) {
           x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
       moduleScreencast(&cfg, &state, runtime);
       if (timerUpdate(&timer, timerNowNs()))
-        notifyTimerExpired(&cfg);
-      moduleTimer(
-          &cfg, &state, timerMinutes(&timer), timer.status != TIMER_EMPTY);
+        beginTimerExpiry(&cfg, &timer, timerFeedbackTfd, &timerSoundPid);
+      moduleTimer(&cfg, &state, timerMinutes(&timer), timerDisplay(&timer));
       if (ticks % 5 == 0)
         moduleCpu(&cfg, &state);
       if (ticks % 5 == 0)
@@ -1805,6 +1856,26 @@ int main(int argc, char **argv) {
               moduleInhibitor(
                   &cfg, &state, inhibitorAvailable(inhibitor), false);
               dirty = true;
+            } else if (reaped == timerSoundPid) {
+              timerSoundPid = 0;
+              bool succeeded = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+              TimerFeedbackAction feedback =
+                  timerSoundFinished(&timer, succeeded);
+              if (feedback != TIMER_FEEDBACK_NONE) {
+                if (feedback == TIMER_FEEDBACK_TIMEOUT) {
+                  if (timerFeedbackTimeoutSet(timerFeedbackTfd, true))
+                    logMessage("WARNING",
+                               "cannot schedule timer feedback timeout");
+                } else {
+                  timerClearFeedback(&timer);
+                  if (timerFeedbackTimeoutSet(timerFeedbackTfd, false))
+                    logMessage("WARNING",
+                               "cannot cancel timer feedback timeout");
+                }
+                moduleTimer(
+                    &cfg, &state, timerMinutes(&timer), timerDisplay(&timer));
+                dirty = true;
+              }
             } else if (reaped == networkEvents.pid) {
               networkEvents.pid = 0;
               if (networkEvents.readFd >= 0)
@@ -1845,11 +1916,13 @@ int main(int argc, char **argv) {
                      action,
                      &vd,
                      brightnessTfd,
+                     timerFeedbackTfd,
                      workspaceBackend,
                      popup,
                      &weatherPid,
                      inhibitor,
-                     &timer);
+                     &timer,
+                     &timerSoundPid);
           free(ev);
           continue;
         }
@@ -1860,11 +1933,13 @@ int main(int argc, char **argv) {
                    action,
                    &vd,
                    brightnessTfd,
+                   timerFeedbackTfd,
                    workspaceBackend,
                    popup,
                    &weatherPid,
                    inhibitor,
-                   &timer);
+                   &timer,
+                   &timerSoundPid);
           dirty = true;
         }
         if ((ev->response_type & 0x7fU) == XCB_UNMAP_NOTIFY &&
@@ -1923,6 +1998,15 @@ int main(int argc, char **argv) {
       moduleNetwork(&cfg, &state);
       dirty = true;
     }
+    if (fds[8].revents & POLLIN) {
+      uint64_t expirations;
+      if (read(timerFeedbackTfd, &expirations, sizeof(expirations)) ==
+          (ssize_t)sizeof(expirations)) {
+        timerClearFeedback(&timer);
+        moduleTimer(&cfg, &state, timerMinutes(&timer), timerDisplay(&timer));
+        dirty = true;
+      }
+    }
 #ifndef HAVE_XCB
     if (fds[6].revents & POLLIN) {
       char event[2048];
@@ -1968,7 +2052,9 @@ int main(int argc, char **argv) {
   }
   close(tfd);
   close(brightnessTfd);
+  close(timerFeedbackTfd);
   close(sfd);
+  stopTimerSound(timerSoundPid);
   if (weatherPid > 0) {
     kill(weatherPid, SIGTERM);
     waitpid(weatherPid, NULL, 0);

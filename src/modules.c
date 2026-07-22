@@ -21,6 +21,24 @@ action(char *out, size_t n, int button, const char *command, const char *body) {
   snprintf(out, n, "%%{A%d:%s:}%s%%{A}", button, command, body);
 }
 
+const char *moduleClockGlyph(const PanelConfig *c, unsigned hour) {
+  static const char *const CLOCK_GLYPHS[] = {"󱑋",
+                                             "󱑌",
+                                             "󱑍",
+                                             "󱑎",
+                                             "󱑏",
+                                             "󱑐",
+                                             "󱑑",
+                                             "󱑒",
+                                             "󱑓",
+                                             "󱑔",
+                                             "󱑕",
+                                             "󱑖"};
+  unsigned clockHour = hour % 12U;
+  return c && c->iconFont[0] ? CLOCK_GLYPHS[clockHour ? clockHour - 1U : 11U]
+                             : "◷";
+}
+
 void moduleClock(const PanelConfig *c, PanelState *s) {
   s->clock[0] = '\0';
   if (!moduleModeActive(c->moduleClock, true))
@@ -66,7 +84,8 @@ void moduleClock(const PanelConfig *c, PanelState *s) {
            tm.tm_mday);
   char t[32];
   strftime(t, sizeof(t), "%T", &tm);
-  snprintf(text, sizeof(text), " %s  %s", d, t);
+  const char *clockGlyph = moduleClockGlyph(c, (unsigned)tm.tm_hour);
+  snprintf(text, sizeof(text), " %s %s %s", d, clockGlyph, t);
   char body[256];
   block(body, sizeof(body), c->colorBg, c->colorClock, text);
   if (appRoleAvailable(c, APP_ROLE_CALENDAR))
@@ -816,16 +835,18 @@ void moduleInhibitor(const PanelConfig *c,
 void moduleTimer(const PanelConfig *c,
                  PanelState *s,
                  unsigned minutes,
-                 bool active) {
+                 TimerDisplay display) {
   s->timer[0] = '\0';
   if (!moduleModeActive(c->moduleTimer, true))
     return;
   char text[64], body[128];
+  static const char *const TIMER_GLYPHS[] = {"󰀠", "󰀡", "󰀢", "󰀣"};
+  const char *glyph = c->iconFont[0] ? TIMER_GLYPHS[display] : "⏲";
+  bool active = display == TIMER_DISPLAY_ACTIVE;
   if (active)
-    snprintf(
-        text, sizeof(text), "%u %s", minutes, c->iconFont[0] ? "" : "⏲");
+    snprintf(text, sizeof(text), "%u %s", minutes, glyph);
   else
-    snprintf(text, sizeof(text), "%s", c->iconFont[0] ? "" : "⏲");
+    snprintf(text, sizeof(text), "%s", glyph);
   block(body,
         sizeof(body),
         c->colorBg,
