@@ -8,6 +8,9 @@ EWMH-compatible window manager. bspwm has an optional enhanced backend.
 It creates, draws, and controls its dock window directly. The existing Bash
 panel remains an independent reference and fallback.
 
+For a block-by-block overview, mouse controls, configuration, and the
+interaction between Sliverbar, bspwm, and sxhkd, see [USAGE.md](USAGE.md).
+
 ## Authors and license
 
 Sliverbar was created and is maintained by Thomas Tuul, with substantial
