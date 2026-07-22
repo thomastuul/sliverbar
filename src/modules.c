@@ -5,6 +5,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -557,6 +558,65 @@ void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
   action(s->brightness, sizeof(s->brightness), 4, "brightness|up", tmp);
 }
 
+bool brightnessFactorFormat(int percent, char *value, size_t size) {
+  if (percent < 0 || !value || !size)
+    return false;
+  int written = snprintf(value, size, "%d.%02d", percent / 100, percent % 100);
+  return written >= 0 && (size_t)written < size;
+}
+
+bool brightnessFactorParse(const char *value, int *percent) {
+  if (!value || !percent)
+    return false;
+  while (isspace((unsigned char)*value))
+    value++;
+  if (!isdigit((unsigned char)*value))
+    return false;
+
+  int whole = 0;
+  while (isdigit((unsigned char)*value)) {
+    int digit = *value - '0';
+    if (whole > (INT_MAX / 100 - digit) / 10)
+      return false;
+    whole = whole * 10 + digit;
+    value++;
+  }
+
+  int fraction = 0;
+  bool roundUp = false;
+  if (*value == '.') {
+    value++;
+    if (!isdigit((unsigned char)*value))
+      return false;
+    unsigned digitIndex = 0;
+    while (isdigit((unsigned char)*value)) {
+      int digit = *value - '0';
+      if (digitIndex == 0)
+        fraction += digit * 10;
+      else if (digitIndex == 1)
+        fraction += digit;
+      else if (digitIndex == 2)
+        roundUp = digit >= 5;
+      digitIndex++;
+      value++;
+    }
+  }
+  if (*value && !isspace((unsigned char)*value))
+    return false;
+
+  int result = whole * 100;
+  if (fraction > INT_MAX - result)
+    return false;
+  result += fraction;
+  if (roundUp) {
+    if (result == INT_MAX)
+      return false;
+    result++;
+  }
+  *percent = result;
+  return true;
+}
+
 bool moduleBrightnessAdjust(const PanelConfig *c,
                             PanelState *s,
                             const char *operation) {
@@ -614,8 +674,9 @@ void moduleBrightness(const PanelConfig *c, PanelState *s) {
       section += strlen(output);
     }
     char *p = section ? strstr(section, "Brightness:") : NULL;
-    if (p)
-      pct = (int)(strtod(p + 11, NULL) * 100.0 + 0.5);
+    int parsedPercent;
+    if (p && brightnessFactorParse(p + 11, &parsedPercent))
+      pct = parsedPercent;
   }
   if (*output) {
     snprintf(s->brightnessOutput, sizeof(s->brightnessOutput), "%s", output);

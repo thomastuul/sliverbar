@@ -5,6 +5,7 @@
 #include "power_actions.h"
 #include "timer.h"
 
+#include <locale.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -321,6 +322,32 @@ int main(int argc, char **argv) {
   CHECK(missingProbe > 0);
   CHECK(waitpid(missingProbe, &trackedStatus, 0) == missingProbe);
   CHECK(WIFEXITED(trackedStatus) && WEXITSTATUS(trackedStatus) == 127);
+  const char *currentNumericLocale = setlocale(LC_NUMERIC, NULL);
+  CHECK(currentNumericLocale != NULL);
+  char numericLocale[128];
+  snprintf(numericLocale, sizeof(numericLocale), "%s", currentNumericLocale);
+  CHECK(setlocale(LC_NUMERIC, "de_DE.UTF-8") != NULL);
+  CHECK(strcmp(localeconv()->decimal_point, ",") == 0);
+  char brightnessFactor[16];
+  int brightnessPercent = 0;
+  CHECK(brightnessFactorFormat(99, brightnessFactor, sizeof(brightnessFactor)));
+  CHECK(strcmp(brightnessFactor, "0.99") == 0);
+  CHECK(brightnessFactorFormat(5, brightnessFactor, sizeof(brightnessFactor)));
+  CHECK(strcmp(brightnessFactor, "0.05") == 0);
+  CHECK(
+      brightnessFactorFormat(100, brightnessFactor, sizeof(brightnessFactor)));
+  CHECK(strcmp(brightnessFactor, "1.00") == 0);
+  CHECK(
+      !brightnessFactorFormat(-1, brightnessFactor, sizeof(brightnessFactor)));
+  CHECK(brightnessFactorParse("0.99\n", &brightnessPercent));
+  CHECK(brightnessPercent == 99);
+  CHECK(brightnessFactorParse(" 1.0\n", &brightnessPercent));
+  CHECK(brightnessPercent == 100);
+  CHECK(brightnessFactorParse("0.995\n", &brightnessPercent));
+  CHECK(brightnessPercent == 100);
+  CHECK(!brightnessFactorParse("0,99\n", &brightnessPercent));
+  CHECK(!brightnessFactorParse("invalid", &brightnessPercent));
+  CHECK(setlocale(LC_NUMERIC, numericLocale) != NULL);
   PanelState brightnessState = {0};
   moduleBrightnessValue(&cfg, &brightnessState, 42);
   CHECK(strstr(brightnessState.brightness, "  42%") != NULL);

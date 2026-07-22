@@ -424,7 +424,8 @@ static int applyBrightness(PanelState *s) {
   if (!s->brightnessInitialized || !*s->brightnessOutput)
     return -1;
   char value[32];
-  snprintf(value, sizeof(value), "%.2f", (double)s->brightnessPercent / 100.0);
+  if (!brightnessFactorFormat(s->brightnessPercent, value, sizeof(value)))
+    return -1;
   char *outv[] = {
       "xrandr", "--output", s->brightnessOutput, "--brightness", value, NULL};
   char ignored[128];

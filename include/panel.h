@@ -136,6 +136,8 @@ int parseDefaultRouteInterface(const char *routes,
                                size_t interfaceSize);
 int wifiDiagnostic(WifiDiagnostic *diagnostic);
 void moduleNetwork(const PanelConfig *cfg, PanelState *state);
+bool brightnessFactorFormat(int percent, char *value, size_t size);
+bool brightnessFactorParse(const char *value, int *percent);
 void moduleBrightness(const PanelConfig *cfg, PanelState *state);
 bool moduleBrightnessAdjust(const PanelConfig *cfg,
                             PanelState *state,
