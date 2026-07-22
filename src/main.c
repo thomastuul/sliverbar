@@ -776,12 +776,23 @@ static void beginTimerExpiry(const PanelConfig *config,
     logMessage("WARNING", "cannot schedule timer feedback timeout");
 }
 
+static void
+renderTimer(const PanelConfig *config, PanelState *state, const Timer *timer) {
+  uint64_t nowNs = timerNowNs();
+  moduleTimer(config,
+              state,
+              timerMinutes(timer),
+              timerDisplay(timer),
+              timerAnimationFrame(timer, nowNs));
+}
+
 static void doAction(PanelConfig *c,
                      PanelState *s,
                      const char *line,
                      bool *volumeDirty,
                      int brightnessTimerFd,
                      int timerFeedbackTimerFd,
+                     int timerAnimationTimerFd,
                      WorkspaceBackend *workspaceBackend,
                      NativePopup *popup,
                      pid_t *weatherPid,
@@ -812,17 +823,21 @@ static void doAction(PanelConfig *c,
     }
   } else if (!strcmp(kind, "timer") && arg) {
     bool adjusted = false;
+    bool animationScheduleChanged = false;
     if (!strcmp(arg, "up"))
       adjusted = timerAdjust(timer, 1);
     else if (!strcmp(arg, "down"))
       adjusted = timerAdjust(timer, -1);
     else if (!strcmp(arg, "reset")) {
-      if (timerResetWithFeedback(timer) &&
-          timerFeedbackTimeoutSet(timerFeedbackTimerFd, true))
-        logMessage("WARNING", "cannot schedule timer reset feedback");
+      if (timerResetWithFeedback(timer)) {
+        animationScheduleChanged = true;
+        if (timerFeedbackTimeoutSet(timerFeedbackTimerFd, true))
+          logMessage("WARNING", "cannot schedule timer reset feedback");
+      }
     } else if (!strcmp(arg, "toggle")) {
       unsigned minutes = timerMinutes(timer);
       TimerTransition transition = timerToggle(timer, timerNowNs());
+      animationScheduleChanged = transition != TIMER_TRANSITION_NONE;
       if (transition == TIMER_TRANSITION_STARTED)
         notifyTimerStarted(c, minutes);
       else if (transition == TIMER_TRANSITION_EXPIRED)
@@ -830,7 +845,12 @@ static void doAction(PanelConfig *c,
     }
     if (adjusted && timerFeedbackTimeoutSet(timerFeedbackTimerFd, false))
       logMessage("WARNING", "cannot cancel timer feedback timeout");
-    moduleTimer(c, s, timerMinutes(timer), timerDisplay(timer));
+    if (animationScheduleChanged &&
+        timerAnimationTimeoutSet(timerAnimationTimerFd,
+                                 c->iconFont[0] &&
+                                     timer->status == TIMER_RUNNING))
+      logMessage("WARNING", "cannot update timer animation schedule");
+    renderTimer(c, s, timer);
   } else if (!strcmp(kind, "terminal") && arg) {
     char *av[] = {arg, NULL};
     appLaunchTerminal(c, av);
@@ -1723,7 +1743,10 @@ int main(int argc, char **argv) {
       timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
   int timerFeedbackTfd =
       timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
-  if (tfd < 0 || brightnessTfd < 0 || timerFeedbackTfd < 0) {
+  int timerAnimationTfd =
+      timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
+  if (tfd < 0 || brightnessTfd < 0 || timerFeedbackTfd < 0 ||
+      timerAnimationTfd < 0) {
     logMessage("ERROR", "cannot create runtime timer: %s", strerror(errno));
     if (tfd >= 0)
       close(tfd);
@@ -1731,6 +1754,8 @@ int main(int argc, char **argv) {
       close(brightnessTfd);
     if (timerFeedbackTfd >= 0)
       close(timerFeedbackTfd);
+    if (timerAnimationTfd >= 0)
+      close(timerAnimationTfd);
     inhibitorDestroy(inhibitor);
     nativePopupDestroy(popup);
     nativePanelDestroy(panel);
@@ -1773,7 +1798,7 @@ int main(int argc, char **argv) {
   moduleNetwork(&cfg, &state);
   moduleBrightness(&cfg, &state);
   moduleWeather(&cfg, &state);
-  moduleTimer(&cfg, &state, timerMinutes(&timer), timerDisplay(&timer));
+  renderTimer(&cfg, &state, &timer);
   moduleInhibitor(
       &cfg, &state, inhibitorAvailable(inhibitor), inhibitorActive(inhibitor));
   workspaceBackendRefresh(workspaceBackend, &state);
@@ -1791,8 +1816,9 @@ int main(int argc, char **argv) {
         {networkEvents.readFd, POLLIN, 0},
         {titleRoot.readFd, POLLIN, 0},
         {titleWindow.readFd, POLLIN, 0},
-        {timerFeedbackTfd, POLLIN, 0}};
-    if (poll(fds, 9, -1) < 0) {
+        {timerFeedbackTfd, POLLIN, 0},
+        {timerAnimationTfd, POLLIN, 0}};
+    if (poll(fds, 10, -1) < 0) {
       if (errno == EINTR)
         continue;
       logMessage("ERROR", "poll failed: %s", strerror(errno));
@@ -1807,9 +1833,12 @@ int main(int argc, char **argv) {
       updateTitleXcb(
           x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
       moduleScreencast(&cfg, &state, runtime);
-      if (timerUpdate(&timer, timerNowNs()))
+      if (timerUpdate(&timer, timerNowNs())) {
+        if (timerAnimationTimeoutSet(timerAnimationTfd, false))
+          logMessage("WARNING", "cannot stop timer animation");
         beginTimerExpiry(&cfg, &timer, timerFeedbackTfd, &timerSoundPid);
-      moduleTimer(&cfg, &state, timerMinutes(&timer), timerDisplay(&timer));
+      }
+      renderTimer(&cfg, &state, &timer);
       if (ticks % 5 == 0)
         moduleCpu(&cfg, &state);
       if (ticks % 5 == 0)
@@ -1872,8 +1901,7 @@ int main(int argc, char **argv) {
                     logMessage("WARNING",
                                "cannot cancel timer feedback timeout");
                 }
-                moduleTimer(
-                    &cfg, &state, timerMinutes(&timer), timerDisplay(&timer));
+                renderTimer(&cfg, &state, &timer);
                 dirty = true;
               }
             } else if (reaped == networkEvents.pid) {
@@ -1917,6 +1945,7 @@ int main(int argc, char **argv) {
                      &vd,
                      brightnessTfd,
                      timerFeedbackTfd,
+                     timerAnimationTfd,
                      workspaceBackend,
                      popup,
                      &weatherPid,
@@ -1934,6 +1963,7 @@ int main(int argc, char **argv) {
                    &vd,
                    brightnessTfd,
                    timerFeedbackTfd,
+                   timerAnimationTfd,
                    workspaceBackend,
                    popup,
                    &weatherPid,
@@ -2003,7 +2033,15 @@ int main(int argc, char **argv) {
       if (read(timerFeedbackTfd, &expirations, sizeof(expirations)) ==
           (ssize_t)sizeof(expirations)) {
         timerClearFeedback(&timer);
-        moduleTimer(&cfg, &state, timerMinutes(&timer), timerDisplay(&timer));
+        renderTimer(&cfg, &state, &timer);
+        dirty = true;
+      }
+    }
+    if (fds[9].revents & POLLIN) {
+      uint64_t expirations;
+      if (read(timerAnimationTfd, &expirations, sizeof(expirations)) ==
+          (ssize_t)sizeof(expirations)) {
+        renderTimer(&cfg, &state, &timer);
         dirty = true;
       }
     }
@@ -2053,6 +2091,7 @@ int main(int argc, char **argv) {
   close(tfd);
   close(brightnessTfd);
   close(timerFeedbackTfd);
+  close(timerAnimationTfd);
   close(sfd);
   stopTimerSound(timerSoundPid);
   if (weatherPid > 0) {
