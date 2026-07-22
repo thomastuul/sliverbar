@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #define TIMER_MAX_MINUTES 1440U
+#define TIMER_ANIMATION_FRAMES 8U
 
 typedef enum {
   TIMER_EMPTY,
@@ -15,7 +16,9 @@ typedef enum {
 
 typedef enum {
   TIMER_DISPLAY_EMPTY,
-  TIMER_DISPLAY_ACTIVE,
+  TIMER_DISPLAY_SET,
+  TIMER_DISPLAY_RUNNING,
+  TIMER_DISPLAY_PAUSED,
   TIMER_DISPLAY_EXPIRED,
   TIMER_DISPLAY_RESET,
 } TimerDisplay;
@@ -39,6 +42,7 @@ typedef struct {
   TimerDisplay feedback;
   uint64_t remainingNs;
   uint64_t deadlineNs;
+  uint64_t animationStartNs;
 } Timer;
 
 uint64_t timerNowNs(void);
@@ -50,8 +54,10 @@ bool timerResetWithFeedback(Timer *timer);
 void timerShowExpired(Timer *timer);
 void timerClearFeedback(Timer *timer);
 TimerDisplay timerDisplay(const Timer *timer);
+unsigned timerAnimationFrame(const Timer *timer, uint64_t nowNs);
 TimerFeedbackAction timerSoundFinished(Timer *timer, bool succeeded);
 int timerFeedbackTimeoutSet(int timerFd, bool enabled);
+int timerAnimationTimeoutSet(int timerFd, bool enabled);
 unsigned timerMinutes(const Timer *timer);
 
 #endif

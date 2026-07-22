@@ -707,19 +707,34 @@ werden.
 
 ### Timer-Glyphen und Zustaende
 
-- [x] Die vier Timer-Glyphen wie folgt den Zustaenden zuordnen:
+- [x] Die Timer-Glyphen wie folgt den Zustaenden zuordnen:
 
   | Zustand | Nerd-Font-Codepoint | Bedeutung |
   | --- | :---: | --- |
   | leer | `U+F0020` | Standard-Timer |
-  | eingestellt, laufend oder pausiert | `U+F0021` | gestellter Timer |
+  | eingestellt, noch nicht gestartet | `U+F0021` | gestellter Timer |
+  | laufend | `U+F0A9E` bis `U+F0AA5` | acht Animationsphasen |
+  | pausiert | `U+F068E` | pausierter Timer |
   | regulaer abgelaufen | `U+F0022` | abgelaufener Timer |
   | manuell zurueckgesetzt | `U+F0023` | zurueckgesetzter Timer |
 
 - [x] Fuer einen leeren Timer die Standard-Glyph `U+F0020` anzeigen.
-- [x] Fuer einen eingestellten, laufenden oder pausierten Timer die Glyph
-  `U+F0021` anzeigen. Minutenanzeige und bestehende Farbgebung bleiben
-  unveraendert.
+- [x] Fuer einen eingestellten, noch nicht gestarteten Timer die Glyph
+  `U+F0021` anzeigen.
+- [x] Waehrend eines laufenden Countdowns die acht Animationsglyphen
+  `U+F0A9E`, `U+F0A9F`, `U+F0AA0`, `U+F0AA1`, `U+F0AA2`, `U+F0AA3`,
+  `U+F0AA4` und `U+F0AA5` in dieser Reihenfolge anzeigen.
+- [x] Jede Animationsphase 125 Millisekunden anzeigen, sodass die acht Phasen
+  genau einen Umlauf pro Sekunde ergeben.
+- [x] Beim ersten Start und nach jedem Fortsetzen mit der ersten
+  Animationsglyph `U+F0A9E` beginnen.
+- [x] Bei einer Verzoegerung im Ereignisloop den zur monoton vergangenen Zeit
+  passenden Frame anzeigen und uebersprungene Frames nicht nachtraeglich
+  abspielen.
+- [x] Fuer einen pausierten Timer die Pause-Glyph `U+F068E` anzeigen und beim
+  naechsten Linksklick den Countdown sowie die Animation fortsetzen.
+- [x] Minutenanzeige und `color_urgent` fuer eingestellte, laufende und
+  pausierte Timer unveraendert beibehalten.
 - [x] Nach regulaerem Ablauf die Ablauf-Glyph `U+F0022` anzeigen, solange der
   erfolgreich gestartete Timerklang wiedergegeben wird. Nach Ende des
   Wiedergabeprozesses wieder zur Standard-Glyph `U+F0020` wechseln.
@@ -746,6 +761,9 @@ werden.
 - [x] Standard-, eingestellt-, laufend-, pausiert-, abgelaufen- und
   zurueckgesetzt-Glyph sowie die unveraenderten Farben und Minutenangaben
   testen.
+- [x] Alle acht Animationsframes, die 125-Millisekunden-Grenzen, den
+  Ein-Sekunden-Umlauf und den Neustart bei Frame eins nach dem Fortsetzen
+  automatisiert testen.
 - [x] Die Ablaufanzeige sowohl mit einem kontrolliert laufenden
   Wiedergabeprozess als auch bei nicht startbarem Klang testen.
 - [x] Testen, dass die Ruecksetz-Glyph nur bei einem zuvor aufgezogenen Timer
@@ -755,13 +773,15 @@ werden.
   dokumentieren.
 
 Akzeptanzkriterium: Die Uhr zeigt links neben der Uhrzeit fuer jede lokale
-Stunde die oben festgelegte Glyph. Der Timer verwendet fuer seinen leeren,
-aufgezogenen, regulaer abgelaufenen und manuell zurueckgesetzten Zustand die
-jeweils vorgesehene Glyph. Die Ablauf-Glyph bleibt bei erfolgreicher Wiedergabe
-bis zum Ende des Timerklangs sichtbar und erscheint bei nicht startbarem Klang
-1,5 Sekunden. Die Ruecksetz-Glyph erscheint nur nach dem Zuruecksetzen eines
-zuvor aufgezogenen Timers fuer 1,5 Sekunden und wird durch erneutes Aufziehen
-sofort beendet.
+Stunde die oben festgelegte Glyph. Der Timer unterscheidet leer, eingestellt,
+laufend, pausiert, regulaer abgelaufen und manuell zurueckgesetzt. Im laufenden
+Zustand durchlaeuft er die acht Animationsglyphen in 125-Millisekunden-Schritten
+einmal pro Sekunde; nach dem Fortsetzen beginnt er wieder mit der ersten Glyph.
+Die Ablauf-Glyph bleibt bei erfolgreicher Wiedergabe bis zum Ende des
+Timerklangs sichtbar und erscheint bei nicht startbarem Klang 1,5 Sekunden.
+Die Ruecksetz-Glyph erscheint nur nach dem Zuruecksetzen eines zuvor
+aufgezogenen Timers fuer 1,5 Sekunden und wird durch erneutes Aufziehen sofort
+beendet.
 
 ## Feature: Standby- und Hibernation-Inhibitor
 

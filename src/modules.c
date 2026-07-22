@@ -835,14 +835,41 @@ void moduleInhibitor(const PanelConfig *c,
 void moduleTimer(const PanelConfig *c,
                  PanelState *s,
                  unsigned minutes,
-                 TimerDisplay display) {
+                 TimerDisplay display,
+                 unsigned animationFrame) {
   s->timer[0] = '\0';
   if (!moduleModeActive(c->moduleTimer, true))
     return;
   char text[64], body[128];
-  static const char *const TIMER_GLYPHS[] = {"󰀠", "󰀡", "󰀢", "󰀣"};
-  const char *glyph = c->iconFont[0] ? TIMER_GLYPHS[display] : "⏲";
-  bool active = display == TIMER_DISPLAY_ACTIVE;
+  static const char *const ANIMATION_GLYPHS[TIMER_ANIMATION_FRAMES] = {
+      "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥"};
+  const char *glyph = "⏲";
+  if (c->iconFont[0]) {
+    switch (display) {
+    case TIMER_DISPLAY_SET:
+      glyph = "󰀡";
+      break;
+    case TIMER_DISPLAY_RUNNING:
+      glyph = ANIMATION_GLYPHS[animationFrame % TIMER_ANIMATION_FRAMES];
+      break;
+    case TIMER_DISPLAY_PAUSED:
+      glyph = "󰚎";
+      break;
+    case TIMER_DISPLAY_EXPIRED:
+      glyph = "󰀢";
+      break;
+    case TIMER_DISPLAY_RESET:
+      glyph = "󰀣";
+      break;
+    case TIMER_DISPLAY_EMPTY:
+    default:
+      glyph = "󰀠";
+      break;
+    }
+  }
+  bool active = display == TIMER_DISPLAY_SET ||
+                display == TIMER_DISPLAY_RUNNING ||
+                display == TIMER_DISPLAY_PAUSED;
   if (active)
     snprintf(text, sizeof(text), "%u %s", minutes, glyph);
   else

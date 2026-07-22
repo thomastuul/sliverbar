@@ -313,10 +313,14 @@ wheel to add or remove one minute while it is being set. Left click starts the
 countdown; subsequent left clicks pause and resume it. Wheel input is ignored
 after the first start. Right click resets a set, running, or paused timer to
 zero without playing a sound or sending an elapsed notification. The idle
-glyph is `󰀠` and uses `color_clock`; a set, running, or paused timer uses `󰀡`
-and shows its remaining whole minutes to the left in `color_urgent`. After a
-manual reset, `󰀣` is shown for 1.5 seconds unless the timer is wound again
-first. A right click on an already idle timer does not show reset feedback.
+timer uses Nerd Font codepoint `U+F0020` in `color_clock`; a timer that is set
+but not started uses `U+F0021`. While the countdown runs, the eight glyphs
+`U+F0A9E` through `U+F0AA5` advance every 125 milliseconds and repeat once per
+second. Starting or resuming begins with `U+F0A9E`; a paused timer uses
+`U+F068E`. Set, running, and paused timers show their remaining whole minutes
+to the left in `color_urgent`. After a manual reset, `U+F0023` is shown for 1.5
+seconds unless the timer is wound again first. A right click on an already idle
+timer does not show reset feedback.
 
 `timer_sound` selects the audio file played after a natural expiry and defaults
 to `/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga`. Sliverbar
@@ -324,12 +328,13 @@ uses the first available backend from `pw-play`, `paplay`,
 `canberra-gtk-play`, and `aplay`. It also sends localized start and elapsed
 notifications when `notify-send` is available. A missing sound file, playback
 backend, or notification program does not affect the countdown or panel. The
-elapsed glyph `󰀢` remains visible while successful sound playback is running.
-If playback cannot be started, it remains visible for 1.5 seconds instead.
+elapsed glyph `U+F0022` remains visible while successful sound playback is
+running. If playback cannot be started, it remains visible for 1.5 seconds
+instead.
 
 The clock glyph immediately to the left of the time follows the current local
-hour, using the twelve Nerd Font clock glyphs `󱑋` through `󱑖` for 1 through 12
-o'clock. Midnight and noon both use the 12 o'clock glyph. Without an
+hour, using the twelve Nerd Font clock glyphs `U+F144B` through `U+F1456` for 1
+through 12 o'clock. Midnight and noon both use the 12 o'clock glyph. Without an
 `icon_font`, the clock and timer use portable Unicode fallbacks.
 
 The coffee-cup block immediately before weather toggles a real

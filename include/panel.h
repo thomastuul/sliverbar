@@ -158,7 +158,8 @@ void moduleInhibitor(const PanelConfig *cfg,
 void moduleTimer(const PanelConfig *cfg,
                  PanelState *state,
                  unsigned minutes,
-                 TimerDisplay display);
+                 TimerDisplay display,
+                 unsigned animationFrame);
 void renderPanel(const PanelState *state, char *output, size_t size);
 
 #endif

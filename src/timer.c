@@ -5,11 +5,14 @@
 
 #define NANOSECONDS_PER_SECOND UINT64_C(1000000000)
 #define NANOSECONDS_PER_MINUTE (UINT64_C(60) * NANOSECONDS_PER_SECOND)
+#define TIMER_FRAME_NANOSECONDS                                                \
+  (NANOSECONDS_PER_SECOND / TIMER_ANIMATION_FRAMES)
 
 static void timerClearCountdown(Timer *timer) {
   timer->status = TIMER_EMPTY;
   timer->remainingNs = 0;
   timer->deadlineNs = 0;
+  timer->animationStartNs = 0;
 }
 
 uint64_t timerNowNs(void) {
@@ -37,6 +40,7 @@ bool timerAdjust(Timer *timer, int minutes) {
   current = minutes > 0 ? current + 1 : current - 1;
   timer->remainingNs = (uint64_t)current * NANOSECONDS_PER_MINUTE;
   timer->deadlineNs = 0;
+  timer->animationStartNs = 0;
   timer->status = current ? TIMER_SET : TIMER_EMPTY;
   timer->feedback = TIMER_DISPLAY_EMPTY;
   return true;
@@ -47,6 +51,7 @@ TimerTransition timerToggle(Timer *timer, uint64_t nowNs) {
     return TIMER_TRANSITION_NONE;
   if (timer->status == TIMER_SET) {
     timer->deadlineNs = nowNs + timer->remainingNs;
+    timer->animationStartNs = nowNs;
     timer->status = TIMER_RUNNING;
     return TIMER_TRANSITION_STARTED;
   }
@@ -57,11 +62,13 @@ TimerTransition timerToggle(Timer *timer, uint64_t nowNs) {
     }
     timer->remainingNs = timer->deadlineNs - nowNs;
     timer->deadlineNs = 0;
+    timer->animationStartNs = 0;
     timer->status = TIMER_PAUSED;
     return TIMER_TRANSITION_PAUSED;
   }
   if (timer->status == TIMER_PAUSED) {
     timer->deadlineNs = nowNs + timer->remainingNs;
+    timer->animationStartNs = nowNs;
     timer->status = TIMER_RUNNING;
     return TIMER_TRANSITION_RESUMED;
   }
@@ -109,9 +116,22 @@ void timerClearFeedback(Timer *timer) {
 TimerDisplay timerDisplay(const Timer *timer) {
   if (!timer)
     return TIMER_DISPLAY_EMPTY;
-  if (timer->status != TIMER_EMPTY)
-    return TIMER_DISPLAY_ACTIVE;
+  if (timer->status == TIMER_SET)
+    return TIMER_DISPLAY_SET;
+  if (timer->status == TIMER_RUNNING)
+    return TIMER_DISPLAY_RUNNING;
+  if (timer->status == TIMER_PAUSED)
+    return TIMER_DISPLAY_PAUSED;
   return timer->feedback;
+}
+
+unsigned timerAnimationFrame(const Timer *timer, uint64_t nowNs) {
+  if (!timer || timer->status != TIMER_RUNNING ||
+      nowNs <= timer->animationStartNs)
+    return 0;
+  return (
+      unsigned)(((nowNs - timer->animationStartNs) / TIMER_FRAME_NANOSECONDS) %
+                TIMER_ANIMATION_FRAMES);
 }
 
 TimerFeedbackAction timerSoundFinished(Timer *timer, bool succeeded) {
@@ -128,6 +148,15 @@ int timerFeedbackTimeoutSet(int timerFd, bool enabled) {
   if (enabled) {
     timeout.it_value.tv_sec = 1;
     timeout.it_value.tv_nsec = 500000000;
+  }
+  return timerfd_settime(timerFd, 0, &timeout, NULL);
+}
+
+int timerAnimationTimeoutSet(int timerFd, bool enabled) {
+  struct itimerspec timeout = {0};
+  if (enabled) {
+    timeout.it_value.tv_nsec = (long)TIMER_FRAME_NANOSECONDS;
+    timeout.it_interval = timeout.it_value;
   }
   return timerfd_settime(timerFd, 0, &timeout, NULL);
 }
