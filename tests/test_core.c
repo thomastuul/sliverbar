@@ -69,6 +69,36 @@ int main(int argc, char **argv) {
   CHECK(!moduleModeActive(MODULE_AUTO, false));
   CHECK(moduleModeActive(MODULE_ENABLED, false));
   CHECK(!moduleModeActive(MODULE_DISABLED, true));
+  const char *volume84 = "Volume: front-left: 55050 /  84% / -4.54 dB,   "
+                         "front-right: 55050 /  84% / -4.54 dB";
+  const char *volume99 = "Volume: front-left: 64881 /  99% / -0.17 dB,   "
+                         "front-right: 64881 /  99% / -0.17 dB";
+  const char *volume100 = "Volume: front-left: 65536 / 100% / 0.00 dB,   "
+                          "front-right: 65536 / 100% / 0.00 dB";
+  const char *volume125 = "Volume: front-left: 81920 / 125% / 5.81 dB,   "
+                          "front-right: 81920 / 125% / 5.81 dB";
+  char volumeArgument[16];
+  CHECK(pactlVolumeArgument(
+      volume84, 1, "up", volumeArgument, sizeof(volumeArgument)));
+  CHECK(strcmp(volumeArgument, "+1%") == 0);
+  CHECK(pactlVolumeArgument(
+      volume99, 1, "up", volumeArgument, sizeof(volumeArgument)));
+  CHECK(strcmp(volumeArgument, "100%") == 0);
+  CHECK(pactlVolumeArgument(
+      volume100, 1, "up", volumeArgument, sizeof(volumeArgument)));
+  CHECK(strcmp(volumeArgument, "100%") == 0);
+  CHECK(pactlVolumeArgument(
+      volume125, 1, "up", volumeArgument, sizeof(volumeArgument)));
+  CHECK(strcmp(volumeArgument, "100%") == 0);
+  CHECK(pactlVolumeArgument(
+      NULL, 2, "down", volumeArgument, sizeof(volumeArgument)));
+  CHECK(strcmp(volumeArgument, "-2%") == 0);
+  CHECK(!pactlVolumeArgument(
+      "invalid", 1, "up", volumeArgument, sizeof(volumeArgument)));
+  CHECK(!pactlVolumeArgument(
+      volume84, 0, "up", volumeArgument, sizeof(volumeArgument)));
+  CHECK(!pactlVolumeArgument(
+      volume84, 1, "invalid", volumeArgument, sizeof(volumeArgument)));
   snprintf(cfg.language, sizeof(cfg.language), "de");
   CHECK(panelLanguageIsGerman(&cfg));
   CHECK(strcmp(powerActionLabel(&cfg, "poweroff"), "Ausschalten") == 0);

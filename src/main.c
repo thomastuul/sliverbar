@@ -394,15 +394,20 @@ static void title_from_event(char *event,
 #endif
 
 static int setVolume(const PanelConfig *c, const char *op) {
-  char step[24], ignored[256];
-  snprintf(step, sizeof(step), "%d%%", c->volumeStep);
+  char ignored[256];
   if (commandExists("pactl")) {
     char value[32];
-    if (!strcmp(op, "up"))
-      snprintf(value, sizeof(value), "+%s", step);
-    else if (!strcmp(op, "down"))
-      snprintf(value, sizeof(value), "-%s", step);
-    else {
+    if (!strcmp(op, "up")) {
+      char current[2048];
+      char *get[] = {"pactl", "get-sink-volume", "@DEFAULT_SINK@", NULL};
+      if (runCapture(get, current, sizeof(current), 1500) ||
+          !pactlVolumeArgument(
+              current, c->volumeStep, op, value, sizeof(value)))
+        return -1;
+    } else if (!strcmp(op, "down")) {
+      if (!pactlVolumeArgument(NULL, c->volumeStep, op, value, sizeof(value)))
+        return -1;
+    } else {
       char *av[] = {"pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle", NULL};
       return runCapture(av, ignored, sizeof(ignored), 1500);
     }
