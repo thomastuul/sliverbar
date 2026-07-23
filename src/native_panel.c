@@ -690,6 +690,25 @@ bool nativePanelHandleEvent(NativePanel *panel,
   return false;
 }
 
+bool nativePanelActionBounds(const NativePanel *panel,
+                             const char *action,
+                             int *x,
+                             int *width) {
+  if (!panel || !action)
+    return false;
+  for (size_t i = panel->regionCount; i > 0; i--) {
+    const ActionRegion *region = &panel->regions[i - 1];
+    if (strcmp(region->command, action) != 0)
+      continue;
+    if (x)
+      *x = panel->x + region->x0;
+    if (width)
+      *width = region->x1 - region->x0;
+    return true;
+  }
+  return false;
+}
+
 xcb_window_t nativePanelWindow(const NativePanel *panel) {
   return panel->window;
 }

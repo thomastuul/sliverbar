@@ -778,8 +778,8 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   char text[96], body[256], right[512], middle[768];
   snprintf(text, sizeof(text), "爫%3d%% %3d° %3d°", rain, min, max);
   block(body, sizeof(body), c->colorBg, c->colorWeather, text);
-  if (*c->weatherImage && appCanOpenFile(c->weatherImage))
-    action(right, sizeof(right), 3, "weather|open", body);
+  if (c->internalWeatherForecastAvailable)
+    action(right, sizeof(right), 3, "weather|forecast", body);
   else
     snprintf(right, sizeof(right), "%s", body);
   action(middle, sizeof(middle), 2, "weather|refresh", right);

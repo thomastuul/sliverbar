@@ -178,9 +178,19 @@ Legacy single-location weather query.
 .TP
 .B weather_interval
 Refresh interval in seconds.  Values are limited to 1800 through 14400.
+.TP
+.B weather_image
+Deprecated compatibility key.  Its value is ignored because forecasts are
+rendered natively.
 .PP
 Left click selects among configured locations, middle click refreshes, and
-right click opens the forecast image with the registered default application.
+right click toggles a native three-day forecast below the weather block.
+For each day it shows minimum and maximum temperature plus weather glyph,
+temperature, and rain probability at 06, 09, 12, 15, 18, and 21.
+The time labels are drawn as fixed Cairo fields.  Missing values are shown as
+dashes, and monochrome Unicode symbols are used when no icon font is available.
+Only JSON weather data is downloaded; no forecast image or external image
+viewer is used.
 .SS Other commonly changed keys
 .B volume_step
 and

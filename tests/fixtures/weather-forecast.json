@@ -1,0 +1,47 @@
+{
+  "ignored": {
+    "text": "a brace } and an escaped quote \" do not end this object"
+  },
+  "weather": [
+    {
+      "date": "2026-07-23",
+      "mintempC": "-3",
+      "maxtempC": "12",
+      "hourly": [
+        {"time": "0", "tempC": "-5", "chanceofrain": "1", "weatherCode": "113"},
+        {"time": "600", "tempC": "-3", "chanceofrain": "0", "weatherCode": "113"},
+        {"time": "900", "tempC": "1", "chanceofrain": "20", "weatherCode": "116"},
+        {"time": "1200", "tempC": "7", "chanceofrain": "40", "weatherCode": "176"},
+        {"time": "1500", "tempC": "12", "chanceofrain": "100", "weatherCode": "200"},
+        {"time": "1800", "tempC": "8", "chanceofrain": "65", "weatherCode": "230"},
+        {"time": "2100", "tempC": "4", "chanceofrain": "10", "weatherCode": "248"}
+      ]
+    },
+    {
+      "date": "2026-07-24",
+      "mintempC": "4",
+      "maxtempC": "14",
+      "hourly": [
+        {"time": "600", "tempC": "4", "chanceofrain": "5", "weatherCode": "119"},
+        {"time": "900", "chanceofrain": "15", "weatherCode": "999"},
+        {"time": "1200", "tempC": "11", "weatherCode": "353"},
+        {"time": "1500", "tempC": "14", "chanceofrain": "45"},
+        {"time": "1800", "tempC": "10", "chanceofrain": "30", "weatherCode": "122"},
+        {"time": "2100", "tempC": "6", "chanceofrain": "0", "weatherCode": "113"}
+      ]
+    },
+    {
+      "date": "2026-07-25",
+      "mintempC": "6",
+      "maxtempC": "16",
+      "hourly": [
+        {"time": "600", "tempC": "6", "chanceofrain": "0", "weatherCode": "113"},
+        {"time": "900", "tempC": "9", "chanceofrain": "0", "weatherCode": "113"},
+        {"time": "1200", "tempC": "13", "chanceofrain": "0", "weatherCode": "116"},
+        {"time": "1500", "tempC": "16", "chanceofrain": "5", "weatherCode": "116"},
+        {"time": "1800", "tempC": "12", "chanceofrain": "10", "weatherCode": "119"},
+        {"time": "2100", "tempC": "8", "chanceofrain": "15", "weatherCode": "122"}
+      ]
+    }
+  ]
+}

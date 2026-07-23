@@ -2,6 +2,7 @@
 #define SLIVERBAR_NATIVE_POPUP_H
 
 #include "panel.h"
+#include "weather_forecast.h"
 
 #ifdef HAVE_NATIVE_PANEL
 
@@ -32,6 +33,17 @@ int nativePopupOpen(NativePopup *popup,
                     size_t count,
                     bool searchable,
                     bool anchorRight);
+int nativePopupOpenForecast(NativePopup *popup,
+                            const WeatherForecast *forecast,
+                            const char *location,
+                            int actionX,
+                            int actionWidth);
+void nativePopupUpdateForecast(NativePopup *popup,
+                               const WeatherForecast *forecast,
+                               const char *location);
+bool nativePopupIsForecastOpen(const NativePopup *popup);
+void nativePopupGeometry(
+    const NativePopup *popup, int *x, int *y, int *width, int *height);
 void nativePopupClose(NativePopup *popup);
 bool nativePopupHandleEvent(NativePopup *popup,
                             const xcb_generic_event_t *event,

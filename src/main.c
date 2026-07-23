@@ -4,6 +4,7 @@
 #include "power_actions.h"
 #include "timer.h"
 #include "version.h"
+#include "weather_forecast.h"
 #include "workspace_backend.h"
 
 #include "app_launcher.h"
@@ -147,6 +148,27 @@ static xcb_atom_t atom(xcb_connection_t *x, const char *name) {
   xcb_atom_t a = r ? r->atom : XCB_ATOM_NONE;
   free(r);
   return a;
+}
+
+static xcb_keycode_t keycodeForKeysym(xcb_connection_t *connection,
+                                      xcb_keysym_t requested) {
+  const xcb_setup_t *setup = xcb_get_setup(connection);
+  xcb_keycode_t first = setup->min_keycode;
+  uint8_t count = (uint8_t)(setup->max_keycode - first + 1);
+  xcb_get_keyboard_mapping_reply_t *mapping = xcb_get_keyboard_mapping_reply(
+      connection, xcb_get_keyboard_mapping(connection, first, count), NULL);
+  if (!mapping)
+    return 0;
+  xcb_keysym_t *symbols = xcb_get_keyboard_mapping_keysyms(mapping);
+  size_t total = (size_t)count * mapping->keysyms_per_keycode;
+  xcb_keycode_t result = 0;
+  for (size_t index = 0; index < total; index++)
+    if (symbols[index] == requested) {
+      result = (xcb_keycode_t)(first + index / mapping->keysyms_per_keycode);
+      break;
+    }
+  free(mapping);
+  return result;
 }
 
 static xcb_window_t
@@ -481,44 +503,6 @@ static void refreshWeather(const PanelConfig *c) {
   }
 }
 
-static void refreshWeatherImage(const PanelConfig *c) {
-  if (!*c->weatherImage || !commandExists("curl"))
-    return;
-  char location[256], url[512], tmp[PANEL_PATH_MAX], parent[PANEL_PATH_MAX];
-  snprintf(location, sizeof(location), "%s", c->location);
-  for (char *p = location; *p; p++)
-    if (*p == ' ')
-      *p = '+';
-  snprintf(url,
-           sizeof(url),
-           "https://v2.wttr.in/%s.png?lang=%s&m&2",
-           location,
-           panelLanguage(c));
-  if (joinPath(tmp, sizeof(tmp), c->weatherImage, ".tmp"))
-    return;
-  snprintf(parent, sizeof(parent), "%s", c->weatherImage);
-  char *slash = strrchr(parent, '/');
-  if (slash) {
-    *slash = '\0';
-    mkdirP(parent, 0700);
-  }
-  char ignored[256];
-  char *av[] = {"curl",
-                "-fsSL",
-                "--connect-timeout",
-                "3",
-                "--max-time",
-                "15",
-                "-o",
-                tmp,
-                url,
-                NULL};
-  if (!runCapture(av, ignored, sizeof(ignored), 18000))
-    rename(tmp, c->weatherImage);
-  else
-    unlink(tmp);
-}
-
 static pid_t startWeatherRefresh(const PanelConfig *c) {
   if (!moduleModeActive(c->moduleWeather, c->location[0] != '\0') ||
       !c->location[0] || !commandExists("curl"))
@@ -529,7 +513,6 @@ static pid_t startWeatherRefresh(const PanelConfig *c) {
     sigemptyset(&empty);
     sigprocmask(SIG_SETMASK, &empty, NULL);
     refreshWeather(c);
-    refreshWeatherImage(c);
     _exit(0);
   }
   return pid;
@@ -543,11 +526,6 @@ static void updateWeatherPaths(PanelConfig *config) {
   snprintf(suffix, sizeof(suffix), "/%s.json", id);
   joinPath(config->weatherCache,
            sizeof(config->weatherCache),
-           config->weatherCacheRoot,
-           suffix);
-  snprintf(suffix, sizeof(suffix), "/%s.png", id);
-  joinPath(config->weatherImage,
-           sizeof(config->weatherImage),
            config->weatherCacheRoot,
            suffix);
 }
@@ -669,6 +647,48 @@ static int openWeatherLocations(NativePopup *popup, const PanelConfig *config) {
   }
   return nativePopupOpen(
       popup, items, config->weatherLocationCount, false, true);
+}
+
+static const char *activeWeatherLabel(const PanelConfig *config) {
+  if (config->activeWeatherLocation < config->weatherLocationCount &&
+      config->weatherLocations[config->activeWeatherLocation].label[0])
+    return config->weatherLocations[config->activeWeatherLocation].label;
+  return config->location;
+}
+
+static void loadWeatherForecast(const PanelConfig *config,
+                                WeatherForecast *forecast) {
+  memset(forecast, 0, sizeof(*forecast));
+  char json[32768] = "";
+  if (!config->weatherCache[0] ||
+      readTextFile(config->weatherCache, json, sizeof(json)) ||
+      weatherForecastParse(json, forecast))
+    memset(forecast, 0, sizeof(*forecast));
+}
+
+static int openWeatherForecast(NativePopup *popup,
+                               const NativePanel *panel,
+                               const PanelConfig *config) {
+  WeatherForecast forecast;
+  loadWeatherForecast(config, &forecast);
+  int actionX = 0, actionWidth = 1;
+  if (!nativePanelActionBounds(
+          panel, "weather|forecast", &actionX, &actionWidth)) {
+    int panelY = 0, panelWidth = 0, panelHeight = 0;
+    nativePanelBounds(panel, &actionX, &panelY, &panelWidth, &panelHeight);
+    actionX += panelWidth;
+  }
+  return nativePopupOpenForecast(
+      popup, &forecast, activeWeatherLabel(config), actionX, actionWidth);
+}
+
+static void updateOpenWeatherForecast(NativePopup *popup,
+                                      const PanelConfig *config) {
+  if (!nativePopupIsForecastOpen(popup))
+    return;
+  WeatherForecast forecast;
+  loadWeatherForecast(config, &forecast);
+  nativePopupUpdateForecast(popup, &forecast, activeWeatherLabel(config));
 }
 
 static void
@@ -800,6 +820,7 @@ static void doAction(PanelConfig *c,
                      int timerFeedbackTimerFd,
                      int timerAnimationTimerFd,
                      WorkspaceBackend *workspaceBackend,
+                     NativePanel *panel,
                      NativePopup *popup,
                      pid_t *weatherPid,
                      Inhibitor *inhibitor,
@@ -927,9 +948,11 @@ static void doAction(PanelConfig *c,
     char *message = strtok_r(NULL, "", &save);
     char *av[] = {"notify-send", arg, message ? message : "", NULL};
     spawnDetached(av);
-  } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "open") &&
-             *c->weatherImage) {
-    appOpenFile(c->weatherImage);
+  } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "forecast")) {
+    if (nativePopupIsForecastOpen(popup))
+      nativePopupClose(popup);
+    else
+      openWeatherForecast(popup, panel, c);
   } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "locations")) {
     if (nativePopupIsOpen(popup))
       nativePopupClose(popup);
@@ -1255,8 +1278,7 @@ int main(int argc, char **argv) {
                                            savedWeatherLocation,
                                            sizeof(savedWeatherLocation)))
     selectWeatherLocation(&cfg, savedWeatherLocation);
-  if (cache && cfg.location[0] && !cfg.weatherCache[0] &&
-      !cfg.weatherImage[0]) {
+  if (cache && cfg.location[0] && !cfg.weatherCache[0]) {
     joinPath(cfg.weatherCacheRoot,
              sizeof(cfg.weatherCacheRoot),
              cache,
@@ -1568,6 +1590,20 @@ int main(int argc, char **argv) {
         return 1;
       }
     }
+    int smokeX = 0, smokeY = 0, smokeWidth = 0, smokeHeight = 0;
+    nativePanelBounds(panel, &smokeX, &smokeY, &smokeWidth, &smokeHeight);
+    int actionX = 0, actionWidth = 0;
+    if (!nativePanelActionBounds(panel,
+                                 "notify|Native panel|space preserved",
+                                 &actionX,
+                                 &actionWidth) ||
+        actionX < smokeX || actionWidth <= 0) {
+      logMessage("ERROR", "native smoke-test action bounds failed");
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
     if (smokeTestNativeTray(panel, x, screen)) {
       nativePanelDestroy(panel);
       xcb_disconnect(x);
@@ -1575,8 +1611,6 @@ int main(int argc, char **argv) {
       return 1;
     }
     NativePopup *smokePopup = nativePopupCreate(x, screen, &cfg);
-    int smokeX = 0, smokeY = 0, smokeWidth = 0, smokeHeight = 0;
-    nativePanelBounds(panel, &smokeX, &smokeY, &smokeWidth, &smokeHeight);
     nativePopupSetBounds(smokePopup, smokeX, smokeY, smokeWidth, smokeHeight);
     PopupItem popupItems[2] = {
         {.label = "First", .search = "first", .action = "popup|first"},
@@ -1721,6 +1755,126 @@ int main(int argc, char **argv) {
       close(lock);
       return 1;
     }
+    WeatherForecast emptyForecast = {0};
+    if (nativePopupOpenForecast(smokePopup,
+                                &emptyForecast,
+                                "Forecast smoke test",
+                                smokeX + smokeWidth - 80,
+                                80) ||
+        !nativePopupIsForecastOpen(smokePopup)) {
+      logMessage("ERROR", "native forecast popup could not open");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    int forecastX = 0, forecastY = 0, forecastWidth = 0, emptyHeight = 0;
+    nativePopupGeometry(
+        smokePopup, &forecastX, &forecastY, &forecastWidth, &emptyHeight);
+    WeatherForecast smokeForecast = {.dayCount = WEATHER_FORECAST_DAY_COUNT};
+    for (size_t day = 0; day < WEATHER_FORECAST_DAY_COUNT; day++) {
+      WeatherForecastDay *forecastDay = &smokeForecast.days[day];
+      forecastDay->available = true;
+      snprintf(forecastDay->date,
+               sizeof(forecastDay->date),
+               "2026-07-%02zu",
+               23 + day);
+      forecastDay->minimumValid = true;
+      forecastDay->minimumC = 7 + (int)day;
+      forecastDay->maximumValid = true;
+      forecastDay->maximumC = 16 + (int)day;
+      for (size_t slot = 0; slot < WEATHER_FORECAST_SLOT_COUNT; slot++) {
+        WeatherForecastSlot *forecastSlot = &forecastDay->slots[slot];
+        forecastSlot->hour = 6 + (int)slot * 3;
+        forecastSlot->temperatureValid = true;
+        forecastSlot->temperatureC = 8 + (int)day + (int)slot;
+        forecastSlot->rainValid = true;
+        forecastSlot->rainPercent = (int)slot * 10;
+        forecastSlot->codeValid = true;
+        forecastSlot->weatherCode = slot % 2 == 0 ? 113 : 176;
+        forecastSlot->condition =
+            weatherConditionFromCode(forecastSlot->weatherCode);
+      }
+    }
+    nativePopupUpdateForecast(
+        smokePopup, &smokeForecast, "Updated forecast smoke test");
+    int forecastHeight = 0;
+    nativePopupGeometry(smokePopup, NULL, NULL, NULL, &forecastHeight);
+    if (forecastX < smokeX || forecastX + forecastWidth > smokeX + smokeWidth ||
+        forecastY != smokeY + smokeHeight || emptyHeight >= forecastHeight) {
+      logMessage("ERROR", "native forecast popup geometry failed");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    xcb_button_press_event_t forecastClick = {0};
+    forecastClick.response_type = XCB_BUTTON_PRESS;
+    forecastClick.event = screen->root;
+    forecastClick.detail = 1;
+    forecastClick.root_x = (int16_t)(forecastX + 5);
+    forecastClick.root_y = (int16_t)(forecastY + 5);
+    popupAction[0] = '\0';
+    if (!nativePopupHandleEvent(smokePopup,
+                                (xcb_generic_event_t *)&forecastClick,
+                                popupAction,
+                                sizeof(popupAction),
+                                &popupRedraw) ||
+        popupAction[0] || !nativePopupIsForecastOpen(smokePopup)) {
+      logMessage("ERROR", "native forecast popup was interactive");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    forecastClick.root_y = (int16_t)(smokeY + 1);
+    if (!nativePopupHandleEvent(smokePopup,
+                                (xcb_generic_event_t *)&forecastClick,
+                                popupAction,
+                                sizeof(popupAction),
+                                &popupRedraw) ||
+        nativePopupIsOpen(smokePopup)) {
+      logMessage("ERROR", "native forecast popup did not close outside");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    if (nativePopupOpenForecast(smokePopup,
+                                &smokeForecast,
+                                "Escape forecast smoke test",
+                                smokeX + smokeWidth - 80,
+                                80)) {
+      logMessage("ERROR", "native forecast popup could not reopen");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    xcb_keycode_t escape = keycodeForKeysym(x, 0xff1bU);
+    xcb_key_press_event_t escapePress = {0};
+    escapePress.response_type = XCB_KEY_PRESS;
+    escapePress.event = screen->root;
+    escapePress.detail = escape;
+    if (!escape ||
+        !nativePopupHandleEvent(smokePopup,
+                                (xcb_generic_event_t *)&escapePress,
+                                popupAction,
+                                sizeof(popupAction),
+                                &popupRedraw) ||
+        nativePopupIsOpen(smokePopup)) {
+      logMessage("ERROR", "Escape did not close native forecast popup");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
     nativePopupDestroy(smokePopup);
     usleep(100000);
     nativePanelDestroy(panel);
@@ -1743,6 +1897,7 @@ int main(int argc, char **argv) {
                       availablePowerActions,
                       sizeof(availablePowerActions) /
                           sizeof(availablePowerActions[0])) > 0;
+  cfg.internalWeatherForecastAvailable = nativePopupAvailable(popup);
   int sfd = signalfd(-1, &signals, SFD_CLOEXEC | SFD_NONBLOCK);
   int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
   int brightnessTfd =
@@ -1883,6 +2038,7 @@ int main(int argc, char **argv) {
             if (reaped == weatherPid) {
               weatherPid = 0;
               moduleWeather(&cfg, &state);
+              updateOpenWeatherForecast(popup, &cfg);
               dirty = true;
             } else if (workspaceBackendChildExited(
                            workspaceBackend, reaped, status, &state)) {
@@ -1953,6 +2109,7 @@ int main(int argc, char **argv) {
                      timerFeedbackTfd,
                      timerAnimationTfd,
                      workspaceBackend,
+                     panel,
                      popup,
                      &weatherPid,
                      inhibitor,
@@ -1971,6 +2128,7 @@ int main(int argc, char **argv) {
                    timerFeedbackTfd,
                    timerAnimationTfd,
                    workspaceBackend,
+                   panel,
                    popup,
                    &weatherPid,
                    inhibitor,

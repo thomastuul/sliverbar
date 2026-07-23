@@ -21,6 +21,14 @@
 
 #define POPUP_WIDTH 560
 #define POPUP_VISIBLE_ROWS 12
+#define FORECAST_WIDTH 680
+#define FORECAST_TITLE_HEIGHT 34
+#define FORECAST_DAY_HEIGHT 120
+
+typedef enum {
+  POPUP_MODE_MENU,
+  POPUP_MODE_FORECAST,
+} PopupMode;
 
 struct NativePopup {
   xcb_connection_t *connection;
@@ -48,12 +56,18 @@ struct NativePopup {
   int anchorY;
   int anchorWidth;
   int panelHeight;
+  int forecastAnchorX;
+  int forecastAnchorWidth;
   xcb_window_t previousFocus;
   uint8_t previousRevertTo;
   bool focusSaved;
   bool open;
   bool searchable;
+  bool hasIconFont;
+  PopupMode mode;
   char query[256];
+  WeatherForecast forecast;
+  char forecastLocation[128];
 #ifdef HAVE_XKBCOMMON_X11
   struct xkb_context *xkbContext;
   struct xkb_keymap *keymap;
@@ -96,6 +110,22 @@ static void fontDescription(const char *configured, char *output, size_t size) {
     *fontSize = '\0';
   const char *sizeValue = fontSize ? fontSize + 6 : "10";
   snprintf(output, size, "%s %s %s", copy, styleValue, sizeValue);
+}
+
+static bool fontAvailable(PangoLayout *layout,
+                          const PangoFontDescription *requested) {
+  PangoContext *context = pango_layout_get_context(layout);
+  PangoFont *font = pango_context_load_font(context, requested);
+  if (!font)
+    return false;
+  PangoFontDescription *actual = pango_font_describe(font);
+  const char *requestedFamily = pango_font_description_get_family(requested);
+  const char *actualFamily = pango_font_description_get_family(actual);
+  bool available = requestedFamily && actualFamily &&
+                   g_ascii_strcasecmp(requestedFamily, actualFamily) == 0;
+  pango_font_description_free(actual);
+  g_object_unref(font);
+  return available;
 }
 
 static xcb_visualtype_t *findVisual(xcb_screen_t *screen) {
@@ -145,7 +175,9 @@ static void updateMatches(NativePopup *popup) {
 }
 
 static bool iconCodepoint(gunichar codepoint) {
-  return codepoint >= 0xe000U && codepoint <= 0xf8ffU;
+  return (codepoint >= 0xe000U && codepoint <= 0xf8ffU) ||
+         (codepoint >= 0xf0000U && codepoint <= 0xffffdU) ||
+         (codepoint >= 0x100000U && codepoint <= 0x10fffdU);
 }
 
 static void prepareLayout(NativePopup *popup, const char *text) {
@@ -174,9 +206,24 @@ static void drawText(
   pango_cairo_show_layout(popup->cairo, popup->layout);
 }
 
-static void drawPopup(NativePopup *popup) {
-  if (!popup->open)
-    return;
+static void drawCenteredText(NativePopup *popup,
+                             const char *text,
+                             int x,
+                             int y,
+                             int width,
+                             int height,
+                             const char *color) {
+  setColor(popup->cairo, color, "#ffffff");
+  prepareLayout(popup, text);
+  int textWidth = 0, textHeight = 0;
+  pango_layout_get_pixel_size(popup->layout, &textWidth, &textHeight);
+  cairo_move_to(popup->cairo,
+                x + (width - textWidth) / 2.0,
+                y + (height - textHeight) / 2.0);
+  pango_cairo_show_layout(popup->cairo, popup->layout);
+}
+
+static void drawMenu(NativePopup *popup) {
   setColor(popup->cairo, popup->config.colorPanelBg, "#000000");
   cairo_paint(popup->cairo);
   int y = 0;
@@ -221,6 +268,160 @@ static void drawPopup(NativePopup *popup) {
              10,
              y + 5,
              popup->config.colorMuted);
+}
+
+static void
+formatTemperature(bool valid, int temperature, char *output, size_t size) {
+  if (valid)
+    snprintf(output, size, "%d°", temperature);
+  else
+    snprintf(output, size, "%s", "–");
+}
+
+static void formatDayTitle(const NativePopup *popup,
+                           const WeatherForecastDay *day,
+                           char *output,
+                           size_t size) {
+  char weekday[32], minimum[16], maximum[16];
+  weatherForecastDayName(day->date,
+                         panelLanguageIsGerman(&popup->config),
+                         weekday,
+                         sizeof(weekday));
+  formatTemperature(day->minimumValid, day->minimumC, minimum, sizeof(minimum));
+  formatTemperature(day->maximumValid, day->maximumC, maximum, sizeof(maximum));
+  snprintf(output, size, "%s · %s–%s", weekday, minimum, maximum);
+}
+
+static void drawTimeField(NativePopup *popup,
+                          const char *label,
+                          int x,
+                          int y,
+                          int width,
+                          int height) {
+  setColor(popup->cairo, popup->config.colorBg, "#222222");
+  cairo_rectangle(popup->cairo, x + 3, y + 2, width - 6, height - 4);
+  cairo_fill_preserve(popup->cairo);
+  setColor(popup->cairo, popup->config.colorFree, "#bfbfbf");
+  cairo_set_line_width(popup->cairo, 1.0);
+  cairo_stroke(popup->cairo);
+  drawCenteredText(popup,
+                   label,
+                   x + 3,
+                   y + 2,
+                   width - 6,
+                   height - 4,
+                   popup->config.colorClock);
+}
+
+static void drawForecast(NativePopup *popup) {
+  setColor(popup->cairo, popup->config.colorPanelBg, "#000000");
+  cairo_paint(popup->cairo);
+  bool german = panelLanguageIsGerman(&popup->config);
+  const char *title = popup->forecastLocation[0]
+                          ? popup->forecastLocation
+                          : (german ? "Wettervorhersage" : "Weather forecast");
+  drawText(popup, title, 10, 7, popup->config.colorWeather);
+  if (popup->forecast.dayCount == 0) {
+    drawText(popup,
+             german ? "Keine Vorhersagedaten verfügbar"
+                    : "No forecast data available",
+             10,
+             FORECAST_TITLE_HEIGHT + 7,
+             popup->config.colorMuted);
+    return;
+  }
+
+  int labelWidth = popup->width >= 560 ? 104 : popup->width / 5;
+  if (labelWidth < 72)
+    labelWidth = 72;
+  int contentWidth = popup->width - labelWidth - 8;
+  int slotWidth = contentWidth / WEATHER_FORECAST_SLOT_COUNT;
+  int remainder = contentWidth % WEATHER_FORECAST_SLOT_COUNT;
+  const int HEADER_HEIGHT = 26;
+  const int TIME_HEIGHT = 24;
+  const int VALUE_HEIGHT = 22;
+  for (size_t dayIndex = 0; dayIndex < WEATHER_FORECAST_DAY_COUNT; dayIndex++) {
+    const WeatherForecastDay *day = &popup->forecast.days[dayIndex];
+    int dayY = FORECAST_TITLE_HEIGHT + (int)dayIndex * FORECAST_DAY_HEIGHT;
+    setColor(popup->cairo, popup->config.colorBg, "#222222");
+    cairo_rectangle(popup->cairo, 0, dayY, popup->width, FORECAST_DAY_HEIGHT);
+    cairo_fill(popup->cairo);
+    char dayTitle[96];
+    if (day->available)
+      formatDayTitle(popup, day, dayTitle, sizeof(dayTitle));
+    else
+      snprintf(dayTitle, sizeof(dayTitle), "%s", "–");
+    drawText(popup, dayTitle, 10, dayY + 4, popup->config.colorFocusedFree);
+    int timeY = dayY + HEADER_HEIGHT;
+    int weatherY = timeY + TIME_HEIGHT;
+    int temperatureY = weatherY + VALUE_HEIGHT;
+    int rainY = temperatureY + VALUE_HEIGHT;
+    drawText(popup,
+             german ? "Wetter" : "Weather",
+             10,
+             weatherY + 3,
+             popup->config.colorFree);
+    drawText(popup,
+             german ? "Temperatur" : "Temperature",
+             10,
+             temperatureY + 3,
+             popup->config.colorFree);
+    drawText(popup,
+             german ? "Regen" : "Rain",
+             10,
+             rainY + 3,
+             popup->config.colorFree);
+    int slotX = labelWidth;
+    for (size_t slotIndex = 0; slotIndex < WEATHER_FORECAST_SLOT_COUNT;
+         slotIndex++) {
+      int width = slotWidth + ((int)slotIndex < remainder ? 1 : 0);
+      const WeatherForecastSlot *slot = &day->slots[slotIndex];
+      char text[16];
+      snprintf(text, sizeof(text), "%02d", slot->hour);
+      drawTimeField(popup, text, slotX, timeY, width, TIME_HEIGHT);
+      const char *glyph =
+          slot->codeValid
+              ? weatherConditionGlyph(slot->condition, popup->hasIconFont)
+              : "–";
+      drawCenteredText(popup,
+                       glyph,
+                       slotX,
+                       weatherY,
+                       width,
+                       VALUE_HEIGHT,
+                       popup->config.colorWeather);
+      formatTemperature(
+          slot->temperatureValid, slot->temperatureC, text, sizeof(text));
+      drawCenteredText(popup,
+                       text,
+                       slotX,
+                       temperatureY,
+                       width,
+                       VALUE_HEIGHT,
+                       popup->config.colorFree);
+      if (slot->rainValid)
+        snprintf(text, sizeof(text), "%d%%", slot->rainPercent);
+      else
+        snprintf(text, sizeof(text), "%s", "–");
+      drawCenteredText(popup,
+                       text,
+                       slotX,
+                       rainY,
+                       width,
+                       VALUE_HEIGHT,
+                       popup->config.colorNetwork);
+      slotX += width;
+    }
+  }
+}
+
+static void drawPopup(NativePopup *popup) {
+  if (!popup->open)
+    return;
+  if (popup->mode == POPUP_MODE_FORECAST)
+    drawForecast(popup);
+  else
+    drawMenu(popup);
   cairo_surface_flush(popup->surface);
   xcb_flush(popup->connection);
 }
@@ -304,6 +505,11 @@ NativePopup *nativePopupCreate(xcb_connection_t *connection,
   if (config->iconFont[0]) {
     fontDescription(config->iconFont, description, sizeof(description));
     popup->iconFont = pango_font_description_from_string(description);
+    popup->hasIconFont = fontAvailable(popup->layout, popup->iconFont);
+    if (!popup->hasIconFont) {
+      pango_font_description_free(popup->iconFont);
+      popup->iconFont = pango_font_description_copy(popup->font);
+    }
   } else {
     popup->iconFont = pango_font_description_copy(popup->font);
   }
@@ -381,29 +587,7 @@ void nativePopupSetBounds(
     nativePopupClose(popup);
 }
 
-int nativePopupOpen(NativePopup *popup,
-                    const PopupItem *items,
-                    size_t count,
-                    bool searchable,
-                    bool anchorRight) {
-  if (!nativePopupAvailable(popup) || !items || count == 0)
-    return -1;
-  if (count > POPUP_ITEM_MAX)
-    count = POPUP_ITEM_MAX;
-  memcpy(popup->items, items, count * sizeof(*items));
-  popup->itemCount = count;
-  popup->searchable = searchable;
-  popup->query[0] = '\0';
-  updateMatches(popup);
-  size_t rows = count < POPUP_VISIBLE_ROWS ? count : POPUP_VISIBLE_ROWS;
-  if (rows == 0)
-    rows = 1;
-  popup->height = (int)(rows + (searchable ? 1U : 0U)) * popup->rowHeight;
-  popup->width =
-      popup->anchorWidth < POPUP_WIDTH ? popup->anchorWidth : POPUP_WIDTH;
-  popup->x = anchorRight ? popup->anchorX + popup->anchorWidth - popup->width
-                         : popup->anchorX;
-  popup->y = popup->anchorY + popup->panelHeight;
+static void configurePopupWindow(NativePopup *popup) {
   uint32_t geometry[] = {(uint32_t)popup->x,
                          (uint32_t)popup->y,
                          (uint32_t)popup->width,
@@ -414,6 +598,10 @@ int nativePopupOpen(NativePopup *popup,
                            XCB_CONFIG_WINDOW_WIDTH | XCB_CONFIG_WINDOW_HEIGHT,
                        geometry);
   cairo_xcb_surface_set_size(popup->surface, popup->width, popup->height);
+}
+
+static void showPopup(NativePopup *popup) {
+  configurePopupWindow(popup);
   xcb_map_window(popup->connection, popup->window);
   const uint32_t STACK_MODE = XCB_STACK_MODE_ABOVE;
   xcb_configure_window(popup->connection,
@@ -434,7 +622,107 @@ int nativePopupOpen(NativePopup *popup,
                       XCB_CURRENT_TIME);
   popup->open = true;
   drawPopup(popup);
+}
+
+int nativePopupOpen(NativePopup *popup,
+                    const PopupItem *items,
+                    size_t count,
+                    bool searchable,
+                    bool anchorRight) {
+  if (!nativePopupAvailable(popup) || !items || count == 0)
+    return -1;
+  if (count > POPUP_ITEM_MAX)
+    count = POPUP_ITEM_MAX;
+  popup->mode = POPUP_MODE_MENU;
+  memcpy(popup->items, items, count * sizeof(*items));
+  popup->itemCount = count;
+  popup->searchable = searchable;
+  popup->query[0] = '\0';
+  updateMatches(popup);
+  size_t rows = count < POPUP_VISIBLE_ROWS ? count : POPUP_VISIBLE_ROWS;
+  if (rows == 0)
+    rows = 1;
+  popup->height = (int)(rows + (searchable ? 1U : 0U)) * popup->rowHeight;
+  popup->width =
+      popup->anchorWidth < POPUP_WIDTH ? popup->anchorWidth : POPUP_WIDTH;
+  popup->x = anchorRight ? popup->anchorX + popup->anchorWidth - popup->width
+                         : popup->anchorX;
+  popup->y = popup->anchorY + popup->panelHeight;
+  showPopup(popup);
   return 0;
+}
+
+static void configureForecastGeometry(NativePopup *popup) {
+  popup->width =
+      popup->anchorWidth < FORECAST_WIDTH ? popup->anchorWidth : FORECAST_WIDTH;
+  popup->height = popup->forecast.dayCount > 0
+                      ? FORECAST_TITLE_HEIGHT +
+                            WEATHER_FORECAST_DAY_COUNT * FORECAST_DAY_HEIGHT
+                      : FORECAST_TITLE_HEIGHT + 2 * popup->rowHeight;
+  int right = popup->forecastAnchorX + popup->forecastAnchorWidth;
+  popup->x = right - popup->width;
+  if (popup->x < popup->anchorX)
+    popup->x = popup->anchorX;
+  int maximumX = popup->anchorX + popup->anchorWidth - popup->width;
+  if (popup->x > maximumX)
+    popup->x = maximumX;
+  popup->y = popup->anchorY + popup->panelHeight;
+}
+
+int nativePopupOpenForecast(NativePopup *popup,
+                            const WeatherForecast *forecast,
+                            const char *location,
+                            int actionX,
+                            int actionWidth) {
+  if (!nativePopupAvailable(popup) || !forecast)
+    return -1;
+  popup->mode = POPUP_MODE_FORECAST;
+  popup->searchable = false;
+  popup->itemCount = 0;
+  popup->matchCount = 0;
+  popup->forecast = *forecast;
+  snprintf(popup->forecastLocation,
+           sizeof(popup->forecastLocation),
+           "%s",
+           location ? location : "");
+  popup->forecastAnchorX = actionX;
+  popup->forecastAnchorWidth = actionWidth > 0 ? actionWidth : 1;
+  configureForecastGeometry(popup);
+  showPopup(popup);
+  return 0;
+}
+
+void nativePopupUpdateForecast(NativePopup *popup,
+                               const WeatherForecast *forecast,
+                               const char *location) {
+  if (!popup || !forecast || !nativePopupIsForecastOpen(popup))
+    return;
+  popup->forecast = *forecast;
+  snprintf(popup->forecastLocation,
+           sizeof(popup->forecastLocation),
+           "%s",
+           location ? location : "");
+  configureForecastGeometry(popup);
+  configurePopupWindow(popup);
+  drawPopup(popup);
+}
+
+bool nativePopupIsForecastOpen(const NativePopup *popup) {
+  return popup && popup->open && popup->mode == POPUP_MODE_FORECAST;
+}
+
+void nativePopupGeometry(
+    const NativePopup *popup, int *x, int *y, int *width, int *height) {
+  if (!popup)
+    return;
+  if (x)
+    *x = popup->x;
+  if (y)
+    *y = popup->y;
+  if (width)
+    *width = popup->width;
+  if (height)
+    *height = popup->height;
 }
 
 void nativePopupClose(NativePopup *popup) {
@@ -493,6 +781,8 @@ static void handleKey(NativePopup *popup,
   xkb_keysym_t symbol = xkb_state_key_get_one_sym(popup->xkbState, key->detail);
   if (symbol == XKB_KEY_Escape) {
     nativePopupClose(popup);
+  } else if (popup->mode == POPUP_MODE_FORECAST) {
+    return;
   } else if (symbol == XKB_KEY_Return || symbol == XKB_KEY_KP_Enter) {
     chooseSelected(popup, action, actionSize);
   } else if (symbol == XKB_KEY_Up && popup->selected > 0) {
@@ -569,6 +859,8 @@ bool nativePopupHandleEvent(NativePopup *popup,
       nativePopupClose(popup);
       return true;
     }
+    if (popup->mode == POPUP_MODE_FORECAST)
+      return true;
     if (button->detail == 4 && popup->selected > 0) {
       popup->selected--;
       ensureSelectedVisible(popup);
