@@ -16,14 +16,28 @@ if(PkgConfig_FOUND)
     pkg_check_modules(CAIRO_XCB QUIET IMPORTED_TARGET cairo-xcb)
     pkg_check_modules(PANGOCAIRO QUIET IMPORTED_TARGET pangocairo)
     pkg_check_modules(GIO QUIET IMPORTED_TARGET gio-2.0 gio-unix-2.0)
+    pkg_check_modules(EDS QUIET IMPORTED_TARGET libecal-2.0 libedataserver-1.2)
     pkg_check_modules(XKBCOMMON_X11 QUIET IMPORTED_TARGET xkbcommon-x11)
     pkg_check_modules(XCB_RANDR QUIET IMPORTED_TARGET xcb-randr)
 endif()
 
 option(SLIVERBAR_SANITIZERS "Enable address and undefined-behavior sanitizers" OFF)
 option(SLIVERBAR_WITH_XCB "Build the native XCB event backend when available" ON)
+set(SLIVERBAR_EDS "AUTO" CACHE STRING
+    "Evolution Data Server support: AUTO, ON, or OFF")
+set_property(CACHE SLIVERBAR_EDS PROPERTY STRINGS AUTO ON OFF)
+string(TOUPPER "${SLIVERBAR_EDS}" SLIVERBAR_EDS)
+if(NOT SLIVERBAR_EDS MATCHES "^(AUTO|ON|OFF)$")
+    message(FATAL_ERROR "SLIVERBAR_EDS must be AUTO, ON, or OFF")
+endif()
+if(SLIVERBAR_EDS STREQUAL "ON" AND NOT EDS_FOUND)
+    message(FATAL_ERROR
+        "SLIVERBAR_EDS=ON requires libecal-2.0 and libedataserver-1.2")
+endif()
 
 add_library(sliverbar_core
+    src/agenda.c
+    src/agenda_provider.c
     src/app_launcher.c
     src/config.c
     src/inhibitor.c
@@ -40,6 +54,16 @@ target_compile_options(sliverbar_core PRIVATE -Wall -Wextra -Wpedantic -Wconvers
 if(GIO_FOUND)
     target_link_libraries(sliverbar_core PRIVATE PkgConfig::GIO)
     target_compile_definitions(sliverbar_core PRIVATE HAVE_GIO=1)
+endif()
+if(NOT SLIVERBAR_EDS STREQUAL "OFF" AND EDS_FOUND)
+    find_package(Threads REQUIRED)
+    target_link_libraries(
+        sliverbar_core PRIVATE PkgConfig::EDS Threads::Threads
+    )
+    target_compile_definitions(sliverbar_core PRIVATE HAVE_EDS=1)
+    message(STATUS "Evolution Data Server agenda support enabled")
+else()
+    message(STATUS "Evolution Data Server agenda support disabled")
 endif()
 
 add_executable(sliverbar src/main.c)
@@ -146,6 +170,25 @@ if(BUILD_TESTING)
         endif()
         add_test(NAME app_defaults COMMAND test_app_defaults)
         set_tests_properties(app_defaults PROPERTIES SKIP_RETURN_CODE 77)
+    endif()
+    if(NOT SLIVERBAR_EDS STREQUAL "OFF" AND EDS_FOUND)
+        add_executable(test_agenda_timezone tests/test_agenda_timezone.c)
+        target_link_libraries(
+            test_agenda_timezone PRIVATE sliverbar_core PkgConfig::EDS
+        )
+        target_compile_options(
+            test_agenda_timezone PRIVATE -Wall -Wextra -Wpedantic
+        )
+        if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(
+                test_agenda_timezone PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer
+            )
+            target_link_options(
+                test_agenda_timezone PRIVATE -fsanitize=address,undefined
+            )
+        endif()
+        add_test(NAME agenda_timezone COMMAND test_agenda_timezone)
     endif()
     if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(test_core PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)

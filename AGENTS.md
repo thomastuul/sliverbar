@@ -28,6 +28,16 @@ Set `CONTAINER_ENGINE=podman` to use rootless Podman instead of Docker.
 ## Deployment validation
 
 - Before every deployment, CTest must pass.
+- Before replacing a live Sliverbar instance, capture the current panel as the
+  visual baseline and record the configuration used by that process. Start the
+  candidate with the same complete configuration; add feature-specific test
+  settings to a copy of that configuration instead of replacing it with a
+  minimal configuration.
+- Compare the candidate and baseline graphically across the complete panel and
+  every changed popup. Check font family and size, glyph selection, colors
+  including active and warning states, spacing, alignment, module order, panel
+  geometry, and popup geometry. Treat every unexplained visual difference as a
+  regression that must be fixed before deployment.
 - A full `codex-security` `$security-scan`, including validation and attack-path
   analysis, is optional and may only be started after explicit user approval.
 - Do not represent a security scan as a routine prerequisite for every build or

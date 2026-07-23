@@ -1,6 +1,7 @@
 #ifndef SLIVERBAR_NATIVE_POPUP_H
 #define SLIVERBAR_NATIVE_POPUP_H
 
+#include "agenda.h"
 #include "panel.h"
 #include "weather_forecast.h"
 
@@ -42,6 +43,12 @@ void nativePopupUpdateForecast(NativePopup *popup,
                                const WeatherForecast *forecast,
                                const char *location);
 bool nativePopupIsForecastOpen(const NativePopup *popup);
+int nativePopupOpenAgenda(NativePopup *popup,
+                          const AgendaView *agenda,
+                          int actionX,
+                          int actionWidth);
+void nativePopupUpdateAgenda(NativePopup *popup, const AgendaView *agenda);
+bool nativePopupIsAgendaOpen(const NativePopup *popup);
 void nativePopupGeometry(
     const NativePopup *popup, int *x, int *y, int *width, int *height);
 void nativePopupClose(NativePopup *popup);

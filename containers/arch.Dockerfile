@@ -5,6 +5,7 @@ RUN pacman -Syu --noconfirm \
         cairo \
         clang \
         cmake \
+        evolution-data-server \
         glib2 \
         libxcb \
         libxkbcommon-x11 \

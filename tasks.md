@@ -984,6 +984,347 @@ Akzeptanzkriterium: Ein Linksklick auf Datum oder Uhrzeit startet die fuer
 `text/calendar` registrierte Standardanwendung. Fehlt diese, bleibt der
 Zeitblock sichtbar und Sliverbar laeuft unveraendert weiter.
 
+## Feature: Native EDS-Agenda unter Datum und Uhrzeit
+
+Ein Rechtsklick auf den Datums- und Uhrzeitblock soll direkt an der
+Panelunterkante eine native, rein lesende Agenda mit anstehenden Terminen und
+Aufgaben oeffnen. Der vorhandene Linksklick zum Oeffnen der
+Kalenderanwendung bleibt unveraendert.
+
+Die erste Version liest ausschliesslich bereits durch Evolution Data Server
+(EDS) bereitgestellte PIM-Daten. Sliverbar synchronisiert nicht selbst ueber
+CalDAV, implementiert keine anbieterspezifischen Google-APIs und verwaltet
+keine Zugangsdaten oder OAuth-Anmeldung. Thunderbird kann spaeter ueber
+dieselbe interne Provider-Schnittstelle angebunden werden, ist aber nicht Teil
+der ersten Version. Erstellen, Bearbeiten, Abschliessen, Verschieben oder
+Loeschen von PIM-Eintraegen ist ausdruecklich nicht vorgesehen.
+
+### Provider und Datenquellen
+
+- [ ] Eine interne Agenda-Provider-Schnittstelle definieren, die Ermittlung,
+  Initialbefuellung, Aenderungssignale, Fehlerzustand und Wiederverbindung von
+  der Darstellung trennt.
+- [ ] EDS als ersten Provider implementieren. Das allgemeine Agenda-Modell und
+  das native Popup duerfen keine EDS-Typen in ihren oeffentlichen
+  Schnittstellen enthalten.
+- [ ] Termine und Aufgaben getrennt aus den aktivierten EDS-Kalendern und
+  EDS-Aufgabenlisten beziehen. Die Provider-Implementierung muss
+  ausschliesslich lesende EDS-Operationen verwenden.
+- [ ] Quellen, Objekte und Serienvorkommen intern ueber stabile Quellen-ID,
+  Objekt-UID und gegebenenfalls Recurrence-ID identifizieren. Eine
+  zwischenzeitliche Umsortierung darf ein Klickziel nicht einem anderen
+  Eintrag zuordnen.
+- [ ] Mit `sliverbar --list-pim-sources` Typ, Aktivierungszustand, stabile ID
+  und Anzeigename der verfuegbaren Quellen skriptfreundlich ausgeben.
+  Benutzernamen, Server-Adressen, DAV-URLs und Zugangsdaten duerfen nicht
+  erscheinen.
+- [ ] Den Zustand "keine Quellen konfiguriert" von einem Verbindungsfehler
+  unterscheiden. Ohne EDS-Unterstuetzung muss `--list-pim-sources` mit einer
+  klaren Meldung und einem von null verschiedenen Status enden.
+- [ ] Keine internen Evolution- oder Thunderbird-Datenbanken, Cache-Dateien
+  oder Profile direkt lesen. Insbesondere sind Zugriffe auf Thunderbird-
+  `local.sqlite` oder `cache.sqlite` ausgeschlossen.
+
+### Konfiguration und Diagnose
+
+- [ ] `agenda_provider=none|eds` einfuehren. `none` ist der portable
+  Standardwert und darf weder EDS starten noch Agenda-Meldungen erzeugen.
+- [ ] Kalender- und Aufgabenquellen mit wiederholbaren Schluesseln auswaehlen:
+
+  ```ini
+  agenda_calendar_source=*
+  agenda_task_source=*
+  ```
+
+  `*` verwendet alle aktivierten Quellen des Typs, `none` deaktiviert den Typ,
+  und wiederholte explizite Werte waehlen stabile EDS-IDs aus.
+- [ ] `*` oder `none` nicht mit expliziten IDs desselben Typs kombinieren.
+  Leere, doppelte und mehr als 16 explizite Quellen pro Typ bei
+  `--check-config` ablehnen. Unbekannte, aber syntaktisch gueltige IDs erst zur
+  Laufzeit als Warnung behandeln, damit eine Konfiguration vor dem ersten
+  EDS-Start geprueft werden kann.
+- [ ] Folgende Standardwerte und Grenzen einfuehren:
+
+  ```ini
+  agenda_days=7
+  agenda_max_items=10
+  agenda_max_undated_tasks=2
+  agenda_refresh_interval=300
+  agenda_popup_width=480
+  agenda_show_source=true
+  ```
+
+  `agenda_days` wird auf 1 bis 31, `agenda_max_items` auf 4 bis 20,
+  `agenda_max_undated_tasks` auf 0 bis 5,
+  `agenda_refresh_interval` auf 60 bis 3600 Sekunden und
+  `agenda_popup_width` auf 320 bis 720 Pixel begrenzt.
+- [ ] Syntaktisch gueltige Zahlen ausserhalb der Grenzen mit einer
+  `WARNING`-Meldung auf die naechste Grenze setzen. Nichtnumerische Werte,
+  unbekannte Schluessel und andere Syntaxfehler bleiben harte
+  Konfigurationsfehler.
+- [ ] Fuer `agenda_show_source` ausschliesslich `true` und `false` akzeptieren.
+- [ ] Folgende konfigurierbare Dracula-Standardfarben als exakt validierte
+  `#RRGGBB`-Werte einfuehren:
+
+  ```ini
+  agenda_event_color=#8BE9FD
+  agenda_task_color=#FFB86C
+  agenda_overdue_color=#FF5555
+  agenda_source_color=#6272A4
+  ```
+
+  Farbnamen, fehlendes `#`, Alpha-Werte und ungueltige Hexadezimalstellen
+  muessen `--check-config` fehlschlagen lassen.
+- [ ] Den vorhandenen Anwendungsstarter `calendar=auto` fuer Termine
+  weiterverwenden und parallel `tasks=auto` als neue Anwendungsrolle
+  einfuehren. Beide Rollen unterstuetzen `auto`, `desktop:ID.desktop` und
+  `command:PROGRAM ARGUMENTS` ohne Shell-Auswertung.
+- [ ] Einen fehlenden Kalender- oder Aufgabenstarter nur fuer den jeweiligen
+  Klickpfad deaktivieren. Die Agenda-Daten bleiben sichtbar.
+- [ ] In `sliverbar --diagnose` konfigurierten Provider, einkompilierte
+  EDS-Unterstuetzung, Popup-Verfuegbarkeit, Anzahl ausgewaehlter,
+  erreichbarer und ausgefallener Quellen sowie die erkannten PIM-Starter
+  ausgeben. Benutzerdefinierte Befehlsargumente und sensible Quelldaten nicht
+  offenlegen.
+- [ ] `--check-config` darf keine PIM-Daten lesen, keinen EDS-Dienst starten
+  und keine D-Bus- oder Netzwerkverbindung aufbauen. Eine syntaktisch gueltige
+  EDS-Konfiguration bleibt auch in einem Build ohne EDS portabel.
+
+### Datenaufbereitung und Aktualisierung
+
+- [ ] Das Panel beim Start sofort zeichnen und die Agenda asynchron
+  initialisieren. Keine EDS-Operation darf die Panel-Ereignisschleife
+  blockieren.
+- [ ] Jede ausgewaehlte Quelle einzeln oeffnen und fuer die
+  Initialbefuellung hoechstens zehn Sekunden warten. Bis mindestens eine
+  Quelle erfolgreich initialisiert wurde, bleibt der Agenda-Rechtsklick ohne
+  Wirkung.
+- [ ] `ECalClientView` mit Benachrichtigungen fuer hinzugefuegte, geaenderte
+  und entfernte Objekte verwenden, damit normale PIM-Aenderungen unmittelbar
+  in die Agenda gelangen.
+- [ ] Mehrere schnell aufeinanderfolgende EDS-Signale kurz zusammenfassen und
+  eine geoeffnete Agenda atomar aktualisieren. Es duerfen keine teilweise
+  aktualisierten Quellenbestaende sichtbar werden.
+- [ ] `agenda_refresh_interval` fuer Konsistenzabgleich und
+  Wiederverbindungsversuche verwenden. Wenn ein Abgleich noch laeuft, keinen
+  zweiten parallel starten.
+- [ ] Die sichtbare Sortierung einmal pro Minute lokal neu berechnen, damit
+  Termine zu "Laufend", Aufgaben zu "Ueberfaellig" und `Morgen` zu `Heute`
+  wechseln koennen, ohne den Server erneut abzufragen.
+- [ ] Um Mitternacht das EDS-Abfragefenster fuer heute und die folgenden
+  `agenda_days - 1` lokalen Kalendertage neu aufbauen. Der Zeitraum ist in
+  lokalen Kalendertagen und nicht als starres Vielfaches von 24 Stunden zu
+  behandeln.
+- [ ] Beim Beenden laufende Abfragen abbrechen, Views abmelden und alle
+  Arbeitsspeicherdaten freigeben. Sliverbar darf beim Beenden nicht auf eine
+  entfernte DAV-Verbindung warten.
+- [ ] Keinen Agenda-Cache auf der Festplatte anlegen. Zugangsdaten und
+  Synchronisationszustand bleiben vollstaendig in der Verantwortung von EDS.
+
+### Sortierung und Begrenzung
+
+- [ ] Eintraege in dieser Prioritaet gemeinsam sortieren:
+  1. ueberfaellige Aufgaben, aelteste Faelligkeit zuerst;
+  2. aktuell laufende Termine, fruehestes Ende zuerst;
+  3. heute faellige Aufgaben;
+  4. heutige noch bevorstehende Termine;
+  5. zukuenftige Termine und Aufgaben nach Datum und Uhrzeit;
+  6. Aufgaben ohne Faelligkeitsdatum.
+- [ ] Vergangene und bereits beendete Termine, abgeschlossene Aufgaben und
+  abgesagte Termine beziehungsweise Serienvorkommen ausblenden.
+- [ ] Ganztagsereignisse innerhalb eines Tages vor Terminen mit Uhrzeit
+  anzeigen.
+- [ ] Mehrtaegige Termine nur einmal darstellen und ihren laufenden Zeitraum
+  beispielsweise als `Laufend bis Sa 25.07.` kennzeichnen.
+- [ ] Terminserien in ihre Vorkommen innerhalb des sichtbaren Zeitraums
+  aufloesen, veraenderte Vorkommen beruecksichtigen und abgesagte Ausnahmen
+  ueberspringen.
+- [ ] Bei wiederkehrenden Aufgaben nur die aktuell offene Ausfuehrung
+  anzeigen.
+- [ ] Aufgaben ohne Faelligkeitsdatum zuletzt sortieren und mit
+  `agenda_max_undated_tasks` begrenzen. Auch wenn ausschliesslich undatierte
+  Aufgaben vorhanden sind, bleibt diese Grenze wirksam.
+- [ ] Zunaechst `floor(agenda_max_items / 2)` Plaetze fuer jeden Typ
+  reservieren. Den bei einer ungeraden Grenze verbleibenden sowie alle von
+  einer Kategorie ungenutzten Plaetze nach der gemeinsamen Prioritaet
+  vergeben.
+- [ ] Insgesamt nie mehr als `agenda_max_items` Datenzeilen anzeigen. Eine
+  wegen geringer Bildschirmhoehe notwendige weitere Reduzierung ist erlaubt.
+- [ ] Ausgeblendete Eintraege getrennt als
+  `+ n weitere Termine` und `+ n weitere Aufgaben` zaehlen. Ohne weitere
+  Eintraege entfaellt die Abschlusszeile.
+- [ ] In der ersten Version keine Scroll- oder Seitennavigation vorsehen.
+
+### Darstellung und Geometrie
+
+- [ ] Jeden Eintrag einzeilig mit farbigem Typ-Symbol, Datum oder Status,
+  optionaler Uhrzeit, Titel und optionalem Quellennamen darstellen.
+- [ ] Termine mit `agenda_event_color`, Aufgaben mit `agenda_task_color`,
+  ueberfaellige Aufgaben mit `agenda_overdue_color` und Quellennamen mit
+  `agenda_source_color` zeichnen. Unterschiedliche Symbole muessen die Typen
+  auch ohne Farbwahrnehmung unterscheidbar machen.
+- [ ] `Heute`, `Morgen`, danach lokalisierten kurzen Wochentag und Datum
+  verwenden. Termine ohne Uhrzeit als `ganztags`, Aufgaben ohne Faelligkeit
+  als undatiert und fehlende Titel als `(Ohne Titel)` beziehungsweise
+  lokalisierte englische Entsprechung darstellen.
+- [ ] Zeilenumbrueche und Tabulatoren in Titeln normalisieren. Titel und
+  Quellennamen UTF-8-sicher mit Pango-Ellipsierung kuerzen; Zeit- und
+  Statusfelder duerfen nicht abgeschnitten werden.
+- [ ] Beschreibung, Teilnehmer, Erinnerungen und vollstaendigen Ort nicht im
+  Popup darstellen.
+- [ ] Hintergrund, Rahmen, Hover-Zustand, Schrift und allgemeine Abstaende aus
+  der vorhandenen nativen Popup-Darstellung uebernehmen, statt ein separates
+  Farbschema einzufuehren.
+- [ ] Die Popup-Breite aus `agenda_popup_width` verwenden und auf die
+  Monitorbreite minus 16 Pixel Rand begrenzen. Die Hoehe in Abhaengigkeit von
+  Schrift, Datenzeilen und Abschlusszeile berechnen und keinen Leerraum fuer
+  fehlende Eintraege reservieren.
+- [ ] Das Popup am Datum-/Zeit-Block und nicht am Mauszeiger verankern. In der
+  rechten Monitorhaelfte die rechten, in der linken Monitorhaelfte die linken
+  Kanten ausrichten.
+- [ ] Die Oberkante wie bei der Wettervorschau exakt auf
+  `panel_y + panel_height` setzen. Es gibt keinen zusaetzlichen Abstand zur
+  Panelunterkante.
+- [ ] Das Popup auf den Monitor des Datum-/Zeit-Blocks begrenzen. Falls unten
+  nicht genug Platz bleibt, oberhalb des Panels anzeigen. Reicht weder oben
+  noch unten Platz fuer mindestens eine Datenzeile und die notwendige
+  Abschlusszeile, kein Popup oeffnen und einmalig warnen.
+- [ ] Ein geoeffnetes Popup nach einer Panel-, Block- oder
+  Monitorgeometrieaenderung neu positionieren. Die am Panel liegende Kante
+  bleibt auch bei Inhaltsaenderungen fest verankert.
+- [ ] Das Popup ohne Animation unmittelbar oeffnen, aktualisieren und
+  schliessen und oberhalb normaler Fenster stapeln.
+
+### Bedienung
+
+- [ ] Den vorhandenen Linksklick auf Datum und Uhrzeit unveraendert lassen.
+  Rechtsklick oeffnet beziehungsweise schliesst die Agenda.
+- [ ] Die Agenda bei einem Klick ausserhalb, dem Oeffnen eines anderen
+  Sliverbar-Popups, ausgeblendetem Panel, Monitorwechsel oder Beenden von
+  Sliverbar schliessen.
+- [ ] Das nicht durchsuchbare Agenda-Popup darf den Tastaturfokus des aktiven
+  Fensters nicht uebernehmen. Ein fuer Aussenklicks notwendiger Pointer-Grab
+  muss auf jedem Schliess-, Fehler- und Beendigungspfad freigegeben werden.
+  Das bestehende Fokusverhalten durchsuchbarer Popups bleibt unveraendert.
+- [ ] Eine Zeile beim Ueberfahren hervorheben. Ein einfacher Linksklick auf
+  einen Termin oeffnet die Kalenderansicht, ein Linksklick auf eine Aufgabe
+  die Aufgabenansicht des PIM.
+- [ ] Fuer EDS in der ersten Version nur das Oeffnen der passenden
+  PIM-Komponente garantieren. Das dokumentierte Evolution-Verhalten
+  `evolution --component=calendar|tasks` kann keinen bestimmten Datensatz
+  verlaesslich selektieren. Eine spaetere Provider-Funktion darf direkte
+  Datensatz-Links ergaenzen.
+- [ ] Die getrennten Teile der Abschlusszeile anklickbar machen:
+  `weitere Termine` oeffnet die Kalenderansicht und `weitere Aufgaben` die
+  Aufgabenansicht.
+- [ ] Nach erfolgreichem Start des PIM das Popup schliessen. Bei
+  fehlgeschlagenem Start das Popup geoeffnet lassen und einmalig warnen.
+- [ ] Mittel- und Rechtsklick auf Agenda-Zeilen sowie nicht belegte
+  Popup-Bereiche ohne Aktion behandeln.
+
+### Fehlerbehandlung und Datenschutz
+
+- [ ] Jede ausgewaehlte Quelle einzeln bewerten. Bei einem Teilausfall die
+  erreichbaren Quellen weiterhin anzeigen und fuer jede ausgefallene Quelle
+  eine aussagekraeftige Warnung protokollieren.
+- [ ] Wenn alle ausgewaehlten Quellen ausfallen, ein geoeffnetes Popup
+  schliessen, den Rechtsklick deaktivieren und beim Start beziehungsweise
+  Zustandswechsel protokollieren, dass die Agenda nicht verfuegbar ist.
+- [ ] Eine erreichbare, aber leere Quelle nicht als Fehler behandeln. Wenn
+  alle erreichbaren Quellen leer sind, das Popup mit
+  `Keine anstehenden Termine oder Aufgaben` beziehungsweise der englischen
+  Entsprechung oeffnen.
+- [ ] Nach Feststellung eines Quellenausfalls deren moeglicherweise veraltete
+  Eintraege entfernen. Bei Wiederherstellung die Quelle und gegebenenfalls den
+  Rechtsklick wieder aktivieren, das Popup aber nicht selbststaendig oeffnen.
+- [ ] Den ersten Fehler, eine veraenderte Fehlerart und jeden Zustandswechsel
+  protokollieren. Denselben fortbestehenden Fehler nicht bei jedem
+  fuenfminuetigen Abgleich erneut ausgeben.
+- [ ] Fehlerhafte Einzelobjekte ueberspringen und einmalig mit Quellen-ID und
+  Objekt-ID melden, ohne die restliche Quelle zu deaktivieren.
+- [ ] Titel, Beschreibungen, Teilnehmer, URLs, Benutzernamen, Passwoerter,
+  Tokens und andere Zugangsdaten niemals protokollieren. Die stabile
+  Quellen-ID und eine allgemeine Fehlerklasse duerfen erscheinen.
+
+### Abhaengigkeiten und Paketierung
+
+- [ ] Einen dreistufigen CMake-Schalter
+  `SLIVERBAR_EDS=AUTO|ON|OFF` einfuehren. `AUTO` erkennt EDS fuer normale
+  Builds, `ON` bricht bei fehlenden Abhaengigkeiten ab, und `OFF` baut ohne
+  EDS-Code.
+- [ ] EDS ueber `pkg-config` und die oeffentlichen Module `libecal-2.0` und
+  `libedataserver-1.2` einbinden. Keine EDS-Header in allgemeine
+  Quelltextdateien oder oeffentliche Agenda-Datentypen lecken lassen.
+- [ ] Den autoritativen vollstaendigen Container- und Paket-Build mit
+  `SLIVERBAR_EDS=ON` ausfuehren. Debian- und Fedora-Container um die
+  jeweiligen EDS-Entwicklungspakete erweitern, ohne Build-Abhaengigkeiten auf
+  dem Host zu installieren.
+- [ ] Builds mit XCB und EDS, ohne XCB, ohne EDS sowie ohne beide optionalen
+  Abhaengigkeiten vorsehen. Der CLI-only-Build ohne XCB-
+  Entwicklungsheader muss weiterhin `--version`, `--check-config`,
+  `--diagnose` und soweit einkompiliert `--list-pim-sources` bereitstellen.
+- [ ] In DEB und RPM die tatsaechlichen EDS-Laufzeitbibliotheken, den
+  Paketinhalt und die automatisch beziehungsweise explizit erzeugten
+  Abhaengigkeiten pruefen und dokumentieren.
+- [ ] Ein distributierbares Paket nur auf ausdruecklichen Auftrag erzeugen und
+  davor die vorgeschriebene eingeschraenkte, rein statische
+  Sicherheitspruefung ausfuehren. Ein vollstaendiger `codex-security`-Scan
+  bleibt optional und darf nur nach ausdruecklicher Zustimmung gestartet
+  werden.
+
+### Tests und Dokumentation
+
+- [ ] Parser-Tests fuer alle Agenda-Schluessel, Standardwerte, Minimal- und
+  Maximalwerte, Clamp-Warnungen, Farben, boolesche Werte, Quellenlisten,
+  Duplikate, Widersprueche und unbekannte Schluessel hinzufuegen.
+- [ ] Reine Logiktests mit kontrollierbarer Uhr fuer Sortierung,
+  Platzverteilung, Restzaehler, leere Daten, UTF-8, Textnormalisierung,
+  lokale Zeitzonen, Mitternacht und Sommerzeitwechsel hinzufuegen.
+- [ ] Synthetische, nicht private `VEVENT`- und `VTODO`-Fixtures fuer
+  Ganztagstermine, laufende und mehrtaegige Termine, ueberfaellige und
+  undatierte Aufgaben, Serien, veraenderte Vorkommen und Absagen verwenden.
+- [ ] Provider-Tests fuer asynchrone Initialisierung, Timeout, leere Quellen,
+  Teil- und Gesamtausfall, atomare Aktualisierung, Signale, Fehlerdrosselung
+  und Wiederverbindung mit einem kontrollierten Test-Provider ausfuehren.
+- [ ] Sicherstellen, dass Logmeldungen keine vertraulichen Fixture-Felder
+  enthalten und dass benutzerdefinierte PIM-Befehle auch bei Shell-
+  Metazeichen niemals ueber eine Shell ausgewertet werden.
+- [ ] Unter Xvfb Oeffnen, erneuten Rechtsklick, Aussenklick, Hover,
+  Klickziele, Abschlusszeile, leere und nicht verfuegbare Daten,
+  Fokusbeibehaltung, sichere Pointer-Grabs, Stapelung, null Pixel
+  Panelabstand, kleine Bildschirme und mehrere Monitore pruefen.
+- [ ] Eine geoeffnete Agenda waehrend simulierter EDS-Aenderungen neu zeichnen
+  und nachweisen, dass Umsortierung oder Entfernen einer Zeile kein falsches
+  Klickziel erzeugt.
+- [ ] Die Build-Matrix mit GCC, Clang, ASan/UBSan, XCB an/aus und EDS an/aus in
+  den autoritativen Container-Workflow integrieren. Nach jeder C-Aenderung
+  CTest, fuer geaenderte C-Dateien clang-format und fuer geaenderte
+  Uebersetzungseinheiten clang-tidy ausfuehren. Vor Commit oder Deployment
+  muss `./scripts/container-build.sh` vollstaendig bestehen.
+- [ ] Nach bestandener automatisierter Validierung `--list-pim-sources` und
+  die Agenda mit vorhandenen lokalen EDS-Daten ausschliesslich lesend
+  pruefen. Teil- und Gesamtausfall mit temporaerer Quellenauswahl
+  reproduzieren, ohne Termine oder Aufgaben anzulegen oder zu veraendern.
+- [ ] README, `USAGE.md`, Manpage und `config/panel.conf` mit identischen
+  Schluesseln, Standardwerten, Grenzen, Mausaktionen, Abhaengigkeiten,
+  Datenschutz- und Fallback-Hinweisen aktualisieren. Ein Dokumentationsbild
+  muss eine reale getestete Agenda zeigen und darf keine privaten Daten
+  enthalten.
+- [ ] Die zentrale Version in `VERSION` fuer dieses neue,
+  abwaertskompatible Feature von `0.3.1` auf `0.4.0` erhoehen. Keine zweite
+  Versionsquelle einfuehren und `sliverbar --version`, CMake, Manpage sowie
+  DEB-/RPM-Metadaten gegen `sliverbar 0.4.0` testen.
+
+Akzeptanzkriterium: Bei verfuegbarem EDS oeffnet ein Rechtsklick auf Datum und
+Uhrzeit direkt und ohne Abstand an der Panelunterkante eine begrenzte,
+farblich und symbolisch unterscheidbare Liste anstehender Termine und Aufgaben.
+Die Agenda aktualisiert sich ohne Blockierung, bleibt vollstaendig lesend und
+oeffnet bei Auswahl die passende PIM-Ansicht. Erreichbare Quellen bleiben bei
+einem Teilausfall verwendbar; bei einem Gesamtausfall wird eine Warnung
+protokolliert und kein Popup geoeffnet. Builds ohne EDS oder XCB bleiben
+funktionsfaehig, alle automatisierten und kontrollierten Live-Tests bestehen,
+und die zentral verwaltete Version lautet `0.4.0`.
+
 ## Prioritaet 3: Standardkonforme Konfigurationssuche
 
 - [x] Folgende Suchreihenfolge implementieren und dokumentieren:

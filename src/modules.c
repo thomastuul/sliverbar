@@ -89,10 +89,15 @@ void moduleClock(const PanelConfig *c, PanelState *s) {
   snprintf(text, sizeof(text), " %s %s %s", d, clockGlyph, t);
   char body[256];
   block(body, sizeof(body), c->colorBg, c->colorClock, text);
+  char leftAction[384];
   if (appRoleAvailable(c, APP_ROLE_CALENDAR))
-    action(s->clock, sizeof(s->clock), 1, "role|calendar", body);
+    action(leftAction, sizeof(leftAction), 1, "role|calendar", body);
   else
-    snprintf(s->clock, sizeof(s->clock), "%s", body);
+    snprintf(leftAction, sizeof(leftAction), "%s", body);
+  if (c->internalAgendaAvailable)
+    action(s->clock, sizeof(s->clock), 3, "agenda|toggle", leftAction);
+  else
+    snprintf(s->clock, sizeof(s->clock), "%s", leftAction);
 }
 
 void moduleCpu(const PanelConfig *c, PanelState *s) {

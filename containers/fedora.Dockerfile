@@ -6,6 +6,7 @@ RUN dnf install -y \
         clang \
         clang-tools-extra \
         cmake \
+        evolution-data-server-devel \
         gcc \
         gcc-c++ \
         glib2-devel \

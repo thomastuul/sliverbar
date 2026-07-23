@@ -33,6 +33,8 @@ void configDefaults(PanelConfig *c) {
   copy(c->networkSettings, sizeof(c->networkSettings), "auto");
   copy(c->volumeSettings, sizeof(c->volumeSettings), "auto");
   copy(c->calendar, sizeof(c->calendar), "auto");
+  copy(c->tasks, sizeof(c->tasks), "auto");
+  copy(c->agendaProvider, sizeof(c->agendaProvider), "none");
   copy(c->timerSound,
        sizeof(c->timerSound),
        "/usr/share/sounds/freedesktop/stereo/alarm-clock-elapsed.oga");
@@ -63,6 +65,10 @@ void configDefaults(PanelConfig *c) {
   copy(c->colorWarning, 16, "#f1fa8c");
   copy(c->colorCritical, 16, "#ff5555");
   copy(c->colorBrightness, 16, "#bd93f9");
+  copy(c->agendaEventColor, 16, "#8BE9FD");
+  copy(c->agendaTaskColor, 16, "#FFB86C");
+  copy(c->agendaOverdueColor, 16, "#FF5555");
+  copy(c->agendaSourceColor, 16, "#6272A4");
   c->height = 25;
   c->clickableAreas = 30;
   c->volumeStep = 2;
@@ -70,6 +76,14 @@ void configDefaults(PanelConfig *c) {
   c->weatherInterval = 1800;
   c->networkInterval = 60;
   c->titleMax = 45;
+  c->agendaDays = 7;
+  c->agendaMaxItems = 10;
+  c->agendaMaxUndatedTasks = 2;
+  c->agendaRefreshInterval = 300;
+  c->agendaPopupWidth = 720;
+  c->agendaShowSource = true;
+  c->agendaCalendarSourceMode = AGENDA_SOURCES_ALL;
+  c->agendaTaskSourceMode = AGENDA_SOURCES_ALL;
 }
 
 bool moduleModeActive(ModuleMode mode, bool available) {
@@ -130,6 +144,88 @@ static bool validLocationId(const char *id) {
     if (!isalnum((unsigned char)*cursor) && *cursor != '_' && *cursor != '-')
       return false;
   return true;
+}
+
+static bool validColor(const char *value) {
+  if (!value || value[0] != '#' || strlen(value) != 7)
+    return false;
+  for (size_t i = 1; i < 7; i++)
+    if (!isxdigit((unsigned char)value[i]))
+      return false;
+  return true;
+}
+
+static bool validAgendaSourceId(const char *id) {
+  if (!id || !*id || strlen(id) >= PANEL_AGENDA_SOURCE_ID_MAX ||
+      !strcmp(id, "*") || !strcmp(id, "none"))
+    return false;
+  for (const char *cursor = id; *cursor; cursor++)
+    if (iscntrl((unsigned char)*cursor))
+      return false;
+  return true;
+}
+
+static int addAgendaSource(PanelConfig *c, bool calendar, const char *value) {
+  AgendaSourceMode *mode =
+      calendar ? &c->agendaCalendarSourceMode : &c->agendaTaskSourceMode;
+  bool *configured = calendar ? &c->agendaCalendarSourceConfigured
+                              : &c->agendaTaskSourceConfigured;
+  size_t *count =
+      calendar ? &c->agendaCalendarSourceCount : &c->agendaTaskSourceCount;
+  char(*sources)[PANEL_AGENDA_SOURCE_ID_MAX] =
+      calendar ? c->agendaCalendarSources : c->agendaTaskSources;
+  if (!*configured) {
+    *configured = true;
+    *count = 0;
+    if (!strcmp(value, "*")) {
+      *mode = AGENDA_SOURCES_ALL;
+      return 0;
+    }
+    if (!strcmp(value, "none")) {
+      *mode = AGENDA_SOURCES_NONE;
+      return 0;
+    }
+    *mode = AGENDA_SOURCES_EXPLICIT;
+  } else if (*mode != AGENDA_SOURCES_EXPLICIT) {
+    return -1;
+  }
+  if (!validAgendaSourceId(value) || *count >= PANEL_AGENDA_SOURCE_MAX)
+    return -1;
+  for (size_t i = 0; i < *count; i++)
+    if (!strcmp(sources[i], value))
+      return -1;
+  copy(sources[(*count)++], PANEL_AGENDA_SOURCE_ID_MAX, value);
+  return 0;
+}
+
+static int boundedAgendaNumber(const char *key,
+                               const char *value,
+                               unsigned minimum,
+                               unsigned maximum,
+                               unsigned *destination) {
+  long numberValue;
+  if (number(value, LONG_MIN, LONG_MAX, &numberValue))
+    return -1;
+  if (numberValue < (long)minimum) {
+    logMessage("WARNING",
+               "%s=%ld is below the minimum of %u; using %u",
+               key,
+               numberValue,
+               minimum,
+               minimum);
+    *destination = minimum;
+  } else if (numberValue > (long)maximum) {
+    logMessage("WARNING",
+               "%s=%ld exceeds the maximum of %u; using %u",
+               key,
+               numberValue,
+               maximum,
+               maximum);
+    *destination = maximum;
+  } else {
+    *destination = (unsigned)numberValue;
+  }
+  return 0;
 }
 
 static int addWeatherLocation(PanelConfig *c, const char *value) {
@@ -194,6 +290,26 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   STR("network_settings", networkSettings);
   STR("volume_settings", volumeSettings);
   STR("calendar", calendar);
+  STR("tasks", tasks);
+  if (!strcmp(k, "agenda_provider")) {
+    if (strcmp(v, "none") != 0 && strcmp(v, "eds") != 0)
+      return -1;
+    copy(c->agendaProvider, sizeof(c->agendaProvider), v);
+    return 0;
+  }
+  if (!strcmp(k, "agenda_calendar_source"))
+    return addAgendaSource(c, true, v);
+  if (!strcmp(k, "agenda_task_source"))
+    return addAgendaSource(c, false, v);
+  if (!strcmp(k, "agenda_show_source")) {
+    if (!strcmp(v, "true"))
+      c->agendaShowSource = true;
+    else if (!strcmp(v, "false"))
+      c->agendaShowSource = false;
+    else
+      return -1;
+    return 0;
+  }
   STR("timer_sound", timerSound);
   STR("power_actions", powerActions);
   STR("power_confirm", powerConfirm);
@@ -272,6 +388,18 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   STR("color_warning", colorWarning);
   STR("color_critical", colorCritical);
   STR("color_brightness", colorBrightness);
+  if (!strcmp(k, "agenda_event_color") || !strcmp(k, "agenda_task_color") ||
+      !strcmp(k, "agenda_overdue_color") || !strcmp(k, "agenda_source_color")) {
+    if (!validColor(v))
+      return -1;
+    char *destination = !strcmp(k, "agenda_event_color")  ? c->agendaEventColor
+                        : !strcmp(k, "agenda_task_color") ? c->agendaTaskColor
+                        : !strcmp(k, "agenda_overdue_color")
+                            ? c->agendaOverdueColor
+                            : c->agendaSourceColor;
+    copy(destination, 16, v);
+    return 0;
+  }
 #undef STR
   long n;
 #define NUM(key, field, min, max)                                              \
@@ -289,6 +417,30 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   NUM("volume_step", volumeStep, 1, 100);
   NUM("brightness_step", brightnessStep, 1, 100);
 #undef NUM
+  if (!strcmp(k, "agenda_days"))
+    return boundedAgendaNumber(
+        k, v, PANEL_AGENDA_DAYS_MIN, PANEL_AGENDA_DAYS_MAX, &c->agendaDays);
+  if (!strcmp(k, "agenda_max_items"))
+    return boundedAgendaNumber(k,
+                               v,
+                               PANEL_AGENDA_ITEMS_MIN,
+                               PANEL_AGENDA_ITEMS_MAX,
+                               &c->agendaMaxItems);
+  if (!strcmp(k, "agenda_max_undated_tasks"))
+    return boundedAgendaNumber(
+        k, v, 0, PANEL_AGENDA_UNDATED_MAX, &c->agendaMaxUndatedTasks);
+  if (!strcmp(k, "agenda_refresh_interval"))
+    return boundedAgendaNumber(k,
+                               v,
+                               PANEL_AGENDA_REFRESH_MIN,
+                               PANEL_AGENDA_REFRESH_MAX,
+                               &c->agendaRefreshInterval);
+  if (!strcmp(k, "agenda_popup_width"))
+    return boundedAgendaNumber(k,
+                               v,
+                               PANEL_AGENDA_WIDTH_MIN,
+                               PANEL_AGENDA_WIDTH_MAX,
+                               &c->agendaPopupWidth);
   if (!strcmp(k, "weather_interval")) {
     if (number(v, LONG_MIN, LONG_MAX, &n))
       return -1;

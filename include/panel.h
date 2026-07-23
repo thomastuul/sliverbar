@@ -15,6 +15,17 @@
 #define PANEL_WEATHER_LOCATION_MAX 4
 #define PANEL_WEATHER_INTERVAL_MIN 1800U
 #define PANEL_WEATHER_INTERVAL_MAX 14400U
+#define PANEL_AGENDA_SOURCE_MAX 16
+#define PANEL_AGENDA_SOURCE_ID_MAX 256
+#define PANEL_AGENDA_DAYS_MIN 1U
+#define PANEL_AGENDA_DAYS_MAX 31U
+#define PANEL_AGENDA_ITEMS_MIN 4U
+#define PANEL_AGENDA_ITEMS_MAX 20U
+#define PANEL_AGENDA_UNDATED_MAX 5U
+#define PANEL_AGENDA_REFRESH_MIN 60U
+#define PANEL_AGENDA_REFRESH_MAX 3600U
+#define PANEL_AGENDA_WIDTH_MIN 320U
+#define PANEL_AGENDA_WIDTH_MAX 720U
 
 typedef enum {
   MODULE_AUTO,
@@ -28,6 +39,12 @@ typedef struct {
   char query[128];
 } WeatherLocation;
 
+typedef enum {
+  AGENDA_SOURCES_ALL,
+  AGENDA_SOURCES_NONE,
+  AGENDA_SOURCES_EXPLICIT,
+} AgendaSourceMode;
+
 typedef struct {
   char font[128], iconFont[128], geometry[64], wmName[64], monitor[64];
   char workspaceBackend[16];
@@ -35,7 +52,11 @@ typedef struct {
   char powerActions[256], powerConfirm[256];
   char terminal[64], location[128], language[16];
   char systemMonitor[256], networkSettings[256], volumeSettings[256];
-  char calendar[256];
+  char calendar[256], tasks[256];
+  char agendaProvider[16];
+  char agendaCalendarSources[PANEL_AGENDA_SOURCE_MAX]
+                            [PANEL_AGENDA_SOURCE_ID_MAX];
+  char agendaTaskSources[PANEL_AGENDA_SOURCE_MAX][PANEL_AGENDA_SOURCE_ID_MAX];
   char timerSound[PANEL_PATH_MAX];
   char launcher[PANEL_PATH_MAX], powerMenu[PANEL_PATH_MAX];
   char weatherCache[PANEL_PATH_MAX], weatherImage[PANEL_PATH_MAX];
@@ -50,14 +71,23 @@ typedef struct {
   char colorClock[16], colorVolume[16], colorMuted[16], colorSystem[16];
   char colorNetwork[16], colorWeather[16], colorBattery[16];
   char colorWarning[16], colorCritical[16], colorBrightness[16];
+  char agendaEventColor[16], agendaTaskColor[16], agendaOverdueColor[16],
+      agendaSourceColor[16];
   int height, clickableAreas, underline, volumeStep, brightnessStep;
   unsigned weatherInterval, networkInterval, titleMax;
+  unsigned agendaDays, agendaMaxItems, agendaMaxUndatedTasks;
+  unsigned agendaRefreshInterval, agendaPopupWidth;
+  bool agendaShowSource;
+  AgendaSourceMode agendaCalendarSourceMode, agendaTaskSourceMode;
+  bool agendaCalendarSourceConfigured, agendaTaskSourceConfigured;
+  size_t agendaCalendarSourceCount, agendaTaskSourceCount;
   ModuleMode moduleClock, moduleTitle, moduleCpu, moduleBattery;
   ModuleMode moduleScreencast, moduleVolume, moduleNetwork, moduleBrightness;
   ModuleMode moduleWeather, moduleLauncher, moduleTray, modulePower;
   ModuleMode moduleInhibitor, moduleTimer;
   bool internalLauncherAvailable, internalPowerAvailable;
   bool internalWeatherForecastAvailable;
+  bool internalAgendaAvailable;
   WeatherLocation weatherLocations[PANEL_WEATHER_LOCATION_MAX];
   size_t weatherLocationCount, activeWeatherLocation;
   char defaultWeatherLocation[64];

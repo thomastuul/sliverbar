@@ -22,6 +22,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "/usr",
+        "SLIVERBAR_EDS": "ON",
         "SLIVERBAR_WITH_XCB": "ON"
       }
     },
@@ -31,6 +32,7 @@
       "binaryDir": "${sourceDir}/build/container-fallback",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "SLIVERBAR_EDS": "ON",
         "SLIVERBAR_WITH_XCB": "OFF"
       }
     },
@@ -40,6 +42,7 @@
       "binaryDir": "${sourceDir}/build/container-sanitizers",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "SLIVERBAR_EDS": "ON",
         "SLIVERBAR_SANITIZERS": "ON",
         "SLIVERBAR_WITH_XCB": "ON"
       }
@@ -51,7 +54,28 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_C_COMPILER": "clang",
+        "SLIVERBAR_EDS": "ON",
         "SLIVERBAR_WITH_XCB": "ON"
+      }
+    },
+    {
+      "name": "container-no-eds",
+      "inherits": "container-base",
+      "binaryDir": "${sourceDir}/build/container-no-eds",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SLIVERBAR_EDS": "OFF",
+        "SLIVERBAR_WITH_XCB": "ON"
+      }
+    },
+    {
+      "name": "container-minimal",
+      "inherits": "container-base",
+      "binaryDir": "${sourceDir}/build/container-minimal",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "SLIVERBAR_EDS": "OFF",
+        "SLIVERBAR_WITH_XCB": "OFF"
       }
     }
   ],
@@ -59,7 +83,9 @@
     { "name": "container-release", "configurePreset": "container-release" },
     { "name": "container-fallback", "configurePreset": "container-fallback" },
     { "name": "container-sanitizers", "configurePreset": "container-sanitizers" },
-    { "name": "container-clang", "configurePreset": "container-clang" }
+    { "name": "container-clang", "configurePreset": "container-clang" },
+    { "name": "container-no-eds", "configurePreset": "container-no-eds" },
+    { "name": "container-minimal", "configurePreset": "container-minimal" }
   ],
   "testPresets": [
     {
@@ -81,6 +107,16 @@
     {
       "name": "container-clang",
       "configurePreset": "container-clang",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "container-no-eds",
+      "configurePreset": "container-no-eds",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "container-minimal",
+      "configurePreset": "container-minimal",
       "output": { "outputOnFailure": true }
     }
   ]

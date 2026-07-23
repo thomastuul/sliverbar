@@ -22,6 +22,14 @@ cmake --preset container-clang
 cmake --build --preset container-clang
 ctest --preset container-clang
 
+cmake --preset container-no-eds
+cmake --build --preset container-no-eds
+ctest --preset container-no-eds
+
+cmake --preset container-minimal
+cmake --build --preset container-minimal
+ctest --preset container-minimal
+
 expected="sliverbar $(cat VERSION)"
 actual="$(build/container-release/sliverbar --version)"
 test "$actual" = "$expected"

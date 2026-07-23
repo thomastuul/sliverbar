@@ -12,6 +12,7 @@ RUN apt-get update \
         cmake \
         dpkg-dev \
         file \
+        libecal2.0-dev \
         libcairo2-dev \
         libpango1.0-dev \
         libxkbcommon-x11-dev \
