@@ -17,12 +17,14 @@ RUN apt-get update \
         libxkbcommon-x11-dev \
         libxcb1-dev \
         libxcb-randr0-dev \
+        locales \
         ninja-build \
         pkg-config \
         shared-mime-info \
         xauth \
         x11-xserver-utils \
         xvfb \
+    && localedef -i de_DE -f UTF-8 de_DE.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
 
 ENV HOME=/tmp
