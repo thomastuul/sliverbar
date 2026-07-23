@@ -1962,7 +1962,16 @@ int main(int argc, char **argv) {
     snprintf(smokeAgenda.items[0].item.title,
              sizeof(smokeAgenda.items[0].item.title),
              "%s",
-             "Calendar smoke item");
+             "Calendar smoke item with a deliberately long title that wraps "
+             "instead of being truncated at the popup edge");
+    snprintf(smokeAgenda.items[0].item.organizer,
+             sizeof(smokeAgenda.items[0].item.organizer),
+             "%s",
+             "Max Mustermann");
+    snprintf(smokeAgenda.items[0].item.sourceName,
+             sizeof(smokeAgenda.items[0].item.sourceName),
+             "%s",
+             "Shared calendar");
     snprintf(smokeAgenda.items[0].when,
              sizeof(smokeAgenda.items[0].when),
              "%s",
@@ -1986,15 +1995,18 @@ int main(int argc, char **argv) {
       close(lock);
       return 1;
     }
-    int agendaX = 0, agendaY = 0, agendaWidth = 0;
-    nativePopupGeometry(smokePopup, &agendaX, &agendaY, &agendaWidth, NULL);
+    int agendaX = 0, agendaY = 0, agendaWidth = 0, agendaHeight = 0;
+    nativePopupGeometry(
+        smokePopup, &agendaX, &agendaY, &agendaWidth, &agendaHeight);
     xcb_get_input_focus_reply_t *agendaFocus =
         xcb_get_input_focus_reply(x, xcb_get_input_focus(x), NULL);
     bool agendaKeptFocus =
         agendaFocus && agendaFocus->focus == nativePanelWindow(panel);
     free(agendaFocus);
+    int minimumAgendaHeight = 4 * (cfg.height > 28 ? cfg.height : 28);
     if (!agendaKeptFocus || agendaY != smokeY + smokeHeight ||
-        agendaX < smokeX || agendaX + agendaWidth > smokeX + smokeWidth) {
+        agendaX < smokeX || agendaX + agendaWidth > smokeX + smokeWidth ||
+        agendaHeight <= minimumAgendaHeight) {
       logMessage("ERROR", "native agenda focus or geometry failed");
       nativePopupDestroy(smokePopup);
       nativePanelDestroy(panel);

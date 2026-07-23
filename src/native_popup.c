@@ -257,6 +257,31 @@ static void drawEllipsizedText(NativePopup *popup,
   pango_layout_set_ellipsize(popup->layout, PANGO_ELLIPSIZE_NONE);
 }
 
+static int wrappedTextHeight(NativePopup *popup, const char *text, int width) {
+  prepareLayout(popup, text);
+  pango_layout_set_width(popup->layout, width * PANGO_SCALE);
+  pango_layout_set_wrap(popup->layout, PANGO_WRAP_WORD_CHAR);
+  int height = 0;
+  pango_layout_get_pixel_size(popup->layout, NULL, &height);
+  pango_layout_set_width(popup->layout, -1);
+  return height;
+}
+
+static void drawWrappedText(NativePopup *popup,
+                            const char *text,
+                            int x,
+                            int y,
+                            int width,
+                            const char *color) {
+  setColor(popup->cairo, color, "#ffffff");
+  prepareLayout(popup, text);
+  pango_layout_set_width(popup->layout, width * PANGO_SCALE);
+  pango_layout_set_wrap(popup->layout, PANGO_WRAP_WORD_CHAR);
+  cairo_move_to(popup->cairo, x, y);
+  pango_cairo_show_layout(popup->cairo, popup->layout);
+  pango_layout_set_width(popup->layout, -1);
+}
+
 static void drawMenu(NativePopup *popup) {
   setColor(popup->cairo, popup->config.colorPanelBg, "#000000");
   cairo_paint(popup->cairo);
@@ -464,6 +489,63 @@ static void drawForecast(NativePopup *popup) {
   }
 }
 
+static void formatAgendaMetadata(const NativePopup *popup,
+                                 const AgendaDisplayItem *display,
+                                 char *output,
+                                 size_t size) {
+  bool german = panelLanguageIsGerman(&popup->config);
+  const char *organizer = display->item.organizer[0]
+                              ? display->item.organizer
+                              : (german ? "nicht angegeben" : "not specified");
+  snprintf(
+      output, size, german ? "Organisator: %s" : "Organizer: %s", organizer);
+  if (popup->config.agendaShowSource && display->item.sourceName[0]) {
+    size_t used = strlen(output);
+    snprintf(output + used,
+             size > used ? size - used : 0,
+             german ? " · Kalender: %s" : " · Calendar: %s",
+             display->item.sourceName);
+  }
+}
+
+static int agendaItemHeight(NativePopup *popup,
+                            const AgendaDisplayItem *display) {
+  if (display->item.type != AGENDA_ITEM_EVENT)
+    return popup->rowHeight;
+  const char *title =
+      display->item.title[0]
+          ? display->item.title
+          : (panelLanguageIsGerman(&popup->config) ? "(Ohne Titel)"
+                                                   : "(Untitled)");
+  int whenWidth = textWidth(popup, display->when);
+  int titleWidth = popup->width - (30 + whenWidth + 12) - 10;
+  if (titleWidth < 1)
+    titleWidth = 1;
+  int titleHeight = wrappedTextHeight(popup, title, titleWidth);
+  int firstLineHeight = titleHeight + 10;
+  if (firstLineHeight < popup->rowHeight)
+    firstLineHeight = popup->rowHeight;
+  return firstLineHeight + popup->rowHeight;
+}
+
+static int agendaItemsHeight(NativePopup *popup) {
+  int height = 0;
+  for (size_t row = 0; row < popup->agenda.count; row++)
+    height += agendaItemHeight(popup, &popup->agenda.items[row]);
+  return height;
+}
+
+static int agendaRowAtY(NativePopup *popup, int y) {
+  int top = 0;
+  for (size_t row = 0; row < popup->agenda.count; row++) {
+    int bottom = top + agendaItemHeight(popup, &popup->agenda.items[row]);
+    if (y >= top && y < bottom)
+      return (int)row;
+    top = bottom;
+  }
+  return -1;
+}
+
 static void drawAgenda(NativePopup *popup) {
   setColor(popup->cairo, popup->config.colorPanelBg, "#000000");
   cairo_paint(popup->cairo);
@@ -477,12 +559,13 @@ static void drawAgenda(NativePopup *popup) {
                        popup->width - 24,
                        popup->config.colorMuted);
   }
+  int y = 0;
   for (size_t row = 0; row < popup->agenda.count; row++) {
     const AgendaDisplayItem *display = &popup->agenda.items[row];
-    int y = (int)row * popup->rowHeight;
+    int rowHeight = agendaItemHeight(popup, display);
     if ((int)row == popup->agendaHover) {
       setColor(popup->cairo, popup->config.colorFocusedFreeBg, "#333333");
-      cairo_rectangle(popup->cairo, 0, y, popup->width, popup->rowHeight);
+      cairo_rectangle(popup->cairo, 0, y, popup->width, rowHeight);
       cairo_fill(popup->cairo);
     }
     const char *typeColor = display->overdue
@@ -497,7 +580,8 @@ static void drawAgenda(NativePopup *popup) {
     drawText(popup, display->when, whenX, y + 5, typeColor);
     int titleX = whenX + whenWidth + 12;
     int right = popup->width - 10;
-    if (popup->config.agendaShowSource && display->item.sourceName[0]) {
+    if (display->item.type == AGENDA_ITEM_TASK &&
+        popup->config.agendaShowSource && display->item.sourceName[0]) {
       int sourceWidth = textWidth(popup, display->item.sourceName);
       int maximumSourceWidth = popup->width / 4;
       if (sourceWidth > maximumSourceWidth)
@@ -513,11 +597,31 @@ static void drawAgenda(NativePopup *popup) {
     const char *title = display->item.title[0]
                             ? display->item.title
                             : (german ? "(Ohne Titel)" : "(Untitled)");
-    drawEllipsizedText(
-        popup, title, titleX, y + 5, right - titleX, popup->config.colorFree);
+    if (display->item.type == AGENDA_ITEM_EVENT) {
+      int titleWidth = popup->width - titleX - 10;
+      if (titleWidth < 1)
+        titleWidth = 1;
+      drawWrappedText(
+          popup, title, titleX, y + 5, titleWidth, popup->config.colorFree);
+      char metadata[512];
+      formatAgendaMetadata(popup, display, metadata, sizeof(metadata));
+      int titleHeight = wrappedTextHeight(popup, title, titleWidth);
+      int firstLineHeight = titleHeight + 10;
+      if (firstLineHeight < popup->rowHeight)
+        firstLineHeight = popup->rowHeight;
+      drawEllipsizedText(popup,
+                         metadata,
+                         whenX,
+                         y + firstLineHeight + 5,
+                         popup->width - whenX - 10,
+                         popup->config.agendaSourceColor);
+    } else {
+      drawEllipsizedText(
+          popup, title, titleX, y + 5, right - titleX, popup->config.colorFree);
+    }
+    y += rowHeight;
   }
   if (popup->agenda.hiddenEvents || popup->agenda.hiddenTasks) {
-    int y = (int)popup->agenda.count * popup->rowHeight;
     setColor(popup->cairo, popup->config.colorBg, "#222222");
     cairo_rectangle(popup->cairo, 0, y, popup->width, popup->rowHeight);
     cairo_fill(popup->cairo);
@@ -847,10 +951,11 @@ static bool configureAgendaGeometry(NativePopup *popup) {
   popup->width = (int)popup->config.agendaPopupWidth;
   if (popup->width > marginWidth)
     popup->width = marginWidth;
-  size_t rows = popup->agenda.count ? popup->agenda.count : 1;
+  popup->height = popup->agenda.count ? 0 : popup->rowHeight;
+  for (size_t row = 0; row < popup->agenda.count; row++)
+    popup->height += agendaItemHeight(popup, &popup->agenda.items[row]);
   if (popup->agenda.hiddenEvents || popup->agenda.hiddenTasks)
-    rows++;
-  popup->height = (int)rows * popup->rowHeight;
+    popup->height += popup->rowHeight;
   int right = popup->agendaAnchorX + popup->agendaAnchorWidth;
   if (popup->agendaAnchorX + popup->agendaAnchorWidth / 2 >=
       popup->anchorX + popup->anchorWidth / 2)
@@ -1088,17 +1193,17 @@ bool nativePopupHandleEvent(NativePopup *popup,
       if (button->detail != 1)
         return true;
       int contentY = button->root_y - popup->y;
-      size_t row = (size_t)(contentY / popup->rowHeight);
-      if (row < popup->agenda.count) {
+      int row = agendaRowAtY(popup, contentY);
+      if (row >= 0) {
         snprintf(action,
                  actionSize,
                  "role|%s",
-                 popup->agenda.items[row].item.type == AGENDA_ITEM_EVENT
+                 popup->agenda.items[(size_t)row].item.type == AGENDA_ITEM_EVENT
                      ? "calendar"
                      : "tasks");
         return true;
       }
-      if (row == popup->agenda.count &&
+      if (contentY >= agendaItemsHeight(popup) &&
           (popup->agenda.hiddenEvents || popup->agenda.hiddenTasks)) {
         bool calendar = popup->agenda.hiddenEvents &&
                         (!popup->agenda.hiddenTasks ||
@@ -1142,9 +1247,7 @@ bool nativePopupHandleEvent(NativePopup *popup,
         motion->root_x < popup->x + popup->width &&
         motion->root_y >= popup->y &&
         motion->root_y < popup->y + popup->height) {
-      int row = (motion->root_y - popup->y) / popup->rowHeight;
-      if (row >= 0 && (size_t)row < popup->agenda.count)
-        hover = row;
+      hover = agendaRowAtY(popup, motion->root_y - popup->y);
     }
     if (hover != popup->agendaHover) {
       popup->agendaHover = hover;

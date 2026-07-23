@@ -10,6 +10,7 @@
 #define AGENDA_ID_MAX 256
 #define AGENDA_TITLE_MAX 256
 #define AGENDA_SOURCE_NAME_MAX 128
+#define AGENDA_ORGANIZER_MAX 256
 
 typedef enum {
   AGENDA_ITEM_EVENT,
@@ -22,6 +23,7 @@ typedef struct {
   char sourceId[AGENDA_ID_MAX];
   char sourceName[AGENDA_SOURCE_NAME_MAX];
   char title[AGENDA_TITLE_MAX];
+  char organizer[AGENDA_ORGANIZER_MAX];
   time_t start;
   time_t end;
   time_t due;

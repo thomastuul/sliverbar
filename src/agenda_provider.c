@@ -97,6 +97,27 @@ static void copyText(char *output, size_t size, const char *value) {
   output[used] = '\0';
 }
 
+void agendaProviderOrganizerLabel(ECalComponent *component,
+                                  char *output,
+                                  size_t size) {
+  if (!output || size == 0)
+    return;
+  output[0] = '\0';
+  if (!component)
+    return;
+  ECalComponentOrganizer *organizer = e_cal_component_get_organizer(component);
+  if (!organizer)
+    return;
+  const char *label = e_cal_component_organizer_get_cn(organizer);
+  if (!label || !*label) {
+    label = e_cal_component_organizer_get_value(organizer);
+    if (label && !g_ascii_strncasecmp(label, "mailto:", 7))
+      label += 7;
+  }
+  copyText(output, size, label);
+  e_cal_component_organizer_free(organizer);
+}
+
 static bool
 sourceSelected(const PanelConfig *config, AgendaItemType type, const char *id) {
   // NOLINTNEXTLINE(clang-analyzer-optin.core.EnumCastOutOfRange)
@@ -179,6 +200,9 @@ static bool appendComponent(AgendaSnapshot *snapshot,
            sizeof(item->title),
            summary ? e_cal_component_text_get_value(summary) : NULL);
   e_cal_component_text_free(summary);
+  if (source->type == AGENDA_ITEM_EVENT)
+    agendaProviderOrganizerLabel(
+        component, item->organizer, sizeof(item->organizer));
   snprintf(item->sourceName, sizeof(item->sourceName), "%s", source->name);
   snapshot->count++;
   return true;

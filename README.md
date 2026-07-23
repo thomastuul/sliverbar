@@ -230,7 +230,9 @@ block. A right click opens it directly at the panel edge; the existing left
 click still opens the calendar application. Events, tasks, overdue tasks, and
 source names use separately configurable Dracula colors. The list defaults to
 7 local calendar days, 10 rows, at most 2 undated tasks, a 300-second
-consistency refresh, and a 480-pixel popup width.
+consistency refresh, and a 720-pixel popup width. Event titles wrap instead of
+being truncated, and a second detail line shows the organizer and calendar
+source when available.
 
 Sliverbar reads only sources already exposed by Evolution Data Server. It does
 not implement DAV or OAuth, read Evolution/Thunderbird database files, store
@@ -246,7 +248,7 @@ agenda_days=7
 agenda_max_items=10
 agenda_max_undated_tasks=2
 agenda_refresh_interval=300
-agenda_popup_width=480
+agenda_popup_width=720
 agenda_show_source=true
 agenda_event_color=#8BE9FD
 agenda_task_color=#FFB86C

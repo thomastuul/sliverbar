@@ -80,7 +80,7 @@ void configDefaults(PanelConfig *c) {
   c->agendaMaxItems = 10;
   c->agendaMaxUndatedTasks = 2;
   c->agendaRefreshInterval = 300;
-  c->agendaPopupWidth = 480;
+  c->agendaPopupWidth = 720;
   c->agendaShowSource = true;
   c->agendaCalendarSourceMode = AGENDA_SOURCES_ALL;
   c->agendaTaskSourceMode = AGENDA_SOURCES_ALL;

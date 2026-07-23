@@ -1,6 +1,7 @@
 #include "agenda_provider_eds.h"
 
 #include <stdio.h>
+#include <string.h>
 
 #define CHECK(condition)                                                       \
   do {                                                                         \
@@ -58,5 +59,30 @@ int main(void) {
             utc, i_cal_timezone_get_builtin_timezone("Europe/Berlin")) ==
         utcEpoch("20260723T120000Z"));
   g_object_unref(utc);
+
+  ECalComponent *component = e_cal_component_new_from_string(
+      "BEGIN:VEVENT\r\n"
+      "UID:organizer-test\r\n"
+      "DTSTART:20260723T120000Z\r\n"
+      "DTEND:20260723T130000Z\r\n"
+      "ORGANIZER;CN=Max Mustermann:mailto:max@example.com\r\n"
+      "END:VEVENT\r\n");
+  CHECK(component != NULL);
+  char organizer[256];
+  agendaProviderOrganizerLabel(component, organizer, sizeof(organizer));
+  CHECK(strcmp(organizer, "Max Mustermann") == 0);
+  g_object_unref(component);
+
+  component =
+      e_cal_component_new_from_string("BEGIN:VEVENT\r\n"
+                                      "UID:organizer-mail-test\r\n"
+                                      "DTSTART:20260723T120000Z\r\n"
+                                      "DTEND:20260723T130000Z\r\n"
+                                      "ORGANIZER:mailto:other@example.com\r\n"
+                                      "END:VEVENT\r\n");
+  CHECK(component != NULL);
+  agendaProviderOrganizerLabel(component, organizer, sizeof(organizer));
+  CHECK(strcmp(organizer, "other@example.com") == 0);
+  g_object_unref(component);
   return 0;
 }

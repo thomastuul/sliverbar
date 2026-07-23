@@ -84,7 +84,7 @@ int main(int argc, char **argv) {
   CHECK(cfg.agendaMaxItems == 10);
   CHECK(cfg.agendaMaxUndatedTasks == 2);
   CHECK(cfg.agendaRefreshInterval == 300);
-  CHECK(cfg.agendaPopupWidth == 480);
+  CHECK(cfg.agendaPopupWidth == 720);
   CHECK(cfg.agendaShowSource);
   CHECK(strcmp(cfg.agendaEventColor, "#8BE9FD") == 0);
   CHECK(strcmp(cfg.agendaTaskColor, "#FFB86C") == 0);
