@@ -4,6 +4,8 @@
 
 #ifdef HAVE_EDS
 
+#include "agenda_provider_eds.h"
+
 #include <errno.h>
 #include <fcntl.h>
 #include <libecal/libecal.h>
@@ -55,6 +57,13 @@ typedef struct {
   atomic_bool finished;
   bool started;
 } SourceTimeout;
+
+time_t agendaProviderTimeToEpoch(const ICalTime *value,
+                                 const ICalTimezone *defaultTimezone) {
+  const ICalTimezone *eventTimezone = i_cal_time_get_timezone(value);
+  return i_cal_time_as_timet_with_zone(
+      value, eventTimezone ? eventTimezone : defaultTimezone);
+}
 
 static void copyText(char *output, size_t size, const char *value) {
   if (!value || !*value) {
@@ -192,8 +201,12 @@ static gboolean appendEventInstance(ICalComponent *ical,
   appendComponent(context->snapshot,
                   context->source,
                   component,
-                  i_cal_time_as_timet(instanceStart),
-                  i_cal_time_as_timet(instanceEnd),
+                  agendaProviderTimeToEpoch(instanceStart,
+                                            e_cal_client_get_default_timezone(
+                                                context->source->client)),
+                  agendaProviderTimeToEpoch(instanceEnd,
+                                            e_cal_client_get_default_timezone(
+                                                context->source->client)),
                   allDay);
   g_object_unref(component);
   return context->snapshot->count < AGENDA_ENTRY_MAX;
@@ -217,7 +230,10 @@ static void addTasks(AgendaSnapshot *snapshot,
     ECalComponent *component = node->data;
     ECalComponentDateTime *due = e_cal_component_get_due(component);
     ICalTime *value = due ? e_cal_component_datetime_get_value(due) : NULL;
-    time_t dueTime = value ? i_cal_time_as_timet(value) : 0;
+    time_t dueTime =
+        value ? agendaProviderTimeToEpoch(
+                    value, e_cal_client_get_default_timezone(source->client))
+              : 0;
     bool allDay = value && i_cal_time_is_date(value);
     appendComponent(snapshot, source, component, dueTime, dueTime, allDay);
     e_cal_component_datetime_free(due);
@@ -415,6 +431,8 @@ static void refreshSnapshot(AgendaProvider *provider) {
       OpenSource *opened = &provider->sources[provider->sourceCount++];
       opened->provider = provider;
       opened->client = E_CAL_CLIENT(base);
+      e_cal_client_set_default_timezone(opened->client,
+                                        e_cal_util_get_system_timezone());
       opened->type = GROUPS[group].type;
       snprintf(opened->id, sizeof(opened->id), "%s", id);
       copyText(opened->name,

@@ -171,6 +171,25 @@ if(BUILD_TESTING)
         add_test(NAME app_defaults COMMAND test_app_defaults)
         set_tests_properties(app_defaults PROPERTIES SKIP_RETURN_CODE 77)
     endif()
+    if(NOT SLIVERBAR_EDS STREQUAL "OFF" AND EDS_FOUND)
+        add_executable(test_agenda_timezone tests/test_agenda_timezone.c)
+        target_link_libraries(
+            test_agenda_timezone PRIVATE sliverbar_core PkgConfig::EDS
+        )
+        target_compile_options(
+            test_agenda_timezone PRIVATE -Wall -Wextra -Wpedantic
+        )
+        if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(
+                test_agenda_timezone PRIVATE
+                -fsanitize=address,undefined -fno-omit-frame-pointer
+            )
+            target_link_options(
+                test_agenda_timezone PRIVATE -fsanitize=address,undefined
+            )
+        endif()
+        add_test(NAME agenda_timezone COMMAND test_agenda_timezone)
+    endif()
     if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(test_core PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
         target_link_options(test_core PRIVATE -fsanitize=address,undefined)
