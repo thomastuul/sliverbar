@@ -1,6 +1,8 @@
 ## Code
 
 - Use C17.
+- Use model `gpt-5.1-codex-mini` for formatting/linting-only work.
+- Use model `gpt-5.5` with medium reasoning for all other work.
 - Format changed C files with clang-format.
 - Run clang-tidy on changed translation units.
 - Run CTest after every code change.
