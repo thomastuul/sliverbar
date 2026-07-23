@@ -8,6 +8,7 @@ typedef enum {
   APP_ROLE_NETWORK_SETTINGS,
   APP_ROLE_VOLUME_SETTINGS,
   APP_ROLE_CALENDAR,
+  APP_ROLE_TASKS,
 } AppRole;
 
 typedef struct {

@@ -57,6 +57,14 @@ static const Candidate VOLUME_SETTINGS[] = {
 
 static const Candidate CALENDARS[] = {
     {"org.gnome.Calendar.desktop", NULL, false},
+    {"org.gnome.Evolution.desktop", NULL, false},
+    {"org.kde.kalendar.desktop", NULL, false},
+    {"thunderbird.desktop", NULL, false},
+};
+
+static const Candidate TASKS[] = {
+    {"org.gnome.Evolution.desktop", NULL, false},
+    {"org.gnome.Todo.desktop", NULL, false},
     {"org.kde.kalendar.desktop", NULL, false},
     {"thunderbird.desktop", NULL, false},
 };
@@ -214,6 +222,8 @@ const char *appRoleName(AppRole role) {
     return "volume_settings";
   case APP_ROLE_CALENDAR:
     return "calendar";
+  case APP_ROLE_TASKS:
+    return "tasks";
   }
   return "unknown";
 }
@@ -228,6 +238,8 @@ static const char *roleSpec(const PanelConfig *config, AppRole role) {
     return config->volumeSettings;
   case APP_ROLE_CALENDAR:
     return config->calendar;
+  case APP_ROLE_TASKS:
+    return config->tasks;
   }
   return "";
 }
@@ -250,6 +262,10 @@ roleCandidates(AppRole role, const Candidate **candidates, size_t *count) {
   case APP_ROLE_CALENDAR:
     *candidates = CALENDARS;
     *count = sizeof(CALENDARS) / sizeof(CALENDARS[0]);
+    break;
+  case APP_ROLE_TASKS:
+    *candidates = TASKS;
+    *count = sizeof(TASKS) / sizeof(TASKS[0]);
     break;
   }
 }
@@ -414,6 +430,8 @@ bool appRoleAvailable(const PanelConfig *config, AppRole role) {
     return appSpecAvailable(config, spec);
   if (role == APP_ROLE_CALENDAR && defaultTypeAvailable("text/calendar"))
     return true;
+  if (role == APP_ROLE_TASKS && commandExists("evolution"))
+    return true;
   if (role == APP_ROLE_NETWORK_SETTINGS && !networkManagerActive())
     return false;
   const Candidate *candidates = NULL;
@@ -433,6 +451,10 @@ int appLaunchRole(const PanelConfig *config, AppRole role) {
     return appLaunchSpec(config, spec);
   if (role == APP_ROLE_CALENDAR && defaultTypeAvailable("text/calendar"))
     return launchDefaultType("text/calendar");
+  if (role == APP_ROLE_TASKS && commandExists("evolution")) {
+    char *arguments[] = {"evolution", "--component=tasks", NULL};
+    return spawnDetached(arguments);
+  }
   if (role == APP_ROLE_NETWORK_SETTINGS && !networkManagerActive())
     return -1;
   const Candidate *candidates = NULL;
@@ -469,6 +491,10 @@ void appDescribeRole(const PanelConfig *config,
   }
   if (role == APP_ROLE_CALENDAR && defaultTypeAvailable("text/calendar")) {
     snprintf(output, outputSize, "mime:text/calendar");
+    return;
+  }
+  if (role == APP_ROLE_TASKS && commandExists("evolution")) {
+    snprintf(output, outputSize, "command:evolution --component=tasks");
     return;
   }
   if (role == APP_ROLE_NETWORK_SETTINGS && !networkManagerActive()) {

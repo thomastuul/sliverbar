@@ -1,5 +1,6 @@
 #include "panel.h"
 
+#include "agenda.h"
 #include "app_launcher.h"
 #include "inhibitor.h"
 #include "power_actions.h"
@@ -27,6 +28,18 @@
       return 1;                                                                \
     }                                                                          \
   } while (0)
+
+static time_t localTime(int year, int month, int day, int hour, int minute) {
+  struct tm value = {
+      .tm_year = year - 1900,
+      .tm_mon = month - 1,
+      .tm_mday = day,
+      .tm_hour = hour,
+      .tm_min = minute,
+      .tm_isdst = -1,
+  };
+  return mktime(&value);
+}
 
 int main(int argc, char **argv) {
   if (argc == 2 && strcmp(argv[1], "--inhibit-holder") == 0) {
@@ -63,6 +76,20 @@ int main(int argc, char **argv) {
   CHECK(cfg.iconFont[0] == '\0');
   CHECK(strcmp(cfg.terminal, "auto") == 0);
   CHECK(strcmp(cfg.language, "auto") == 0);
+  CHECK(strcmp(cfg.tasks, "auto") == 0);
+  CHECK(strcmp(cfg.agendaProvider, "none") == 0);
+  CHECK(cfg.agendaCalendarSourceMode == AGENDA_SOURCES_ALL);
+  CHECK(cfg.agendaTaskSourceMode == AGENDA_SOURCES_ALL);
+  CHECK(cfg.agendaDays == 7);
+  CHECK(cfg.agendaMaxItems == 10);
+  CHECK(cfg.agendaMaxUndatedTasks == 2);
+  CHECK(cfg.agendaRefreshInterval == 300);
+  CHECK(cfg.agendaPopupWidth == 480);
+  CHECK(cfg.agendaShowSource);
+  CHECK(strcmp(cfg.agendaEventColor, "#8BE9FD") == 0);
+  CHECK(strcmp(cfg.agendaTaskColor, "#FFB86C") == 0);
+  CHECK(strcmp(cfg.agendaOverdueColor, "#FF5555") == 0);
+  CHECK(strcmp(cfg.agendaSourceColor, "#6272A4") == 0);
   CHECK(strstr(cfg.timerSound, "alarm-clock-elapsed.oga") != NULL);
   CHECK(cfg.location[0] == '\0');
   CHECK(cfg.moduleClock == MODULE_AUTO);
@@ -107,6 +134,73 @@ int main(int argc, char **argv) {
   CHECK(!panelLanguageIsGerman(&cfg));
   CHECK(strcmp(powerActionLabel(&cfg, "poweroff"), "Power off") == 0);
   snprintf(cfg.language, sizeof(cfg.language), "auto");
+
+  CHECK(setenv("TZ", "UTC", 1) == 0);
+  tzset();
+  time_t agendaNow = localTime(2026, 7, 23, 10, 0);
+  AgendaSnapshot agendaSnapshot = {
+      .selectedSourceCount = 2,
+      .reachableSourceCount = 2,
+      .initialized = true,
+  };
+  AgendaItem agendaItems[] = {
+      {.type = AGENDA_ITEM_EVENT,
+       .title = "Afternoon",
+       .start = localTime(2026, 7, 23, 14, 0),
+       .end = localTime(2026, 7, 23, 15, 0),
+       .hasStart = true,
+       .hasEnd = true},
+      {.type = AGENDA_ITEM_TASK,
+       .title = "Overdue",
+       .due = localTime(2026, 7, 22, 0, 0),
+       .hasDue = true,
+       .dateOnly = true},
+      {.type = AGENDA_ITEM_EVENT,
+       .title = "Ongoing",
+       .start = localTime(2026, 7, 23, 9, 0),
+       .end = localTime(2026, 7, 23, 11, 0),
+       .hasStart = true,
+       .hasEnd = true},
+      {.type = AGENDA_ITEM_TASK,
+       .title = "Today",
+       .due = localTime(2026, 7, 23, 0, 0),
+       .hasDue = true,
+       .dateOnly = true},
+      {.type = AGENDA_ITEM_TASK, .title = "Undated A"},
+      {.type = AGENDA_ITEM_TASK, .title = "Undated B"},
+      {.type = AGENDA_ITEM_TASK, .title = "Undated C"},
+      {.type = AGENDA_ITEM_EVENT,
+       .title = "Cancelled",
+       .start = localTime(2026, 7, 23, 12, 0),
+       .end = localTime(2026, 7, 23, 13, 0),
+       .hasStart = true,
+       .hasEnd = true,
+       .cancelled = true},
+  };
+  agendaSnapshot.count = sizeof(agendaItems) / sizeof(agendaItems[0]);
+  memcpy(agendaSnapshot.items, agendaItems, sizeof(agendaItems));
+  AgendaView agendaView;
+  agendaBuildView(&agendaSnapshot, agendaNow, 7, 6, 2, true, &agendaView);
+  CHECK(agendaView.initialized);
+  CHECK(agendaView.available);
+  CHECK(agendaView.count == 6);
+  CHECK(strcmp(agendaView.items[0].item.title, "Overdue") == 0);
+  CHECK(agendaView.items[0].overdue);
+  CHECK(strstr(agendaView.items[0].when, "Ueberfaellig") != NULL);
+  CHECK(strcmp(agendaView.items[1].item.title, "Ongoing") == 0);
+  CHECK(agendaView.items[1].ongoing);
+  CHECK(strstr(agendaView.items[1].when, "Laufend") != NULL);
+  CHECK(strcmp(agendaView.items[2].item.title, "Today") == 0);
+  CHECK(strcmp(agendaView.items[3].item.title, "Afternoon") == 0);
+  CHECK(agendaView.hiddenTasks == 1);
+  agendaSnapshot.reachableSourceCount = 0;
+  agendaBuildView(&agendaSnapshot, agendaNow, 7, 10, 2, false, &agendaView);
+  CHECK(!agendaView.available);
+  agendaSnapshot.reachableSourceCount = 1;
+  agendaSnapshot.count = 0;
+  agendaBuildView(&agendaSnapshot, agendaNow, 7, 10, 2, false, &agendaView);
+  CHECK(agendaView.available);
+  CHECK(agendaView.count == 0);
 
   char forecastPath[PANEL_PATH_MAX];
   CHECK(snprintf(forecastPath,
@@ -217,6 +311,18 @@ int main(int argc, char **argv) {
   forecastConfig.internalWeatherForecastAvailable = false;
   moduleWeather(&forecastConfig, &forecastState);
   CHECK(strstr(forecastState.weather, "weather|forecast") == NULL);
+  PanelState agendaClockState = {0};
+  snprintf(forecastConfig.calendar,
+           sizeof(forecastConfig.calendar),
+           "%s",
+           "command:/bin/true");
+  forecastConfig.internalAgendaAvailable = true;
+  moduleClock(&forecastConfig, &agendaClockState);
+  CHECK(strstr(agendaClockState.clock, "role|calendar") != NULL);
+  CHECK(strstr(agendaClockState.clock, "agenda|toggle") != NULL);
+  forecastConfig.internalAgendaAvailable = false;
+  moduleClock(&forecastConfig, &agendaClockState);
+  CHECK(strstr(agendaClockState.clock, "agenda|toggle") == NULL);
 
   const char *oldLanguage = getenv("LANGUAGE");
   const char *oldLcMessages = getenv("LC_MESSAGES");
@@ -279,6 +385,72 @@ int main(int argc, char **argv) {
   CHECK(!powerActionAllowed(cfg.powerActions, "hibernate"));
   CHECK(unlink(path) == 0);
 
+  PanelConfig agendaConfig;
+  configDefaults(&agendaConfig);
+  char agendaPath[] = "/tmp/sliverbar-agenda-test-XXXXXX";
+  fd = mkstemp(agendaPath);
+  CHECK(fd >= 0);
+  const char AGENDA_TEXT[] = "agenda_provider=eds\n"
+                             "agenda_calendar_source=personal\n"
+                             "agenda_calendar_source=work\n"
+                             "agenda_task_source=none\n"
+                             "agenda_days=45\n"
+                             "agenda_max_items=2\n"
+                             "agenda_max_undated_tasks=8\n"
+                             "agenda_refresh_interval=10\n"
+                             "agenda_popup_width=900\n"
+                             "agenda_show_source=false\n"
+                             "agenda_event_color=#8be9fd\n"
+                             "tasks=command:evolution --component=tasks\n";
+  CHECK(write(fd, AGENDA_TEXT, sizeof(AGENDA_TEXT) - 1) ==
+        (ssize_t)(sizeof(AGENDA_TEXT) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&agendaConfig, agendaPath, error, sizeof(error)) == 0);
+  CHECK(strcmp(agendaConfig.agendaProvider, "eds") == 0);
+  CHECK(agendaConfig.agendaCalendarSourceMode == AGENDA_SOURCES_EXPLICIT);
+  CHECK(agendaConfig.agendaCalendarSourceCount == 2);
+  CHECK(strcmp(agendaConfig.agendaCalendarSources[0], "personal") == 0);
+  CHECK(strcmp(agendaConfig.agendaCalendarSources[1], "work") == 0);
+  CHECK(agendaConfig.agendaTaskSourceMode == AGENDA_SOURCES_NONE);
+  CHECK(agendaConfig.agendaTaskSourceCount == 0);
+  CHECK(agendaConfig.agendaDays == 31);
+  CHECK(agendaConfig.agendaMaxItems == 4);
+  CHECK(agendaConfig.agendaMaxUndatedTasks == 5);
+  CHECK(agendaConfig.agendaRefreshInterval == 60);
+  CHECK(agendaConfig.agendaPopupWidth == 720);
+  CHECK(!agendaConfig.agendaShowSource);
+  CHECK(strcmp(agendaConfig.agendaEventColor, "#8be9fd") == 0);
+  CHECK(strcmp(agendaConfig.tasks, "command:evolution --component=tasks") == 0);
+  CHECK(unlink(agendaPath) == 0);
+
+  char invalidAgendaPath[] = "/tmp/sliverbar-agenda-invalid-XXXXXX";
+  fd = mkstemp(invalidAgendaPath);
+  CHECK(fd >= 0);
+  const char INVALID_AGENDA_TEXT[] = "agenda_calendar_source=*\n"
+                                     "agenda_calendar_source=personal\n";
+  CHECK(write(fd, INVALID_AGENDA_TEXT, sizeof(INVALID_AGENDA_TEXT) - 1) ==
+        (ssize_t)(sizeof(INVALID_AGENDA_TEXT) - 1));
+  CHECK(close(fd) == 0);
+  configDefaults(&agendaConfig);
+  CHECK(configLoad(&agendaConfig, invalidAgendaPath, error, sizeof(error)) !=
+        0);
+  CHECK(unlink(invalidAgendaPath) == 0);
+
+  char invalidAgendaValuePath[] = "/tmp/sliverbar-agenda-invalid-value-XXXXXX";
+  fd = mkstemp(invalidAgendaValuePath);
+  CHECK(fd >= 0);
+  const char INVALID_AGENDA_VALUE_TEXT[] = "agenda_show_source=yes\n"
+                                           "agenda_event_color=cyan\n";
+  CHECK(write(fd,
+              INVALID_AGENDA_VALUE_TEXT,
+              sizeof(INVALID_AGENDA_VALUE_TEXT) - 1) ==
+        (ssize_t)(sizeof(INVALID_AGENDA_VALUE_TEXT) - 1));
+  CHECK(close(fd) == 0);
+  configDefaults(&agendaConfig);
+  CHECK(configLoad(
+            &agendaConfig, invalidAgendaValuePath, error, sizeof(error)) != 0);
+  CHECK(unlink(invalidAgendaValuePath) == 0);
+
   CHECK(appSpecAvailable(&cfg, "command:/bin/true"));
   CHECK(!appSpecAvailable(&cfg, "command:/definitely/missing/sliverbar"));
   CHECK(!appSpecAvailable(&cfg, "command:'unterminated"));
@@ -297,6 +469,14 @@ int main(int argc, char **argv) {
   char *terminalProbe[] = {"/bin/true", NULL};
   CHECK(appLaunchTerminal(&cfg, terminalProbe) == 0);
   snprintf(cfg.terminal, sizeof(cfg.terminal), "auto");
+  snprintf(cfg.tasks, sizeof(cfg.tasks), "command:/bin/true");
+  CHECK(appRoleAvailable(&cfg, APP_ROLE_TASKS));
+  CHECK(appLaunchRole(&cfg, APP_ROLE_TASKS) == 0);
+  snprintf(
+      cfg.tasks, sizeof(cfg.tasks), "command:/definitely/missing/sliverbar");
+  CHECK(!appRoleAvailable(&cfg, APP_ROLE_TASKS));
+  CHECK(appLaunchRole(&cfg, APP_ROLE_TASKS) != 0);
+  snprintf(cfg.tasks, sizeof(cfg.tasks), "auto");
 
   if (appLauncherHasGio()) {
     char dataHome[] = "/tmp/sliverbar-app-info-XXXXXX";

@@ -6,6 +6,7 @@ sliverbar \- lightweight native X11 panel
 .RI [ \-\-config\ PATH ]
 .RB [ \-\-check-config ]
 .RB [ \-\-diagnose ]
+.RB [ \-\-list-pim-sources ]
 .RB [ \-\-version ]
 .SH DESCRIPTION
 .B sliverbar
@@ -32,6 +33,12 @@ invalid keys cause failure.
 Print the selected configuration, display and workspace backend, optional
 programs, fonts, application roles, launcher catalog, WLAN source, weather
 locations, power actions, and inhibitor backend without starting the panel.
+.TP
+.B \-\-list-pim-sources
+List Evolution Data Server calendar and task sources as tab-separated type,
+enabled state, stable ID, and display name.  Credentials, DAV URLs, and server
+addresses are not printed.  The command fails when EDS support is not compiled
+in or the registry is unavailable.
 .TP
 .B \-\-version
 Print the program name and version, then exit successfully.
@@ -125,7 +132,7 @@ Terminal selection.  The default
 .B auto
 uses the system terminal preference and known portable fallbacks.
 .TP
-.B system_monitor, network_settings, volume_settings, calendar
+.B system_monitor, network_settings, volume_settings, calendar, tasks
 Application roles.  Values may be
 .BR auto ,
 .BI desktop: ID.desktop ,
@@ -164,6 +171,55 @@ Comma-separated ordered subsets of
 .BR reboot ,
 and
 .BR poweroff .
+.SS Read-only agenda
+.TP
+.B agenda_provider
+.B none
+or
+.BR eds .
+The portable default
+.B none
+does not start EDS.  The EDS provider only reads sources already exposed by
+Evolution Data Server; Sliverbar does not implement DAV or OAuth, read private
+PIM database files, write PIM data, or create an on-disk agenda cache.
+.TP
+.B agenda_calendar_source, agenda_task_source
+Repeat a stable source ID, use
+.B *
+for all enabled sources, or
+.B none
+to disable that type.  Wildcards and
+.B none
+cannot be combined with explicit IDs.  At most 16 explicit IDs are accepted.
+.TP
+.B agenda_days, agenda_max_items, agenda_max_undated_tasks
+The defaults are 7 local calendar days, 10 total rows, and 2 undated tasks.
+The accepted ranges are 1\-31, 4\-20, and 0\-5 respectively.
+.TP
+.B agenda_refresh_interval, agenda_popup_width
+Consistency refresh in seconds (default 300, range 60\-3600) and popup width
+in pixels (default 480, range 320\-720).
+.TP
+.B agenda_show_source
+.B true
+or
+.BR false ;
+defaults to true.
+.TP
+.B agenda_event_color, agenda_task_color, agenda_overdue_color, agenda_source_color
+Exact
+.B #RRGGBB
+colors.  Dracula defaults are
+.BR #8BE9FD ,
+.BR #FFB86C ,
+.BR #FF5555 ,
+and
+.BR #6272A4 .
+.PP
+Right click on the date/time block toggles the native agenda at the panel
+edge.  Left click retains the calendar action.  Agenda rows open the matching
+calendar or tasks role.  The popup stays disabled until at least one selected
+source is reachable and does not take keyboard focus.
 .SS Weather
 .TP
 .B weather_location

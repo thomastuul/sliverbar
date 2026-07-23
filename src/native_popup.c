@@ -28,6 +28,7 @@
 typedef enum {
   POPUP_MODE_MENU,
   POPUP_MODE_FORECAST,
+  POPUP_MODE_AGENDA,
 } PopupMode;
 
 struct NativePopup {
@@ -58,15 +59,20 @@ struct NativePopup {
   int panelHeight;
   int forecastAnchorX;
   int forecastAnchorWidth;
+  int agendaAnchorX;
+  int agendaAnchorWidth;
+  int agendaHover;
   xcb_window_t previousFocus;
   uint8_t previousRevertTo;
   bool focusSaved;
   bool open;
+  bool pointerGrabbed;
   bool searchable;
   bool hasIconFont;
   PopupMode mode;
   char query[256];
   WeatherForecast forecast;
+  AgendaView agenda;
   char forecastLocation[128];
 #ifdef HAVE_XKBCOMMON_X11
   struct xkb_context *xkbContext;
@@ -458,11 +464,91 @@ static void drawForecast(NativePopup *popup) {
   }
 }
 
+static void drawAgenda(NativePopup *popup) {
+  setColor(popup->cairo, popup->config.colorPanelBg, "#000000");
+  cairo_paint(popup->cairo);
+  bool german = panelLanguageIsGerman(&popup->config);
+  if (popup->agenda.count == 0) {
+    drawEllipsizedText(popup,
+                       german ? "Keine anstehenden Termine oder Aufgaben"
+                              : "No upcoming events or tasks",
+                       12,
+                       5,
+                       popup->width - 24,
+                       popup->config.colorMuted);
+  }
+  for (size_t row = 0; row < popup->agenda.count; row++) {
+    const AgendaDisplayItem *display = &popup->agenda.items[row];
+    int y = (int)row * popup->rowHeight;
+    if ((int)row == popup->agendaHover) {
+      setColor(popup->cairo, popup->config.colorFocusedFreeBg, "#333333");
+      cairo_rectangle(popup->cairo, 0, y, popup->width, popup->rowHeight);
+      cairo_fill(popup->cairo);
+    }
+    const char *typeColor = display->overdue
+                                ? popup->config.agendaOverdueColor
+                                : (display->item.type == AGENDA_ITEM_EVENT
+                                       ? popup->config.agendaEventColor
+                                       : popup->config.agendaTaskColor);
+    const char *symbol = display->item.type == AGENDA_ITEM_EVENT ? "●" : "◆";
+    drawText(popup, symbol, 10, y + 5, typeColor);
+    int whenX = 30;
+    int whenWidth = textWidth(popup, display->when);
+    drawText(popup, display->when, whenX, y + 5, typeColor);
+    int titleX = whenX + whenWidth + 12;
+    int right = popup->width - 10;
+    if (popup->config.agendaShowSource && display->item.sourceName[0]) {
+      int sourceWidth = textWidth(popup, display->item.sourceName);
+      int maximumSourceWidth = popup->width / 4;
+      if (sourceWidth > maximumSourceWidth)
+        sourceWidth = maximumSourceWidth;
+      drawEllipsizedText(popup,
+                         display->item.sourceName,
+                         right - sourceWidth,
+                         y + 5,
+                         sourceWidth,
+                         popup->config.agendaSourceColor);
+      right -= sourceWidth + 12;
+    }
+    const char *title = display->item.title[0]
+                            ? display->item.title
+                            : (german ? "(Ohne Titel)" : "(Untitled)");
+    drawEllipsizedText(
+        popup, title, titleX, y + 5, right - titleX, popup->config.colorFree);
+  }
+  if (popup->agenda.hiddenEvents || popup->agenda.hiddenTasks) {
+    int y = (int)popup->agenda.count * popup->rowHeight;
+    setColor(popup->cairo, popup->config.colorBg, "#222222");
+    cairo_rectangle(popup->cairo, 0, y, popup->width, popup->rowHeight);
+    cairo_fill(popup->cairo);
+    char events[96] = "", tasks[96] = "";
+    if (popup->agenda.hiddenEvents)
+      snprintf(events,
+               sizeof(events),
+               german ? "+ %zu weitere Termine" : "+ %zu more events",
+               popup->agenda.hiddenEvents);
+    if (popup->agenda.hiddenTasks)
+      snprintf(tasks,
+               sizeof(tasks),
+               german ? "+ %zu weitere Aufgaben" : "+ %zu more tasks",
+               popup->agenda.hiddenTasks);
+    drawText(popup, events, 10, y + 5, popup->config.agendaEventColor);
+    if (tasks[0])
+      drawRightAlignedText(popup,
+                           tasks,
+                           popup->width - 10,
+                           y + 5,
+                           popup->config.agendaTaskColor);
+  }
+}
+
 static void drawPopup(NativePopup *popup) {
   if (!popup->open)
     return;
   if (popup->mode == POPUP_MODE_FORECAST)
     drawForecast(popup);
+  else if (popup->mode == POPUP_MODE_AGENDA)
+    drawAgenda(popup);
   else
     drawMenu(popup);
   cairo_surface_flush(popup->surface);
@@ -521,8 +607,8 @@ NativePopup *nativePopupCreate(xcb_connection_t *connection,
       screen->black_pixel,
       1,
       XCB_EVENT_MASK_EXPOSURE | XCB_EVENT_MASK_BUTTON_PRESS |
-          XCB_EVENT_MASK_KEY_PRESS | XCB_EVENT_MASK_KEY_RELEASE |
-          XCB_EVENT_MASK_FOCUS_CHANGE,
+          XCB_EVENT_MASK_POINTER_MOTION | XCB_EVENT_MASK_KEY_PRESS |
+          XCB_EVENT_MASK_KEY_RELEASE | XCB_EVENT_MASK_FOCUS_CHANGE,
   };
   xcb_create_window(connection,
                     screen->root_depth,
@@ -643,7 +729,7 @@ static void configurePopupWindow(NativePopup *popup) {
   cairo_xcb_surface_set_size(popup->surface, popup->width, popup->height);
 }
 
-static void showPopup(NativePopup *popup) {
+static void showPopup(NativePopup *popup, bool takeFocus) {
   configurePopupWindow(popup);
   xcb_map_window(popup->connection, popup->window);
   const uint32_t STACK_MODE = XCB_STACK_MODE_ABOVE;
@@ -651,18 +737,20 @@ static void showPopup(NativePopup *popup) {
                        popup->window,
                        XCB_CONFIG_WINDOW_STACK_MODE,
                        &STACK_MODE);
-  xcb_get_input_focus_reply_t *focusReply = xcb_get_input_focus_reply(
-      popup->connection, xcb_get_input_focus(popup->connection), NULL);
-  popup->focusSaved = focusReply != NULL;
-  if (focusReply) {
-    popup->previousFocus = focusReply->focus;
-    popup->previousRevertTo = focusReply->revert_to;
+  if (takeFocus) {
+    xcb_get_input_focus_reply_t *focusReply = xcb_get_input_focus_reply(
+        popup->connection, xcb_get_input_focus(popup->connection), NULL);
+    popup->focusSaved = focusReply != NULL;
+    if (focusReply) {
+      popup->previousFocus = focusReply->focus;
+      popup->previousRevertTo = focusReply->revert_to;
+    }
+    free(focusReply);
+    xcb_set_input_focus(popup->connection,
+                        XCB_INPUT_FOCUS_POINTER_ROOT,
+                        popup->window,
+                        XCB_CURRENT_TIME);
   }
-  free(focusReply);
-  xcb_set_input_focus(popup->connection,
-                      XCB_INPUT_FOCUS_POINTER_ROOT,
-                      popup->window,
-                      XCB_CURRENT_TIME);
   popup->open = true;
   drawPopup(popup);
 }
@@ -691,7 +779,7 @@ int nativePopupOpen(NativePopup *popup,
   popup->x = anchorRight ? popup->anchorX + popup->anchorWidth - popup->width
                          : popup->anchorX;
   popup->y = popup->anchorY + popup->panelHeight;
-  showPopup(popup);
+  showPopup(popup, true);
   return 0;
 }
 
@@ -731,7 +819,7 @@ int nativePopupOpenForecast(NativePopup *popup,
   popup->forecastAnchorX = actionX;
   popup->forecastAnchorWidth = actionWidth > 0 ? actionWidth : 1;
   configureForecastGeometry(popup);
-  showPopup(popup);
+  showPopup(popup, true);
   return 0;
 }
 
@@ -752,6 +840,95 @@ void nativePopupUpdateForecast(NativePopup *popup,
 
 bool nativePopupIsForecastOpen(const NativePopup *popup) {
   return popup && popup->open && popup->mode == POPUP_MODE_FORECAST;
+}
+
+static bool configureAgendaGeometry(NativePopup *popup) {
+  int marginWidth = popup->anchorWidth - 16;
+  popup->width = (int)popup->config.agendaPopupWidth;
+  if (popup->width > marginWidth)
+    popup->width = marginWidth;
+  size_t rows = popup->agenda.count ? popup->agenda.count : 1;
+  if (popup->agenda.hiddenEvents || popup->agenda.hiddenTasks)
+    rows++;
+  popup->height = (int)rows * popup->rowHeight;
+  int right = popup->agendaAnchorX + popup->agendaAnchorWidth;
+  if (popup->agendaAnchorX + popup->agendaAnchorWidth / 2 >=
+      popup->anchorX + popup->anchorWidth / 2)
+    popup->x = right - popup->width;
+  else
+    popup->x = popup->agendaAnchorX;
+  int minimumX = popup->anchorX + 8;
+  int maximumX = popup->anchorX + popup->anchorWidth - popup->width - 8;
+  if (popup->x < minimumX)
+    popup->x = minimumX;
+  if (popup->x > maximumX)
+    popup->x = maximumX;
+  int below = popup->anchorY + popup->panelHeight;
+  int screenBottom = (int)popup->screen->height_in_pixels;
+  if (below + popup->height <= screenBottom)
+    popup->y = below;
+  else if (popup->anchorY - popup->height >= 0)
+    popup->y = popup->anchorY - popup->height;
+  else
+    return false;
+  return true;
+}
+
+int nativePopupOpenAgenda(NativePopup *popup,
+                          const AgendaView *agenda,
+                          int actionX,
+                          int actionWidth) {
+  if (!nativePopupAvailable(popup) || !agenda || !agenda->available)
+    return -1;
+  popup->mode = POPUP_MODE_AGENDA;
+  popup->searchable = false;
+  popup->agenda = *agenda;
+  popup->agendaAnchorX = actionX;
+  popup->agendaAnchorWidth = actionWidth > 0 ? actionWidth : 1;
+  popup->agendaHover = -1;
+  if (!configureAgendaGeometry(popup))
+    return -1;
+  showPopup(popup, false);
+  xcb_grab_pointer_cookie_t cookie = xcb_grab_pointer(
+      popup->connection,
+      0,
+      popup->screen->root,
+      XCB_EVENT_MASK_BUTTON_PRESS | XCB_EVENT_MASK_POINTER_MOTION,
+      XCB_GRAB_MODE_ASYNC,
+      XCB_GRAB_MODE_ASYNC,
+      XCB_WINDOW_NONE,
+      XCB_CURSOR_NONE,
+      XCB_CURRENT_TIME);
+  xcb_grab_pointer_reply_t *reply =
+      xcb_grab_pointer_reply(popup->connection, cookie, NULL);
+  popup->pointerGrabbed = reply && reply->status == XCB_GRAB_STATUS_SUCCESS;
+  free(reply);
+  if (!popup->pointerGrabbed) {
+    nativePopupClose(popup);
+    return -1;
+  }
+  return 0;
+}
+
+void nativePopupUpdateAgenda(NativePopup *popup, const AgendaView *agenda) {
+  if (!popup || !agenda || !nativePopupIsAgendaOpen(popup))
+    return;
+  if (!agenda->available) {
+    nativePopupClose(popup);
+    return;
+  }
+  popup->agenda = *agenda;
+  popup->agendaHover = -1;
+  if (!configureAgendaGeometry(popup)) {
+    nativePopupClose(popup);
+    return;
+  }
+  configurePopupWindow(popup);
+  drawPopup(popup);
+}
+
+bool nativePopupIsAgendaOpen(const NativePopup *popup) {
+  return popup && popup->open && popup->mode == POPUP_MODE_AGENDA;
 }
 
 void nativePopupGeometry(
@@ -778,6 +955,8 @@ void nativePopupClose(NativePopup *popup) {
                       popup->previousFocus != XCB_INPUT_FOCUS_NONE;
   free(focusReply);
   xcb_unmap_window(popup->connection, popup->window);
+  if (popup->pointerGrabbed)
+    xcb_ungrab_pointer(popup->connection, XCB_CURRENT_TIME);
   if (restoreFocus)
     xcb_set_input_focus(popup->connection,
                         popup->previousRevertTo,
@@ -785,6 +964,7 @@ void nativePopupClose(NativePopup *popup) {
                         XCB_CURRENT_TIME);
   xcb_flush(popup->connection);
   popup->focusSaved = false;
+  popup->pointerGrabbed = false;
   popup->open = false;
 }
 
@@ -904,6 +1084,30 @@ bool nativePopupHandleEvent(NativePopup *popup,
     }
     if (popup->mode == POPUP_MODE_FORECAST)
       return true;
+    if (popup->mode == POPUP_MODE_AGENDA) {
+      if (button->detail != 1)
+        return true;
+      int contentY = button->root_y - popup->y;
+      size_t row = (size_t)(contentY / popup->rowHeight);
+      if (row < popup->agenda.count) {
+        snprintf(action,
+                 actionSize,
+                 "role|%s",
+                 popup->agenda.items[row].item.type == AGENDA_ITEM_EVENT
+                     ? "calendar"
+                     : "tasks");
+        return true;
+      }
+      if (row == popup->agenda.count &&
+          (popup->agenda.hiddenEvents || popup->agenda.hiddenTasks)) {
+        bool calendar = popup->agenda.hiddenEvents &&
+                        (!popup->agenda.hiddenTasks ||
+                         button->root_x < popup->x + popup->width / 2);
+        snprintf(
+            action, actionSize, "role|%s", calendar ? "calendar" : "tasks");
+      }
+      return true;
+    }
     if (button->detail == 4 && popup->selected > 0) {
       popup->selected--;
       ensureSelectedVisible(popup);
@@ -930,6 +1134,24 @@ bool nativePopupHandleEvent(NativePopup *popup,
     }
     return true;
   }
+  if (type == XCB_MOTION_NOTIFY && popup->mode == POPUP_MODE_AGENDA) {
+    const xcb_motion_notify_event_t *motion =
+        (const xcb_motion_notify_event_t *)event;
+    int hover = -1;
+    if (motion->root_x >= popup->x &&
+        motion->root_x < popup->x + popup->width &&
+        motion->root_y >= popup->y &&
+        motion->root_y < popup->y + popup->height) {
+      int row = (motion->root_y - popup->y) / popup->rowHeight;
+      if (row >= 0 && (size_t)row < popup->agenda.count)
+        hover = row;
+    }
+    if (hover != popup->agendaHover) {
+      popup->agendaHover = hover;
+      drawPopup(popup);
+    }
+    return true;
+  }
 #ifdef HAVE_XKBCOMMON_X11
   if (type == XCB_KEY_PRESS) {
     handleKey(popup, (const xcb_key_press_event_t *)event, action, actionSize);
@@ -941,7 +1163,7 @@ bool nativePopupHandleEvent(NativePopup *popup,
     return true;
   }
 #endif
-  if (type == XCB_FOCUS_OUT) {
+  if (type == XCB_FOCUS_OUT && popup->mode != POPUP_MODE_AGENDA) {
     if (!nativePopupHasFocus(popup))
       nativePopupClose(popup);
     return true;

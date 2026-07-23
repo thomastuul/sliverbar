@@ -206,7 +206,8 @@ screen is the safe fallback.
 ### Application roles
 
 Clicks are dispatched without shell evaluation. `system_monitor`,
-`network_settings`, `volume_settings`, and `calendar` default to `auto`.
+`network_settings`, `volume_settings`, `calendar`, and `tasks` default to
+`auto`.
 Overrides accept `desktop:ID.desktop`, `command:PROGRAM ARGUMENTS`, or
 `terminal:PROGRAM ARGUMENTS`; quoted argv syntax is parsed but never evaluated
 as shell code. Desktop entries and default file handlers use GIO when it was
@@ -221,6 +222,43 @@ and `pavucontrol` before terminal mixers. Terminal programs prefer
 `xdg-terminal-exec`, then a simple `$TERMINAL`, followed by known terminals
 with their appropriate command separator. If no valid target exists, the block
 remains visible but has no click action.
+
+### Read-only EDS agenda
+
+Set `agenda_provider=eds` to add a native read-only agenda to the date/time
+block. A right click opens it directly at the panel edge; the existing left
+click still opens the calendar application. Events, tasks, overdue tasks, and
+source names use separately configurable Dracula colors. The list defaults to
+7 local calendar days, 10 rows, at most 2 undated tasks, a 300-second
+consistency refresh, and a 480-pixel popup width.
+
+Sliverbar reads only sources already exposed by Evolution Data Server. It does
+not implement DAV or OAuth, read Evolution/Thunderbird database files, store
+credentials, or write PIM data. List safe source IDs and display names with
+`sliverbar --list-pim-sources`, then select all enabled sources with `*`,
+disable a type with `none`, or repeat explicit source IDs:
+
+```ini
+agenda_provider=eds
+agenda_calendar_source=*
+agenda_task_source=*
+agenda_days=7
+agenda_max_items=10
+agenda_max_undated_tasks=2
+agenda_refresh_interval=300
+agenda_popup_width=480
+agenda_show_source=true
+agenda_event_color=#8BE9FD
+agenda_task_color=#FFB86C
+agenda_overdue_color=#FF5555
+agenda_source_color=#6272A4
+```
+
+`agenda_provider=none` is the portable default. When EDS support is absent or
+all selected sources fail, startup logs an unavailable state and right click
+does nothing. Reachable sources remain usable during a partial failure. The
+optional build switch is `-DSLIVERBAR_EDS=AUTO|ON|OFF`; `ON` requires
+`libecal-2.0` and `libedataserver-1.2`.
 
 `workspace_backend=auto` prefers bspwm's report stream when a reachable `bspc`
 is available and otherwise uses EWMH. `ewmh` forces the portable backend,

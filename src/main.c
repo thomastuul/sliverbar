@@ -1,3 +1,4 @@
+#include "agenda_provider.h"
 #include "native_panel.h"
 #include "native_popup.h"
 #include "panel.h"
@@ -710,6 +711,46 @@ static void updateOpenWeatherForecast(NativePopup *popup,
   nativePopupUpdateForecast(popup, &forecast, activeWeatherLabel(config));
 }
 
+static int openAgenda(NativePopup *popup,
+                      const NativePanel *panel,
+                      const PanelConfig *config,
+                      const AgendaSnapshot *snapshot) {
+  AgendaView agenda;
+  agendaBuildView(snapshot,
+                  time(NULL),
+                  config->agendaDays,
+                  config->agendaMaxItems,
+                  config->agendaMaxUndatedTasks,
+                  panelLanguageIsGerman(config),
+                  &agenda);
+  if (!agenda.available)
+    return -1;
+  int actionX = 0, actionWidth = 1;
+  if (!nativePanelActionBounds(
+          panel, "agenda|toggle", &actionX, &actionWidth)) {
+    int panelY = 0, panelWidth = 0, panelHeight = 0;
+    nativePanelBounds(panel, &actionX, &panelY, &panelWidth, &panelHeight);
+    actionX += panelWidth;
+  }
+  return nativePopupOpenAgenda(popup, &agenda, actionX, actionWidth);
+}
+
+static void updateOpenAgenda(NativePopup *popup,
+                             const PanelConfig *config,
+                             const AgendaSnapshot *snapshot) {
+  if (!nativePopupIsAgendaOpen(popup))
+    return;
+  AgendaView agenda;
+  agendaBuildView(snapshot,
+                  time(NULL),
+                  config->agendaDays,
+                  config->agendaMaxItems,
+                  config->agendaMaxUndatedTasks,
+                  panelLanguageIsGerman(config),
+                  &agenda);
+  nativePopupUpdateAgenda(popup, &agenda);
+}
+
 static void
 restartWeather(PanelConfig *config, PanelState *state, pid_t *weatherPid) {
   if (*weatherPid > 0) {
@@ -844,7 +885,8 @@ static void doAction(PanelConfig *c,
                      pid_t *weatherPid,
                      Inhibitor *inhibitor,
                      Timer *timer,
-                     pid_t *timerSoundPid) {
+                     pid_t *timerSoundPid,
+                     const AgendaSnapshot *agendaSnapshot) {
   char copybuf[1024];
   snprintf(copybuf, sizeof(copybuf), "%s", line);
   char *nl = strpbrk(copybuf, "\r\n");
@@ -901,14 +943,19 @@ static void doAction(PanelConfig *c,
     char *av[] = {arg, NULL};
     appLaunchTerminal(c, av);
   } else if (!strcmp(kind, "role") && arg) {
+    int launchResult = -1;
     if (!strcmp(arg, "system_monitor"))
-      appLaunchRole(c, APP_ROLE_SYSTEM_MONITOR);
+      launchResult = appLaunchRole(c, APP_ROLE_SYSTEM_MONITOR);
     else if (!strcmp(arg, "network_settings"))
-      appLaunchRole(c, APP_ROLE_NETWORK_SETTINGS);
+      launchResult = appLaunchRole(c, APP_ROLE_NETWORK_SETTINGS);
     else if (!strcmp(arg, "volume_settings"))
-      appLaunchRole(c, APP_ROLE_VOLUME_SETTINGS);
+      launchResult = appLaunchRole(c, APP_ROLE_VOLUME_SETTINGS);
     else if (!strcmp(arg, "calendar"))
-      appLaunchRole(c, APP_ROLE_CALENDAR);
+      launchResult = appLaunchRole(c, APP_ROLE_CALENDAR);
+    else if (!strcmp(arg, "tasks"))
+      launchResult = appLaunchRole(c, APP_ROLE_TASKS);
+    if (!launchResult && nativePopupIsAgendaOpen(popup))
+      nativePopupClose(popup);
   } else if (!strcmp(kind, "app") && arg) {
     char spec[320];
     snprintf(spec, sizeof(spec), "desktop:%s", arg);
@@ -979,6 +1026,11 @@ static void doAction(PanelConfig *c,
       openWeatherLocations(popup, c);
   } else if (!strcmp(kind, "weather") && arg && !strcmp(arg, "refresh")) {
     restartWeather(c, s, weatherPid);
+  } else if (!strcmp(kind, "agenda") && arg && !strcmp(arg, "toggle")) {
+    if (nativePopupIsAgendaOpen(popup))
+      nativePopupClose(popup);
+    else if (c->internalAgendaAvailable)
+      openAgenda(popup, panel, c, agendaSnapshot);
   } else if (!strcmp(kind, "brightness") && arg) {
     if (scheduleBrightness(c, s, arg, brightnessTimerFd))
       logMessage(
@@ -990,13 +1042,25 @@ static void doAction(PanelConfig *c,
 static void usage(FILE *f, const char *name) {
   fprintf(f,
           "Usage: %s [--config PATH] [--check-config] [--diagnose] "
-          "[--smoke-test] [--version]\n",
+          "[--list-pim-sources] [--smoke-test] [--version]\n",
           name);
 }
 
 static int runDiagnostics(const PanelConfig *config,
                           const char *configPath,
                           const char *executable) {
+  AgendaProviderStatus agendaStatus = {0};
+  if (!strcmp(config->agendaProvider, "eds") && agendaProviderEdsCompiled()) {
+    AgendaProvider *provider = agendaProviderCreate(config);
+    if (provider && !agendaProviderStart(provider)) {
+      struct pollfd agendaPoll = {agendaProviderPollFd(provider), POLLIN, 0};
+      if (poll(&agendaPoll, 1, 11000) > 0) {
+        AgendaSnapshot snapshot;
+        agendaProviderRead(provider, &snapshot, &agendaStatus);
+      }
+    }
+    agendaProviderDestroy(provider);
+  }
   printf("version=%s\n", SLIVERBAR_VERSION);
   printf("config=%s\n", configPath ? configPath : "internal-defaults");
   printf("display=%s\n", getenv("DISPLAY") ? getenv("DISPLAY") : "unavailable");
@@ -1004,6 +1068,17 @@ static int runDiagnostics(const PanelConfig *config,
   printf("icon_font=%s\n",
          config->iconFont[0] ? config->iconFont : "system-fallback");
   printf("gio=%s\n", appLauncherHasGio() ? "yes" : "no");
+  printf("agenda.provider=%s\n", config->agendaProvider);
+  printf("agenda.eds_compiled=%s\n",
+         agendaProviderEdsCompiled() ? "yes" : "no");
+#ifdef HAVE_NATIVE_PANEL
+  printf("agenda.popup=compiled\n");
+#else
+  printf("agenda.popup=unavailable\n");
+#endif
+  printf("agenda.sources.selected=%zu\n", agendaStatus.selectedSources);
+  printf("agenda.sources.reachable=%zu\n", agendaStatus.reachableSources);
+  printf("agenda.sources.failed=%zu\n", agendaStatus.failedSources);
   printf("launcher.mode=%s\n", config->applicationLauncher);
   const size_t DIAGNOSTIC_APP_CAPACITY = 512;
   AppEntry *catalog = calloc(DIAGNOSTIC_APP_CAPACITY, sizeof(*catalog));
@@ -1081,9 +1156,15 @@ static int runDiagnostics(const PanelConfig *config,
          config->timerSound[0] ? config->timerSound : "disabled");
   printf("timer.audio_backend=%s\n",
          timerSoundBackend() ? timerSoundBackend() : "unavailable");
-  for (AppRole role = APP_ROLE_SYSTEM_MONITOR; role <= APP_ROLE_CALENDAR;
-       role++) {
-    appDescribeRole(config, role, description, sizeof(description));
+  for (AppRole role = APP_ROLE_SYSTEM_MONITOR; role <= APP_ROLE_TASKS; role++) {
+    if ((role == APP_ROLE_CALENDAR && strcmp(config->calendar, "auto") != 0) ||
+        (role == APP_ROLE_TASKS && strcmp(config->tasks, "auto") != 0))
+      snprintf(description,
+               sizeof(description),
+               "%s",
+               appRoleAvailable(config, role) ? "configured" : "unavailable");
+    else
+      appDescribeRole(config, role, description, sizeof(description));
     printf("role.%s=%s\n", appRoleName(role), description);
   }
   printf("weather.locations=%zu\n", config->weatherLocationCount);
@@ -1221,7 +1302,8 @@ int main(int argc, char **argv) {
   configDefaults(&cfg);
   const char *config = NULL;
   char defaultConfig[PANEL_PATH_MAX];
-  bool check = false, diagnose = false, smokeTest = false;
+  bool check = false, diagnose = false, listPimSources = false,
+       smokeTest = false;
   signal(SIGPIPE, SIG_IGN);
   for (int i = 1; i < argc; i++) {
     if (!strcmp(argv[i], "--config") && i + 1 < argc)
@@ -1230,6 +1312,8 @@ int main(int argc, char **argv) {
       check = true;
     else if (!strcmp(argv[i], "--diagnose"))
       diagnose = true;
+    else if (!strcmp(argv[i], "--list-pim-sources"))
+      listPimSources = true;
     else if (!strcmp(argv[i], "--smoke-test"))
       smokeTest = true;
     else if (!strcmp(argv[i], "--version")) {
@@ -1309,6 +1393,8 @@ int main(int argc, char **argv) {
     puts("configuration valid");
     return 0;
   }
+  if (listPimSources)
+    return agendaProviderListSources(stdout, stderr);
   if (diagnose)
     return runDiagnostics(&cfg, config, argv[0]);
 #ifdef HAVE_NATIVE_PANEL
@@ -1867,6 +1953,121 @@ int main(int argc, char **argv) {
       close(lock);
       return 1;
     }
+    AgendaView smokeAgenda = {.count = 2,
+                              .hiddenEvents = 1,
+                              .hiddenTasks = 2,
+                              .initialized = true,
+                              .available = true};
+    smokeAgenda.items[0].item.type = AGENDA_ITEM_EVENT;
+    snprintf(smokeAgenda.items[0].item.title,
+             sizeof(smokeAgenda.items[0].item.title),
+             "%s",
+             "Calendar smoke item");
+    snprintf(smokeAgenda.items[0].when,
+             sizeof(smokeAgenda.items[0].when),
+             "%s",
+             "Heute 12:00");
+    smokeAgenda.items[1].item.type = AGENDA_ITEM_TASK;
+    snprintf(smokeAgenda.items[1].item.title,
+             sizeof(smokeAgenda.items[1].item.title),
+             "%s",
+             "Task smoke item");
+    snprintf(smokeAgenda.items[1].when,
+             sizeof(smokeAgenda.items[1].when),
+             "%s",
+             "Morgen");
+    if (nativePopupOpenAgenda(
+            smokePopup, &smokeAgenda, smokeX + smokeWidth - 100, 100) ||
+        !nativePopupIsAgendaOpen(smokePopup)) {
+      logMessage("ERROR", "native agenda popup could not open");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    int agendaX = 0, agendaY = 0, agendaWidth = 0;
+    nativePopupGeometry(smokePopup, &agendaX, &agendaY, &agendaWidth, NULL);
+    xcb_get_input_focus_reply_t *agendaFocus =
+        xcb_get_input_focus_reply(x, xcb_get_input_focus(x), NULL);
+    bool agendaKeptFocus =
+        agendaFocus && agendaFocus->focus == nativePanelWindow(panel);
+    free(agendaFocus);
+    if (!agendaKeptFocus || agendaY != smokeY + smokeHeight ||
+        agendaX < smokeX || agendaX + agendaWidth > smokeX + smokeWidth) {
+      logMessage("ERROR", "native agenda focus or geometry failed");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    xcb_button_press_event_t agendaClick = {0};
+    agendaClick.response_type = XCB_BUTTON_PRESS;
+    agendaClick.event = screen->root;
+    agendaClick.detail = 1;
+    agendaClick.root_x = (int16_t)(agendaX + 5);
+    agendaClick.root_y = (int16_t)(agendaY + 5);
+    popupAction[0] = '\0';
+    if (!nativePopupHandleEvent(smokePopup,
+                                (xcb_generic_event_t *)&agendaClick,
+                                popupAction,
+                                sizeof(popupAction),
+                                &popupRedraw) ||
+        strcmp(popupAction, "role|calendar") != 0 ||
+        !nativePopupIsAgendaOpen(smokePopup)) {
+      logMessage("ERROR", "native agenda row routing failed");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    agendaClick.root_y = (int16_t)(smokeY + 1);
+    if (!nativePopupHandleEvent(smokePopup,
+                                (xcb_generic_event_t *)&agendaClick,
+                                popupAction,
+                                sizeof(popupAction),
+                                &popupRedraw) ||
+        nativePopupIsOpen(smokePopup)) {
+      logMessage("ERROR", "native agenda did not close outside");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    xcb_connection_t *agendaProbe = xcb_connect(NULL, NULL);
+    xcb_grab_pointer_reply_t *agendaPointer =
+        agendaProbe && !xcb_connection_has_error(agendaProbe)
+            ? xcb_grab_pointer_reply(
+                  agendaProbe,
+                  xcb_grab_pointer(agendaProbe,
+                                   0,
+                                   screen->root,
+                                   XCB_EVENT_MASK_BUTTON_PRESS,
+                                   XCB_GRAB_MODE_ASYNC,
+                                   XCB_GRAB_MODE_ASYNC,
+                                   XCB_WINDOW_NONE,
+                                   XCB_CURSOR_NONE,
+                                   XCB_CURRENT_TIME),
+                  NULL)
+            : NULL;
+    bool agendaReleasedPointer =
+        agendaPointer && agendaPointer->status == XCB_GRAB_STATUS_SUCCESS;
+    if (agendaReleasedPointer)
+      xcb_ungrab_pointer(agendaProbe, XCB_CURRENT_TIME);
+    free(agendaPointer);
+    if (agendaProbe)
+      xcb_disconnect(agendaProbe);
+    if (!agendaReleasedPointer) {
+      logMessage("ERROR", "native agenda did not release pointer grab");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
     if (nativePopupOpenForecast(smokePopup,
                                 &smokeForecast,
                                 "Escape forecast smoke test",
@@ -1921,6 +2122,23 @@ int main(int argc, char **argv) {
                       sizeof(availablePowerActions) /
                           sizeof(availablePowerActions[0])) > 0;
   cfg.internalWeatherForecastAvailable = nativePopupAvailable(popup);
+  AgendaSnapshot agendaSnapshot = {0};
+  AgendaProviderStatus agendaStatus = {0};
+  bool agendaStatusLogged = false;
+  AgendaProvider *agendaProvider = NULL;
+  if (!strcmp(cfg.agendaProvider, "eds")) {
+    if (!agendaProviderEdsCompiled()) {
+      logMessage("WARNING",
+                 "agenda is unavailable: EDS support is not compiled in");
+    } else {
+      agendaProvider = agendaProviderCreate(&cfg);
+      if (!agendaProvider || agendaProviderStart(agendaProvider)) {
+        logMessage("WARNING", "agenda provider could not be started");
+        agendaProviderDestroy(agendaProvider);
+        agendaProvider = NULL;
+      }
+    }
+  }
   int sfd = signalfd(-1, &signals, SFD_CLOEXEC | SFD_NONBLOCK);
   int tfd = timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC | TFD_NONBLOCK);
   int brightnessTfd =
@@ -1940,6 +2158,7 @@ int main(int argc, char **argv) {
       close(timerFeedbackTfd);
     if (timerAnimationTfd >= 0)
       close(timerAnimationTfd);
+    agendaProviderDestroy(agendaProvider);
     inhibitorDestroy(inhibitor);
     nativePopupDestroy(popup);
     nativePanelDestroy(panel);
@@ -1951,8 +2170,17 @@ int main(int argc, char **argv) {
   timerfd_settime(tfd, 0, &tick, NULL);
   WorkspaceBackend *workspaceBackend = workspaceBackendCreate(x, root, &cfg);
   if (!workspaceBackend) {
+    agendaProviderDestroy(agendaProvider);
+    inhibitorDestroy(inhibitor);
+    nativePopupDestroy(popup);
     nativePanelDestroy(panel);
     xcb_disconnect(x);
+    close(tfd);
+    close(brightnessTfd);
+    close(timerFeedbackTfd);
+    close(timerAnimationTfd);
+    close(sfd);
+    close(lock);
     return 1;
   }
   Child networkEvents = {.readFd = -1, .writeFd = -1};
@@ -2001,8 +2229,9 @@ int main(int argc, char **argv) {
         {titleRoot.readFd, POLLIN, 0},
         {titleWindow.readFd, POLLIN, 0},
         {timerFeedbackTfd, POLLIN, 0},
-        {timerAnimationTfd, POLLIN, 0}};
-    if (poll(fds, 10, -1) < 0) {
+        {timerAnimationTfd, POLLIN, 0},
+        {agendaProviderPollFd(agendaProvider), POLLIN, 0}};
+    if (poll(fds, 11, -1) < 0) {
       if (errno == EINTR)
         continue;
       logMessage("ERROR", "poll failed: %s", strerror(errno));
@@ -2013,6 +2242,7 @@ int main(int argc, char **argv) {
       read(tfd, &n, sizeof(n));
       ticks += (unsigned)n;
       moduleClock(&cfg, &state);
+      updateOpenAgenda(popup, &cfg, &agendaSnapshot);
       workspaceBackendRefresh(workspaceBackend, &state);
       updateTitleXcb(
           x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
@@ -2137,7 +2367,8 @@ int main(int argc, char **argv) {
                      &weatherPid,
                      inhibitor,
                      &timer,
-                     &timerSoundPid);
+                     &timerSoundPid,
+                     &agendaSnapshot);
           free(ev);
           continue;
         }
@@ -2156,7 +2387,8 @@ int main(int argc, char **argv) {
                    &weatherPid,
                    inhibitor,
                    &timer,
-                   &timerSoundPid);
+                   &timerSoundPid,
+                   &agendaSnapshot);
           dirty = true;
         }
         if ((ev->response_type & 0x7fU) == XCB_UNMAP_NOTIFY &&
@@ -2232,6 +2464,26 @@ int main(int argc, char **argv) {
         dirty = true;
       }
     }
+    if (fds[10].revents & POLLIN) {
+      bool wasAvailable = cfg.internalAgendaAvailable;
+      if (agendaProviderRead(agendaProvider, &agendaSnapshot, &agendaStatus)) {
+        cfg.internalAgendaAvailable = nativePopupAvailable(popup) &&
+                                      agendaStatus.initialized &&
+                                      agendaStatus.reachableSources > 0;
+        if (!agendaStatusLogged ||
+            cfg.internalAgendaAvailable != wasAvailable) {
+          logMessage(cfg.internalAgendaAvailable ? "INFO" : "WARNING",
+                     "agenda is %s (%zu reachable, %zu failed sources)",
+                     cfg.internalAgendaAvailable ? "available" : "unavailable",
+                     agendaStatus.reachableSources,
+                     agendaStatus.failedSources);
+          agendaStatusLogged = true;
+        }
+        moduleClock(&cfg, &state);
+        updateOpenAgenda(popup, &cfg, &agendaSnapshot);
+        dirty = true;
+      }
+    }
 #ifndef HAVE_XCB
     if (fds[6].revents & POLLIN) {
       char event[2048];
@@ -2288,6 +2540,7 @@ int main(int argc, char **argv) {
   stopChild(&networkEvents);
   stopChild(&titleWindow);
   stopChild(&titleRoot);
+  agendaProviderDestroy(agendaProvider);
   workspaceBackendDestroy(workspaceBackend);
   inhibitorDestroy(inhibitor);
   nativePopupDestroy(popup);

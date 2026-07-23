@@ -289,9 +289,53 @@ Systemsprache gewählt, andernfalls Englisch.
 Die Uhrglyphe wechselt stündlich. Mit leerem `icon_font` verwendet Sliverbar
 einen darstellbaren Unicode-Fallback.
 
-**Mausaktion:** Linksklick öffnet die erkannte oder mit `calendar=`
-konfigurierte Kalenderanwendung. Fehlt eine passende Anwendung, bleibt der
-Block eine reine Anzeige.
+**Mausaktionen:**
+
+- Linksklick öffnet die erkannte oder mit `calendar=` konfigurierte
+  Kalenderanwendung.
+- Rechtsklick öffnet oder schließt bei `agenda_provider=eds` die native,
+  ausschließlich lesende Agenda direkt und ohne Abstand an der
+  Panelunterkante.
+
+Die Agenda liest Termine und Aufgaben aus den bereits in Evolution Data Server
+aktivierten Quellen. Sliverbar synchronisiert weder selbst über CalDAV noch
+verwaltet es OAuth oder Zugangsdaten; interne Datenbanken von Evolution und
+Thunderbird werden nicht gelesen. Verfügbare sichere Quellenkennungen zeigt:
+
+```sh
+sliverbar --list-pim-sources
+```
+
+Alle aktivierten Quellen, keine Quelle eines Typs oder bis zu 16 explizite
+Quellen werden so ausgewählt:
+
+```ini
+agenda_provider=eds
+agenda_calendar_source=*
+agenda_task_source=*
+# agenda_calendar_source=stable-source-id
+# agenda_task_source=none
+```
+
+`agenda_provider=none` ist der portable Standard. Die Anzeige umfasst
+standardmäßig 7 lokale Kalendertage und höchstens 10 Zeilen, davon maximal 2
+undatierte Aufgaben. `agenda_days` erlaubt 1–31, `agenda_max_items` 4–20,
+`agenda_max_undated_tasks` 0–5, `agenda_refresh_interval` 60–3600 Sekunden und
+`agenda_popup_width` 320–720 Pixel. Werte außerhalb dieser Grenzen werden mit
+Warnung begrenzt. `agenda_show_source=true|false` schaltet Quellennamen um.
+
+Termine verwenden `agenda_event_color=#8BE9FD`, Aufgaben
+`agenda_task_color=#FFB86C`, überfällige Aufgaben
+`agenda_overdue_color=#FF5555` und Quellen
+`agenda_source_color=#6272A4`. Ein Klick auf eine Terminzeile öffnet
+`calendar=auto`, ein Klick auf eine Aufgabenzeile `tasks=auto`; beide Rollen
+akzeptieren auch `desktop:ID.desktop` und `command:PROGRAM ARGUMENTS` ohne
+Shell-Auswertung.
+
+EDS wird asynchron initialisiert. Bis mindestens eine Quelle erreichbar ist,
+hat der Rechtsklick keine Wirkung. Bei Teilausfällen bleiben erreichbare
+Quellen sichtbar; bei Gesamtausfall wird der Zustand protokolliert und kein
+Popup geöffnet. Es entsteht kein Agenda-Cache auf der Festplatte.
 
 ### N – System-Tray
 
