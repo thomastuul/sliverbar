@@ -155,6 +155,45 @@ int main(int argc, char **argv) {
         0);
   CHECK(strcmp(weatherConditionGlyph(WEATHER_CONDITION_UNKNOWN, true), "?") ==
         0);
+  char updated[64];
+  const char *oldTimezone = getenv("TZ");
+  char oldTimezoneCopy[128] = "";
+  if (oldTimezone)
+    snprintf(oldTimezoneCopy, sizeof(oldTimezoneCopy), "%s", oldTimezone);
+  CHECK(setenv("TZ", "UTC", 1) == 0);
+  tzset();
+  const time_t SAME_DAY_UPDATE = 1784797680;
+  const time_t PREVIOUS_DAY_UPDATE = 1784745600;
+  const time_t CURRENT_TIME = 1784808000;
+  CHECK(strcmp(weatherForecastUpdatedLabel(SAME_DAY_UPDATE,
+                                           true,
+                                           true,
+                                           CURRENT_TIME,
+                                           updated,
+                                           sizeof(updated)),
+               "Aktualisiert 09:08") == 0);
+  CHECK(strcmp(weatherForecastUpdatedLabel(PREVIOUS_DAY_UPDATE,
+                                           true,
+                                           true,
+                                           CURRENT_TIME,
+                                           updated,
+                                           sizeof(updated)),
+               "Aktualisiert 22.07. 18:40") == 0);
+  CHECK(strcmp(weatherForecastUpdatedLabel(SAME_DAY_UPDATE,
+                                           true,
+                                           false,
+                                           CURRENT_TIME,
+                                           updated,
+                                           sizeof(updated)),
+               "Updated 09:08") == 0);
+  CHECK(strcmp(weatherForecastUpdatedLabel(
+                   0, false, false, CURRENT_TIME, updated, sizeof(updated)),
+               "Updated –") == 0);
+  if (oldTimezone)
+    CHECK(setenv("TZ", oldTimezoneCopy, 1) == 0);
+  else
+    CHECK(unsetenv("TZ") == 0);
+  tzset();
   CHECK(weatherForecastParse("{\"weather\":[]}", &forecast) != 0);
   CHECK(forecast.dayCount == 0);
   CHECK(weatherForecastParse("{\"weather\":[", &forecast) != 0);

@@ -410,3 +410,38 @@ int weatherForecastParse(const char *json, WeatherForecast *forecast) {
   }
   return forecast->dayCount > 0 ? 0 : -1;
 }
+
+const char *weatherForecastUpdatedLabel(time_t updatedAt,
+                                        bool valid,
+                                        bool german,
+                                        time_t now,
+                                        char *buffer,
+                                        size_t size) {
+  if (!buffer || !size)
+    return "";
+  const char *prefix = german ? "Aktualisiert" : "Updated";
+  struct tm updatedLocal, nowLocal;
+  if (!valid || !localtime_r(&updatedAt, &updatedLocal) ||
+      !localtime_r(&now, &nowLocal)) {
+    snprintf(buffer, size, "%s –", prefix);
+    return buffer;
+  }
+  if (updatedLocal.tm_year == nowLocal.tm_year &&
+      updatedLocal.tm_yday == nowLocal.tm_yday)
+    snprintf(buffer,
+             size,
+             "%s %02d:%02d",
+             prefix,
+             updatedLocal.tm_hour,
+             updatedLocal.tm_min);
+  else
+    snprintf(buffer,
+             size,
+             "%s %02d.%02d. %02d:%02d",
+             prefix,
+             updatedLocal.tm_mday,
+             updatedLocal.tm_mon + 1,
+             updatedLocal.tm_hour,
+             updatedLocal.tm_min);
+  return buffer;
+}

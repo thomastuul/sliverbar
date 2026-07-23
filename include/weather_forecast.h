@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <time.h>
 
 #define WEATHER_FORECAST_DAY_COUNT 3
 #define WEATHER_FORECAST_SLOT_COUNT 6
@@ -40,6 +41,8 @@ typedef struct {
 
 typedef struct {
   size_t dayCount;
+  bool updatedAtValid;
+  time_t updatedAt;
   WeatherForecastDay days[WEATHER_FORECAST_DAY_COUNT];
 } WeatherForecast;
 
@@ -50,5 +53,11 @@ const char *weatherForecastDayName(const char *date,
                                    bool german,
                                    char *buffer,
                                    size_t size);
+const char *weatherForecastUpdatedLabel(time_t updatedAt,
+                                        bool valid,
+                                        bool german,
+                                        time_t now,
+                                        char *buffer,
+                                        size_t size);
 
 #endif

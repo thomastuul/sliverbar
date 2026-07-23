@@ -312,8 +312,10 @@ three-day forecast anchored below the weather block. The forecast shows 06,
 temperature, and rain probability for every time. Each localized day heading
 also shows its minimum and maximum temperature. Missing values remain visible
 as dashes, and an unavailable icon font falls back to monochrome Unicode
-symbols. Existing cache data for a newly selected location appears before its
-asynchronous refresh; an open forecast redraws when refreshed data is
+symbols. The popup header shows the location on the left and the cache update
+time on the right; older data also includes its date. Existing cache data for a
+newly selected location appears before its asynchronous refresh; an open
+forecast redraws both its values and update time when refreshed data is
 published.
 
 Sliverbar no longer downloads or caches a forecast PNG and does not launch an
