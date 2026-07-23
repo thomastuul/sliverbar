@@ -210,7 +210,13 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   STR("launcher", launcher);
   STR("power_menu", powerMenu);
   STR("weather_cache", weatherCache);
-  STR("weather_image", weatherImage);
+  if (!strcmp(k, "weather_image")) {
+    copy(c->weatherImage, sizeof(c->weatherImage), v);
+    logMessage("WARNING",
+               "weather_image is deprecated and ignored; Sliverbar now "
+               "renders the forecast natively");
+    return 0;
+  }
 #define MODULE(key, field)                                                     \
   do {                                                                         \
     if (!strcmp(k, "module_" key)) {                                           \

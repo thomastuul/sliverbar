@@ -31,6 +31,7 @@ add_library(sliverbar_core
     src/power_actions.c
     src/timer.c
     src/util.c
+    src/weather_forecast.c
 )
 target_include_directories(sliverbar_core PUBLIC include)
 target_compile_features(sliverbar_core PUBLIC c_std_17)
@@ -130,6 +131,10 @@ include(CPack)
 if(BUILD_TESTING)
     add_executable(test_core tests/test_core.c)
     target_link_libraries(test_core PRIVATE sliverbar_core)
+    target_compile_definitions(
+        test_core PRIVATE
+        SLIVERBAR_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+    )
     target_compile_options(test_core PRIVATE -Wall -Wextra -Wpedantic)
     if(GIO_FOUND)
         add_executable(test_app_defaults tests/test_app_defaults.c)
@@ -150,6 +155,12 @@ if(BUILD_TESTING)
     add_test(NAME check_config COMMAND sliverbar --config ${CMAKE_CURRENT_BINARY_DIR}/panel.conf --check-config)
     add_test(NAME version COMMAND sliverbar --version)
     add_test(NAME diagnose COMMAND sliverbar --config ${CMAKE_CURRENT_BINARY_DIR}/panel.conf --diagnose)
+    add_test(
+        NAME weather_json_only
+        COMMAND ${CMAKE_COMMAND}
+                -DSOURCE_FILE=${CMAKE_CURRENT_SOURCE_DIR}/src/main.c
+                -P ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather-json-only.cmake
+    )
     add_test(
         NAME config_search
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/config-search.sh

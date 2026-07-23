@@ -25,6 +25,10 @@ bool nativePanelHandleEvent(NativePanel *panel,
                             char *action,
                             size_t actionSize,
                             bool *redraw);
+bool nativePanelActionBounds(const NativePanel *panel,
+                             const char *action,
+                             int *x,
+                             int *width);
 xcb_window_t nativePanelWindow(const NativePanel *panel);
 bool nativePanelOwnsTray(const NativePanel *panel);
 size_t nativePanelTrayIconCount(const NativePanel *panel);

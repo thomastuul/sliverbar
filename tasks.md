@@ -490,9 +490,10 @@ Rofi- oder `systemctl`-Aufrufe ausgefuehrt.
   `$XDG_STATE_HOME/sliverbar` speichern und beim naechsten Start
   wiederherstellen. Die Konfigurationsdatei darf dabei nicht automatisch
   umgeschrieben werden.
-- [x] Wetterdaten und Vorhersagebilder pro Ort getrennt cachen. Fuer Dateinamen
-  eine sichere ID oder einen Hash verwenden, nicht den ungeprueften Ortsnamen
-  als Pfadbestandteil.
+- [x] Wetterdaten pro Ort getrennt cachen. Fuer Dateinamen eine sichere ID oder
+  einen Hash verwenden, nicht den ungeprueften Ortsnamen als Pfadbestandteil.
+  Der zwischenzeitliche PNG-Cache wurde mit der nativen Vorschau wieder
+  entfernt.
 - [x] Beim Wechsel sofort vorhandene Cache-Daten des neuen Orts anzeigen und
   anschliessend eine Aktualisierung im Hintergrund anstossen.
 - [x] Laufzeitsignale vor der Initialisierung von GIO-/D-Bus-Hilfsthreads
@@ -514,14 +515,9 @@ Rofi- oder `systemctl`-Aufrufe ausgefuehrt.
   eine zwingende Laufzeitabhaengigkeit werden.
 - [x] Auswahl per Maus vorsehen; Tastaturbedienung mit Pfeiltasten, Enter und
   Escape sowie Schliessen bei einem Klick ausserhalb des Menues ergaenzen.
-- [x] Die bisherige Aktion zum Oeffnen des Vorhersagebilds von Linksklick auf
-  Rechtsklick verschieben.
-- [x] Das Vorhersagebild weiterhin ueber `xdg-open` oeffnen, damit die fuer den
-  MIME-Typ `image/png` konfigurierte Standardanwendung verwendet wird. Keinen
-  Bildbetrachter wie `sxiv` direkt in Sliverbar fest eintragen.
-- [x] Einen Test ergaenzen, der fuer die Vorschau den Aufruf des
-  Standardprogramm-Dispatchers prueft, ohne eine konkrete Desktop-Anwendung
-  vorauszusetzen.
+- [x] Rechtsklick fuer die ausfuehrliche Wettervorschau reservieren. Die
+  zwischenzeitliche PNG-/`xdg-open`-Variante wurde durch die unten
+  spezifizierte native Vorschau abgeloest.
 - [x] Festlegen, ob der Mittelklick weiterhin eine Wetterbenachrichtigung zeigt
   oder stattdessen eine sofortige Aktualisierung ausloest.
 - [x] Das Menue bei ausgeblendetem Panel, Monitorwechsel und Beendigung von
@@ -549,6 +545,121 @@ asynchron und stellt die Auswahl beim naechsten Start optional wieder her. Das
 Aktualisierungsintervall liegt wirksam immer zwischen 30 und 240 Minuten;
 abweichende Konfigurationswerte werden mit einer Warnung auf die naechste
 Grenze gesetzt.
+
+## Feature: Native glyphbasierte Drei-Tage-Wettervorschau
+
+Das von wttr.in fertig gerenderte PNG soll durch eine von Sliverbar selbst
+gezeichnete Informationsansicht ersetzt werden. wttr.in bleibt zunaechst die
+Datenquelle, Sliverbar laedt jedoch nur noch die bereits fuer den Wetterblock
+verwendeten JSON-Daten herunter und rendert daraus eine konsistente native
+Vorschau. Es wird keine Bilddatei fuer die Vorschau benoetigt.
+
+### Daten und Aktualisierung
+
+- [x] Heute und die beiden folgenden Tage aus den strukturierten Tages- und
+  Stundenwerten des Wetter-JSON einlesen.
+- [x] Fuer jeden Tag die Zeitpunkte 06, 09, 12, 15, 18 und 21 Uhr aus den vom
+  Wetterdienst gelieferten lokalen Zeitabschnitten verwenden.
+- [x] Pro Zeitpunkt Wetterzustand, Temperatur in Grad Celsius und
+  Regenwahrscheinlichkeit auslesen. Zusaetzlich Tiefst- und
+  Hoechsttemperatur des jeweiligen Tages bereitstellen.
+- [x] Regenwahrscheinlichkeiten einschliesslich 0 Prozent immer anzeigen,
+  damit das Raster zwischen Tagen und Aktualisierungen stabil bleibt.
+- [x] Einzelne fehlende oder ungueltige Werte als `-` darstellen. Wenn keine
+  verwendbaren Vorhersagedaten vorhanden sind, eine lokalisierte Meldung wie
+  `Keine Vorhersagedaten verfuegbar` beziehungsweise
+  `No forecast data available` anzeigen.
+- [x] Vorhandene Cache-Daten beim Oeffnen sofort darstellen. Nach Abschluss
+  einer asynchronen Aktualisierung eine bereits offene Vorschau aus dem
+  atomar veroeffentlichten Cache neu einlesen und neu zeichnen.
+- [x] Beim Wetterortwechsel verhindern, dass Daten oder ein spaeter
+  eintreffendes Worker-Ergebnis des vorherigen Orts in der Vorschau des neuen
+  Orts erscheinen.
+- [x] Den Wetter-Worker auf den JSON-Abruf beschraenken. Keine PNG-URL mehr
+  anfragen und keine PNG-Datei mehr erzeugen oder pro Ort cachen.
+
+### Darstellung
+
+- [x] Die Vorschau als nicht interaktive Informationsansicht im vorhandenen
+  nativen X11-Popup-Fenster darstellen und direkt am Wetterblock verankern.
+  Positionierung, Stapelung, Farben, Schriften und Lebenszyklus mit Launcher,
+  Power-Menue und Ortsauswahl teilen, ohne die Wettertage als auswaehlbare
+  Menueeintraege zu behandeln.
+- [x] Drei Tagesbereiche untereinander zeichnen. Die Ueberschrift jedes
+  Bereichs enthaelt den lokalisierten Wochentag sowie die Tiefst- und
+  Hoechsttemperatur.
+- [x] In jedem Tagesbereich sechs gleich breite Vorhersagespalten fuer 06, 09,
+  12, 15, 18 und 21 Uhr zeichnen. Die Spalten werden ueber alle drei Tage
+  hinweg ausgerichtet.
+- [x] Die Zeitmarken `06`, `09`, `12`, `15`, `18` und `21` als kleine, mit
+  Cairo gezeichnete Felder darstellen. Sie sind reine Spaltenueberschriften
+  und duerfen weder wie Schaltflaechen reagieren noch Tastaturfokus erhalten.
+- [x] Unter jeder Zeitmarke Wetter-Glyph, konkrete Temperatur und
+  Regenwahrscheinlichkeit anordnen. Beschriftungen und Werte muessen auch bei
+  0 Prozent, negativen Temperaturen und zweistelligen Temperaturwerten stabil
+  ausgerichtet bleiben.
+- [x] Wettercodes zentral und testbar auf Glyphs fuer mindestens klar,
+  bewoelkt, Regen, Gewitter, Schnee und Nebel abbilden. Unbekannte Codes
+  erhalten eine neutrale `?`-Darstellung.
+- [x] Die konfigurierte Icon-Schrift verwenden, wenn sie verfuegbar ist. Ohne
+  Icon-Schrift auf gut erkennbare monochrome Unicode-Symbole in der normalen
+  Schrift zurueckfallen; die numerischen Wetterwerte duerfen von einer
+  fehlenden Icon-Schrift nicht abhaengen.
+- [x] Hintergrund, Rahmen und Text der Zeitfelder aus vorhandenen
+  Sliverbar-Farben ableiten, statt neue fest codierte Farbschemata
+  einzufuehren.
+- [x] Die sechs Spalten gleichmaessig auf die verfuegbare Popup-Breite
+  verteilen und die Geometrie am Monitorrand begrenzen, ohne Zeitpunkte oder
+  Werte stillschweigend wegzulassen.
+
+### Bedienung und Kompatibilitaet
+
+- [x] Rechtsklick auf den Wetterblock oeffnet beziehungsweise schliesst die
+  native Drei-Tage-Vorschau und ersetzt damit das Oeffnen des
+  Vorhersagebilds.
+- [x] Linksklick bleibt die native Wetterortauswahl; Mittelklick bleibt die
+  sofortige asynchrone Wetteraktualisierung.
+- [x] Die Vorschau mit `Escape`, einem Klick ausserhalb oder einem erneuten
+  Rechtsklick schliessen. Sie ebenfalls schliessen beziehungsweise
+  zerstoeren, wenn das Panel ausgeblendet, der Monitor gewechselt oder
+  Sliverbar beendet wird.
+- [x] Fuer die Vorschau keine neue zwingende Laufzeitabhaengigkeit und keinen
+  externen Bildbetrachter einfuehren.
+- [x] Die bisherige Option `weather_image=` vorerst weiterhin syntaktisch
+  akzeptieren, ihren Wert jedoch nicht mehr verwenden und eine eindeutige
+  Deprecation-Warnung protokollieren. Eine spaetere Entfernung bleibt einer
+  passenden inkompatiblen Version vorbehalten.
+- [x] Die CLI-only-Variante ohne XCB-Entwicklungsheader weiterhin bauen; dort
+  bleibt die native Vorschau nicht verfuegbar, ohne den Wetterblock oder den
+  restlichen Panelbetrieb unbrauchbar zu machen.
+
+### Tests und Dokumentation
+
+- [x] Parser-Tests mit festen Drei-Tage-JSON-Fixtures fuer alle sechs
+  Zeitpunkte, negative und zweistellige Temperaturen, 0 und 100 Prozent
+  Regenwahrscheinlichkeit, bekannte und unbekannte Wettercodes sowie teilweise
+  und vollstaendig fehlende Daten ergaenzen.
+- [x] Tests sicherstellen, dass der Wetter-Worker nur JSON abruft und weder
+  eine PNG-URL verwendet noch PNG-Cache-Dateien erzeugt.
+- [x] Unter Xvfb Oeffnen, erneuten Rechtsklick, `Escape`, Klick ausserhalb,
+  Positionierung am Bildschirmrand, gleichmaessige Spalten, Glyph-Fallback und
+  Schliessen bei Panel- beziehungsweise Monitorwechsel testen.
+- [x] Das Neuzeichnen einer offenen Vorschau nach Aktualisierung sowie den
+  Wetterortwechsel waehrend einer laufenden Anfrage automatisiert testen.
+- [x] Die bestehende automatisierte Darstellung ohne konfigurierte
+  Icon-Schrift abdecken und die CLI-only-Kompilierung ohne XCB beibehalten.
+- [x] README und Manpage auf die neue Mausbelegung und Vorschau aktualisieren.
+  PNG-Download, PNG-Cache und externer Bildbetrachter duerfen danach nicht mehr
+  als aktuelles Verhalten dokumentiert sein.
+
+Akzeptanzkriterium: Ein Rechtsklick auf den Wetterblock oeffnet ohne externen
+Prozess und ohne heruntergeladene Bilddatei eine am Block verankerte native
+Vorschau fuer heute und die beiden folgenden Tage. Jeder Tag zeigt
+Tiefst-/Hoechsttemperatur sowie fuer 06, 09, 12, 15, 18 und 21 Uhr eine
+Cairo-Zeitmarke, Wetter-Glyph, Temperatur und Regenwahrscheinlichkeit.
+Vorhandene Daten erscheinen sofort, eine laufende Aktualisierung blockiert das
+Panel nicht, und fehlende Daten oder Schriften werden lesbar und ohne Absturz
+behandelt.
 
 ## Feature: Aufziehbarer Timer im Panel
 

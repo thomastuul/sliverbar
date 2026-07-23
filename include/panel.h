@@ -57,6 +57,7 @@ typedef struct {
   ModuleMode moduleWeather, moduleLauncher, moduleTray, modulePower;
   ModuleMode moduleInhibitor, moduleTimer;
   bool internalLauncherAvailable, internalPowerAvailable;
+  bool internalWeatherForecastAvailable;
   WeatherLocation weatherLocations[PANEL_WEATHER_LOCATION_MAX];
   size_t weatherLocationCount, activeWeatherLocation;
   char defaultWeatherLocation[64];

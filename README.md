@@ -220,8 +220,7 @@ monitors before `btop`/`htop`/`top`, NetworkManager's editor before `nmtui`,
 and `pavucontrol` before terminal mixers. Terminal programs prefer
 `xdg-terminal-exec`, then a simple `$TERMINAL`, followed by known terminals
 with their appropriate command separator. If no valid target exists, the block
-remains visible but has no click action. Forecast images are opened through the
-registered default file handler rather than a hard-coded image viewer.
+remains visible but has no click action.
 
 `workspace_backend=auto` prefers bspwm's report stream when a reachable `bspc`
 is available and otherwise uses EWMH. `ewmh` forces the portable backend,
@@ -293,7 +292,7 @@ Repeat `weather_location=safe-id|Display name|service query` for up to 4
 locations and set `weather_default=safe-id`. Legacy `location=query` remains a
 single-location form. A fifth location and empty, duplicate, overlong, or unsafe
 IDs fail `--check-config`. Selection state is stored below
-`$XDG_STATE_HOME/sliverbar`; JSON and PNG caches are isolated by safe ID below
+`$XDG_STATE_HOME/sliverbar`; JSON caches are isolated by safe ID below
 `$XDG_CACHE_HOME/sliverbar/weather`.
 
 `weather_interval` is specified in seconds and is limited to 1800–14400 seconds
@@ -307,9 +306,19 @@ menus, confirmations, notifications, clock abbreviations, and weather service.
 Explicit `language=de` and `language=en` overrides remain available.
 
 Weather mouse bindings are: left opens the native location list when multiple
-locations exist, middle refreshes immediately, and right opens the forecast PNG
-with the registered default image handler. Existing cache data for a newly
-selected location appears before its asynchronous refresh.
+locations exist, middle refreshes immediately, and right toggles a native
+three-day forecast anchored below the weather block. The forecast shows 06,
+09, 12, 15, 18, and 21 in Cairo-drawn time fields, followed by a weather glyph,
+temperature, and rain probability for every time. Each localized day heading
+also shows its minimum and maximum temperature. Missing values remain visible
+as dashes, and an unavailable icon font falls back to monochrome Unicode
+symbols. Existing cache data for a newly selected location appears before its
+asynchronous refresh; an open forecast redraws when refreshed data is
+published.
+
+Sliverbar no longer downloads or caches a forecast PNG and does not launch an
+external image viewer for weather. The legacy `weather_image=` key is accepted
+for compatibility, ignored, and reported as deprecated.
 
 The timer block immediately before the coffee-cup inhibitor uses the mouse
 wheel to add or remove one minute while it is being set. Left click starts the
@@ -366,7 +375,7 @@ backend, raw value, and rendered percentage.
 | clock, CPU, battery, screencast | native `/proc`, `/sys`, time and XDG logic |
 | volume and brightness | backend detection plus validated action protocol |
 | network worker | `/sys/class/net`, optional nmcli query and monitor |
-| weather worker | non-blocking child, atomic JSON/PNG caches |
+| weather worker | non-blocking child, atomic per-location JSON caches |
 | trayer block | native XEmbed tray manager and direct child-window layout |
 | launcher, power and terminal clicks | detached, argument-based exec |
 
@@ -387,5 +396,5 @@ The Bash directory is not read or executed by `sliverbar`.
 
 Optional module backends are not panel prerequisites: `pactl`/`amixer` for
 volume, `nmcli` for NetworkManager details, `xrandr` for brightness, `curl` for
-weather refresh, `notify-send` for notifications, and `systemd-inhibit` for the
-inhibitor. Missing tools hide or reduce only the affected feature.
+weather JSON refresh, `notify-send` for notifications, and `systemd-inhibit`
+for the inhibitor. Missing tools hide or reduce only the affected feature.

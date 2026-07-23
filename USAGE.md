@@ -183,9 +183,9 @@ Das Wettermodul lädt über `curl` JSON-Daten von `wttr.in` und zeigt:
 
 Bis zu vier Orte lassen sich mit
 `weather_location=safe-id|Anzeigename|Suchwert` konfigurieren. Der aktive Ort
-wird unter `$XDG_STATE_HOME/sliverbar` gespeichert; JSON- und PNG-Caches liegen
-unter `$XDG_CACHE_HOME/sliverbar/weather`. Beim Umschalten erscheint zuerst
-ein vorhandener Cache, danach wird asynchron aktualisiert.
+wird unter `$XDG_STATE_HOME/sliverbar` gespeichert; die JSON-Caches liegen
+unter `$XDG_CACHE_HOME/sliverbar/weather`. Beim Umschalten erscheint zuerst ein
+vorhandener Cache, danach wird asynchron aktualisiert.
 
 `weather_interval` ist auf 1800 bis 14400 Sekunden, also 30 bis 240 Minuten,
 begrenzt. Werte außerhalb des Bereichs werden auf die nächste Grenze gesetzt
@@ -195,8 +195,20 @@ und als Warnung protokolliert.
 
 - Linksklick: bei mehreren Orten die Ortsauswahl öffnen;
 - Mittelklick: sofort aktualisieren;
-- Rechtsklick: die Vorhersagegrafik mit dem registrierten Standardprogramm
-  öffnen.
+- Rechtsklick: die native Drei-Tage-Vorschau öffnen oder schließen.
+
+Die Vorschau erscheint direkt unter dem Wetterblock. Für heute und die beiden
+folgenden Tage zeigt sie die Tiefst- und Höchsttemperatur sowie Vorhersagen für
+06, 09, 12, 15, 18 und 21 Uhr. Jede Zeitspalte enthält ein mit Cairo
+gezeichnetes Zeitfeld, eine Wetter-Glyphe, die Temperatur und die
+Regenwahrscheinlichkeit. Fehlende Werte erscheinen als Gedankenstrich; ohne
+verfügbare Icon-Schrift nutzt Sliverbar monochrome Unicode-Symbole.
+
+Die Ansicht verwendet ausschließlich den vorhandenen JSON-Cache und wird nach
+einer asynchronen Aktualisierung neu gezeichnet. Sliverbar lädt kein
+Vorhersage-PNG mehr herunter und startet keinen externen Bildbetrachter. Der
+alte Schlüssel `weather_image=` wird noch akzeptiert, aber ignoriert und als
+veraltet protokolliert.
 
 Ohne konfigurierten Ort oder ohne verwertbare Daten bleibt der Block im
 `auto`-Modus verborgen.
@@ -486,7 +498,7 @@ betroffene Modul verborgen oder eingeschränkt.
 | `pactl` oder `amixer` | Lautstärke lesen und ändern |
 | `xrandr` | Helligkeit lesen und ändern |
 | `nmcli` | SSID, WLAN-Fallback und Netzwerkereignisse |
-| `curl` | Wetterdaten und Vorhersagebild |
+| `curl` | Wetterdaten im JSON-Format |
 | `notify-send` | Timer-, Inhibitor- und Statusbenachrichtigungen |
 | `systemd-inhibit` | Standby- und Hibernation-Sperre |
 | `pw-play`, `paplay`, `canberra-gtk-play` oder `aplay` | Timerklang |

@@ -4,6 +4,7 @@
 #include "inhibitor.h"
 #include "power_actions.h"
 #include "timer.h"
+#include "weather_forecast.h"
 
 #include <locale.h>
 #include <signal.h>
@@ -106,6 +107,77 @@ int main(int argc, char **argv) {
   CHECK(!panelLanguageIsGerman(&cfg));
   CHECK(strcmp(powerActionLabel(&cfg, "poweroff"), "Power off") == 0);
   snprintf(cfg.language, sizeof(cfg.language), "auto");
+
+  char forecastPath[PANEL_PATH_MAX];
+  CHECK(snprintf(forecastPath,
+                 sizeof(forecastPath),
+                 "%s/tests/fixtures/weather-forecast.json",
+                 SLIVERBAR_TEST_SOURCE_DIR) > 0);
+  char forecastJson[32768];
+  CHECK(readTextFile(forecastPath, forecastJson, sizeof(forecastJson)) == 0);
+  WeatherForecast forecast;
+  CHECK(weatherForecastParse(forecastJson, &forecast) == 0);
+  CHECK(forecast.dayCount == WEATHER_FORECAST_DAY_COUNT);
+  CHECK(strcmp(forecast.days[0].date, "2026-07-23") == 0);
+  CHECK(forecast.days[0].minimumValid);
+  CHECK(forecast.days[0].minimumC == -3);
+  CHECK(forecast.days[0].maximumValid);
+  CHECK(forecast.days[0].maximumC == 12);
+  for (size_t i = 0; i < WEATHER_FORECAST_SLOT_COUNT; i++)
+    CHECK(forecast.days[0].slots[i].hour == 6 + (int)i * 3);
+  CHECK(forecast.days[0].slots[0].temperatureValid);
+  CHECK(forecast.days[0].slots[0].temperatureC == -3);
+  CHECK(forecast.days[0].slots[0].rainValid);
+  CHECK(forecast.days[0].slots[0].rainPercent == 0);
+  CHECK(forecast.days[0].slots[3].rainPercent == 100);
+  CHECK(forecast.days[0].slots[0].condition == WEATHER_CONDITION_CLEAR);
+  CHECK(forecast.days[0].slots[1].condition == WEATHER_CONDITION_CLOUDY);
+  CHECK(forecast.days[0].slots[2].condition == WEATHER_CONDITION_RAIN);
+  CHECK(forecast.days[0].slots[3].condition == WEATHER_CONDITION_THUNDER);
+  CHECK(forecast.days[0].slots[4].condition == WEATHER_CONDITION_SNOW);
+  CHECK(forecast.days[0].slots[5].condition == WEATHER_CONDITION_FOG);
+  CHECK(!forecast.days[1].slots[1].temperatureValid);
+  CHECK(forecast.days[1].slots[1].rainValid);
+  CHECK(forecast.days[1].slots[1].condition == WEATHER_CONDITION_UNKNOWN);
+  CHECK(!forecast.days[1].slots[2].rainValid);
+  CHECK(!forecast.days[1].slots[3].codeValid);
+  char weekday[32];
+  CHECK(strcmp(weatherForecastDayName(
+                   "2026-07-23", true, weekday, sizeof(weekday)),
+               "Donnerstag") == 0);
+  CHECK(strcmp(weatherForecastDayName(
+                   "2026-07-23", false, weekday, sizeof(weekday)),
+               "Thursday") == 0);
+  CHECK(
+      strcmp(weatherForecastDayName("invalid", true, weekday, sizeof(weekday)),
+             "-") == 0);
+  CHECK(strcmp(weatherConditionGlyph(WEATHER_CONDITION_CLEAR, false), "☀") ==
+        0);
+  CHECK(strcmp(weatherConditionGlyph(WEATHER_CONDITION_UNKNOWN, true), "?") ==
+        0);
+  CHECK(weatherForecastParse("{\"weather\":[]}", &forecast) != 0);
+  CHECK(forecast.dayCount == 0);
+  CHECK(weatherForecastParse("{\"weather\":[", &forecast) != 0);
+
+  PanelConfig forecastConfig;
+  configDefaults(&forecastConfig);
+  snprintf(forecastConfig.location,
+           sizeof(forecastConfig.location),
+           "%s",
+           "Test location");
+  snprintf(forecastConfig.weatherCache,
+           sizeof(forecastConfig.weatherCache),
+           "%s",
+           forecastPath);
+  forecastConfig.moduleWeather = MODULE_ENABLED;
+  forecastConfig.internalWeatherForecastAvailable = true;
+  PanelState forecastState = {0};
+  moduleWeather(&forecastConfig, &forecastState);
+  CHECK(strstr(forecastState.weather, "weather|forecast") != NULL);
+  CHECK(strstr(forecastState.weather, "weather|open") == NULL);
+  forecastConfig.internalWeatherForecastAvailable = false;
+  moduleWeather(&forecastConfig, &forecastState);
+  CHECK(strstr(forecastState.weather, "weather|forecast") == NULL);
 
   const char *oldLanguage = getenv("LANGUAGE");
   const char *oldLcMessages = getenv("LC_MESSAGES");
@@ -658,6 +730,26 @@ int main(int argc, char **argv) {
   CHECK(strcmp(weatherConfig.location, "Berlin, Germany") == 0);
   CHECK(strcmp(weatherConfig.weatherLocations[0].label, "München") == 0);
   CHECK(unlink(weatherPath) == 0);
+
+  PanelConfig deprecatedWeatherImageConfig;
+  configDefaults(&deprecatedWeatherImageConfig);
+  char deprecatedWeatherImagePath[] = "/tmp/sliverbar-weather-image-XXXXXX";
+  fd = mkstemp(deprecatedWeatherImagePath);
+  CHECK(fd >= 0);
+  const char DEPRECATED_WEATHER_IMAGE[] =
+      "location=Munich\nweather_image=/tmp/forecast.png\n";
+  CHECK(write(fd,
+              DEPRECATED_WEATHER_IMAGE,
+              sizeof(DEPRECATED_WEATHER_IMAGE) - 1) ==
+        (ssize_t)(sizeof(DEPRECATED_WEATHER_IMAGE) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&deprecatedWeatherImageConfig,
+                   deprecatedWeatherImagePath,
+                   error,
+                   sizeof(error)) == 0);
+  CHECK(strcmp(deprecatedWeatherImageConfig.weatherImage,
+               "/tmp/forecast.png") == 0);
+  CHECK(unlink(deprecatedWeatherImagePath) == 0);
 
   PanelConfig boundedWeatherConfig;
   configDefaults(&boundedWeatherConfig);
