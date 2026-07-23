@@ -217,6 +217,66 @@ void moduleScreencast(const PanelConfig *c,
         "壘");
 }
 
+static bool pactlMaxRawVolume(const char *output, unsigned long *maximum) {
+  bool found = false;
+  unsigned long result = 0;
+
+  if (!output || !maximum)
+    return false;
+  for (const char *slash = strchr(output, '/'); slash;
+       slash = strchr(slash + 1, '/')) {
+    const char *end = slash;
+    while (end > output && isspace((unsigned char)end[-1]))
+      end--;
+    const char *begin = end;
+    while (begin > output && isdigit((unsigned char)begin[-1]))
+      begin--;
+    if (begin == end)
+      continue;
+
+    errno = 0;
+    char *parseEnd = NULL;
+    unsigned long volume = strtoul(begin, &parseEnd, 10);
+    if (errno || parseEnd != end)
+      continue;
+    if (!found || volume > result)
+      result = volume;
+    found = true;
+  }
+  if (found)
+    *maximum = result;
+  return found;
+}
+
+bool pactlVolumeArgument(const char *output,
+                         int step,
+                         const char *operation,
+                         char *value,
+                         size_t valueSize) {
+  if (!operation || !value || !valueSize || step < 1 || step > 100)
+    return false;
+
+  int written = -1;
+  if (!strcmp(operation, "down")) {
+    written = snprintf(value, valueSize, "-%d%%", step);
+  } else if (!strcmp(operation, "up")) {
+    unsigned long maximum = 0;
+    if (!pactlMaxRawVolume(output, &maximum))
+      return false;
+
+    const unsigned long NORMAL = 65536UL;
+    const unsigned long INCREMENT = NORMAL * (unsigned long)step / 100UL;
+    if (maximum >= NORMAL || INCREMENT >= NORMAL ||
+        maximum >= NORMAL - INCREMENT)
+      written = snprintf(value, valueSize, "100%%");
+    else
+      written = snprintf(value, valueSize, "+%d%%", step);
+  } else {
+    return false;
+  }
+  return written >= 0 && (size_t)written < valueSize;
+}
+
 void moduleVolume(const PanelConfig *c, PanelState *s) {
   s->volume[0] = '\0';
   bool pactl = commandExists("pactl");

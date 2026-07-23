@@ -121,6 +121,11 @@ void moduleBattery(const PanelConfig *cfg, PanelState *state);
 void moduleScreencast(const PanelConfig *cfg,
                       PanelState *state,
                       const char *runtimeDir);
+bool pactlVolumeArgument(const char *output,
+                         int step,
+                         const char *operation,
+                         char *value,
+                         size_t valueSize);
 void moduleVolume(const PanelConfig *cfg, PanelState *state);
 int parseNmcliWifi(const char *output,
                    char *ssid,
