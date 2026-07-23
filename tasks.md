@@ -588,6 +588,11 @@ Vorschau. Es wird keine Bilddatei fuer die Vorschau benoetigt.
 - [x] Drei Tagesbereiche untereinander zeichnen. Die Ueberschrift jedes
   Bereichs enthaelt den lokalisierten Wochentag sowie die Tiefst- und
   Hoechsttemperatur.
+- [x] In der Kopfzeile den aktiven Ort linksbuendig und den Zeitpunkt der
+  letzten erfolgreichen JSON-Cache-Aktualisierung rechtsbuendig darstellen.
+  Fuer Daten vom aktuellen Tag `Aktualisiert HH:MM`, fuer aeltere Daten
+  zusaetzlich das Datum und ohne verwertbaren Cache `Aktualisiert -` anzeigen.
+  Eine offene Vorschau aktualisiert den Zeitpunkt nach erfolgreichem Refresh.
 - [x] In jedem Tagesbereich sechs gleich breite Vorhersagespalten fuer 06, 09,
   12, 15, 18 und 21 Uhr zeichnen. Die Spalten werden ueber alle drei Tage
   hinweg ausgerichtet.

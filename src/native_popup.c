@@ -223,6 +223,34 @@ static void drawCenteredText(NativePopup *popup,
   pango_cairo_show_layout(popup->cairo, popup->layout);
 }
 
+static int textWidth(NativePopup *popup, const char *text) {
+  prepareLayout(popup, text);
+  int width = 0;
+  pango_layout_get_pixel_size(popup->layout, &width, NULL);
+  return width;
+}
+
+static void drawRightAlignedText(
+    NativePopup *popup, const char *text, int right, int y, const char *color) {
+  drawText(popup, text, right - textWidth(popup, text), y, color);
+}
+
+static void drawEllipsizedText(NativePopup *popup,
+                               const char *text,
+                               int x,
+                               int y,
+                               int width,
+                               const char *color) {
+  setColor(popup->cairo, color, "#ffffff");
+  prepareLayout(popup, text);
+  pango_layout_set_width(popup->layout, width * PANGO_SCALE);
+  pango_layout_set_ellipsize(popup->layout, PANGO_ELLIPSIZE_END);
+  cairo_move_to(popup->cairo, x, y);
+  pango_cairo_show_layout(popup->cairo, popup->layout);
+  pango_layout_set_width(popup->layout, -1);
+  pango_layout_set_ellipsize(popup->layout, PANGO_ELLIPSIZE_NONE);
+}
+
 static void drawMenu(NativePopup *popup) {
   setColor(popup->cairo, popup->config.colorPanelBg, "#000000");
   cairo_paint(popup->cairo);
@@ -320,7 +348,22 @@ static void drawForecast(NativePopup *popup) {
   const char *title = popup->forecastLocation[0]
                           ? popup->forecastLocation
                           : (german ? "Wettervorhersage" : "Weather forecast");
-  drawText(popup, title, 10, 7, popup->config.colorWeather);
+  char updated[64];
+  weatherForecastUpdatedLabel(popup->forecast.updatedAt,
+                              popup->forecast.updatedAtValid,
+                              german,
+                              time(NULL),
+                              updated,
+                              sizeof(updated));
+  int updatedWidth = textWidth(popup, updated);
+  int updatedLeft = popup->width - 10 - updatedWidth;
+  int titleWidth = updatedLeft - 20;
+  if (titleWidth < 1)
+    titleWidth = 1;
+  drawEllipsizedText(
+      popup, title, 10, 7, titleWidth, popup->config.colorWeather);
+  drawRightAlignedText(
+      popup, updated, popup->width - 10, 7, popup->config.colorFree);
   if (popup->forecast.dayCount == 0) {
     drawText(popup,
              german ? "Keine Vorhersagedaten verfügbar"

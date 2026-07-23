@@ -189,6 +189,8 @@ For each day it shows minimum and maximum temperature plus weather glyph,
 temperature, and rain probability at 06, 09, 12, 15, 18, and 21.
 The time labels are drawn as fixed Cairo fields.  Missing values are shown as
 dashes, and monochrome Unicode symbols are used when no icon font is available.
+The popup header shows the location on the left and the last successful cache
+update time on the right.  Older cache data also shows its date.
 Only JSON weather data is downloaded; no forecast image or external image
 viewer is used.
 .SS Other commonly changed keys

@@ -204,11 +204,16 @@ gezeichnetes Zeitfeld, eine Wetter-Glyphe, die Temperatur und die
 Regenwahrscheinlichkeit. Fehlende Werte erscheinen als Gedankenstrich; ohne
 verfügbare Icon-Schrift nutzt Sliverbar monochrome Unicode-Symbole.
 
+In der Kopfzeile steht links der aktive Ort und rechts der Zeitpunkt der
+letzten erfolgreichen Cache-Aktualisierung. Für Daten vom aktuellen Tag wird
+`Aktualisiert HH:MM` angezeigt, bei älteren Daten zusätzlich das Datum. Ohne
+verwertbaren Cache erscheint `Aktualisiert –`.
+
 Die Ansicht verwendet ausschließlich den vorhandenen JSON-Cache und wird nach
-einer asynchronen Aktualisierung neu gezeichnet. Sliverbar lädt kein
-Vorhersage-PNG mehr herunter und startet keinen externen Bildbetrachter. Der
-alte Schlüssel `weather_image=` wird noch akzeptiert, aber ignoriert und als
-veraltet protokolliert.
+einer asynchronen Aktualisierung einschließlich des Zeitpunkts neu gezeichnet.
+Sliverbar lädt kein Vorhersage-PNG mehr herunter und startet keinen externen
+Bildbetrachter. Der alte Schlüssel `weather_image=` wird noch akzeptiert, aber
+ignoriert und als veraltet protokolliert.
 
 Ohne konfigurierten Ort oder ohne verwertbare Daten bleibt der Block im
 `auto`-Modus verborgen.

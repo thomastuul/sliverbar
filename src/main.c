@@ -21,6 +21,7 @@
 #include <string.h>
 #include <sys/file.h>
 #include <sys/signalfd.h>
+#include <sys/stat.h>
 #include <sys/timerfd.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -660,10 +661,28 @@ static void loadWeatherForecast(const PanelConfig *config,
                                 WeatherForecast *forecast) {
   memset(forecast, 0, sizeof(*forecast));
   char json[32768] = "";
-  if (!config->weatherCache[0] ||
-      readTextFile(config->weatherCache, json, sizeof(json)) ||
-      weatherForecastParse(json, forecast))
+  if (!config->weatherCache[0])
+    return;
+  int fd = open(config->weatherCache, O_RDONLY | O_CLOEXEC);
+  if (fd < 0)
+    return;
+  struct stat cacheStat;
+  ssize_t length = read(fd, json, sizeof(json) - 1);
+  int status = fstat(fd, &cacheStat);
+  int saved = errno;
+  close(fd);
+  errno = saved;
+  if (length < 0 || status) {
     memset(forecast, 0, sizeof(*forecast));
+    return;
+  }
+  json[length] = '\0';
+  if (weatherForecastParse(json, forecast)) {
+    memset(forecast, 0, sizeof(*forecast));
+    return;
+  }
+  forecast->updatedAtValid = true;
+  forecast->updatedAt = cacheStat.st_mtime;
 }
 
 static int openWeatherForecast(NativePopup *popup,
@@ -1772,7 +1791,11 @@ int main(int argc, char **argv) {
     int forecastX = 0, forecastY = 0, forecastWidth = 0, emptyHeight = 0;
     nativePopupGeometry(
         smokePopup, &forecastX, &forecastY, &forecastWidth, &emptyHeight);
-    WeatherForecast smokeForecast = {.dayCount = WEATHER_FORECAST_DAY_COUNT};
+    WeatherForecast smokeForecast = {
+        .dayCount = WEATHER_FORECAST_DAY_COUNT,
+        .updatedAtValid = true,
+        .updatedAt = time(NULL),
+    };
     for (size_t day = 0; day < WEATHER_FORECAST_DAY_COUNT; day++) {
       WeatherForecastDay *forecastDay = &smokeForecast.days[day];
       forecastDay->available = true;
