@@ -6,11 +6,11 @@ cd "$project_dir"
 
 ./scripts/format-check.sh
 
-if [ ! -f build/container-release/compile_commands.json ]; then
-    cmake --preset container-release
+if [ ! -f build/local-host/compile_commands.json ]; then
+    cmake --preset local
 fi
 
 clang-tidy -quiet \
-    -p build/container-release \
+    -p build/local-host \
     src/*.c \
     tests/*.c

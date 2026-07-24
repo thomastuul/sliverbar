@@ -1,159 +1,62 @@
+# Sliverbar repository instructions
+
 ## Code
 
-- Use C17.
-- Use `./scripts/inspect.sh` for a read-only repository overview before reading files.
-- Use `rg --files` first to inspect the repository structure before reading files.
-- Prefer targeted `rg` searches and read only files relevant to the task.
-- Exclude generated files, build directories, caches, dependencies, and `.git` unless they are explicitly relevant.
-- Start coding sessions with the Codex profile `dev`.
-- Run formatting and linting tools directly in the current session.
-- Do not attempt to switch Codex profiles within a running session.
-- Use a separate `codex --profile fast` session only for an optional AI review focused on formatting or linting.
+- Use C17 and preserve the existing CMake architecture.
+- Keep the project buildable without XCB development headers.
 - Format changed C files with clang-format.
 - Run clang-tidy on changed translation units.
 - Run CTest after every code change.
-- Keep the project buildable without XCB development headers.
+- Keep generated files in out-of-source build directories.
 
-## Scripts
+## Repository search
 
-- Use `./scripts/inspect.sh` for a bundled read-only overview.
-- Use `./scripts/format-check.sh` for the local clang-format check.
-- Use `./scripts/lint.sh` for formatting and clang-tidy validation.
-- Use `./scripts/test.sh` for the complete authoritative container validation.
+- Use `./scripts/inspect.sh` for a read-only repository overview before reading files.
+- Use `rg --files` first to inspect the repository structure.
+- Prefer targeted `rg` searches and read only files relevant to the task.
+- Exclude generated files, build directories, caches, dependencies, and `.git` unless explicitly relevant.
 
-## Standard validation
+## Validation scripts
 
-For normal C changes, use the reproducible container workflow from the
-repository root:
+- `./scripts/quick-check.sh`: fast iterative checks.
+- `./scripts/lint.sh`: local format and clang-tidy validation.
+- `./scripts/test-local.sh`: local build and CTest.
+- `./scripts/test.sh`: complete authoritative container validation.
 
-    ./scripts/container-build.sh
+## Staged validation
 
-This is the authoritative validation before committing C changes. It must run:
+1. Run `./scripts/quick-check.sh` during iterative development.
+2. Run `./scripts/test-local.sh` after normal C changes.
+3. Run `./scripts/test.sh` before committing, pushing, releasing, or opening a PR.
 
-- clang-format validation
-- clang-tidy
-- native release compilation
-- CLI-only compilation without XCB
-- CTest
-- ASan/UBSan tests
-- automated X11 tests under Xvfb
+The complete validation workflow is documented in [docs/development.md](docs/development.md).
 
-Set `CONTAINER_ENGINE=podman` to use rootless Podman instead of Docker.
+## Deployment and packaging
 
-## Deployment validation
-
-- Before every deployment, CTest must pass.
-- Before replacing a live Sliverbar instance, capture the current panel as the
-  visual baseline and record the configuration used by that process. Start the
-  candidate with the same complete configuration; add feature-specific test
-  settings to a copy of that configuration instead of replacing it with a
-  minimal configuration.
-- Compare the candidate and baseline graphically across the complete panel and
-  every changed popup. Check font family and size, glyph selection, colors
-  including active and warning states, spacing, alignment, module order, panel
-  geometry, and popup geometry. Treat every unexplained visual difference as a
-  regression that must be fixed before deployment.
-- A full `codex-security` `$security-scan`, including validation and attack-path
-  analysis, is optional and may only be started after explicit user approval.
-- Do not represent a security scan as a routine prerequisite for every build or
-  deployment when neither condition applies.
-
-## Packaging
-
-- The project should remain packageable as a distributable Linux package, for
-  example a Debian package (`.deb`). Prefer integrating package generation
-  through the existing CMake/install metadata (such as CPack) rather than
-  duplicating build definitions.
-- Before producing a package, verify the installed binary, configuration files,
-  runtime-library requirements, package contents, and version metadata.
-- Before producing a distributable package, perform a restricted, read-only
-  security review of the repository. Do not request Trusted Access for Cyber.
-  Limit the review to threat modeling and static source inspection; do not
-  generate exploits or proof-of-concept attacks, perform offensive testing, or
-  access external systems.
-
-A local build may be used for quick iteration:
-
-    cmake -S . -B build/local \
-      -DCMAKE_BUILD_TYPE=RelWithDebInfo
-    cmake --build build/local --parallel
-    ctest --test-dir build/local --output-on-failure
-
-## Containerized development
-
-- Use Docker or rootless Podman for reproducible compilation, static analysis,
-  sanitizer builds, and automated tests.
-- Build dependencies may be installed inside the development container. This
-  includes compilers, CMake, Ninja, clang-format, clang-tidy, Xvfb, development
-  headers, and required build or runtime libraries.
-- Do not install project build dependencies on the host when they can be kept
-  inside the development container.
-- Keep the container definition, build commands, and dependency versions in
-  version-controlled project files.
-- Use CMake presets or project scripts for container builds instead of
-  duplicating long command lines in documentation or agent instructions.
-- Build as an unprivileged user and ensure generated files are owned by the
-  invoking host user.
-- Use out-of-source build directories and never write generated build artifacts
-  into `src`, `include`, or `tests`.
-- Run clang-format, clang-tidy, CTest, and sanitizer tests inside the container
-  before committing C code changes.
-- Use Xvfb for automated X11 integration and rendering tests inside the
-  container whenever possible.
-- Do not run the production panel inside the development container. The final
-  panel should run as a normal process in the user's graphical session.
-- Do not use privileged containers.
-- Do not mount the Docker or Podman control socket into the container.
-- Do not mount the host X11 socket, D-Bus socket, audio sockets, or unrelated
-  host directories unless a specific integration test requires that access.
-- Keep any host integration mount read-only unless the test explicitly requires
-  writes.
-- A container-built release must remain compatible with the target host's libc
-  and runtime environment.
-- Document the host runtime libraries required by dynamically linked release
-  binaries. If releases must avoid host library installation, provide an
-  explicit packaging solution instead of assuming that containerized builds
-  remove runtime dependencies.
-
-## Runtime and integration tests
-
-- Use host runtime tools such as `xprop`, `xrandr`, `xdotool`, `xwininfo`,
-  `bspc`, `pactl`, `nmcli`, `ps`, and `strace` only when relevant to integration
-  testing or runtime diagnosis.
+- Follow [docs/deployment.md](docs/deployment.md) before replacing a live instance.
+- Follow [docs/packaging.md](docs/packaging.md) before producing a distributable package.
+- Do not start a full security scan without explicit user approval.
 
 ## Versioning
 
-The project must have a centrally managed version number.
+- The single version source is `VERSION` and must use `MAJOR.MINOR.PATCH`.
+- The program must support `sliverbar --version` and exit successfully.
+- Keep version tests and documentation synchronized with `VERSION`.
 
-- The version number must use Semantic Versioning:
-  `MAJOR.MINOR.PATCH`, for example `1.4.2`.
-- The version number must be defined in only one central location.
-- The program must be able to print the version number from the command line.
-- Supported option:
+## Definition of Done
 
-      program-name --version
+A change is complete when:
 
-- The output should contain only, or at least, the following:
+- relevant files were located and inspected with targeted searches;
+- `./scripts/quick-check.sh` passes when applicable;
+- `./scripts/test-local.sh` passes for C changes;
+- `./scripts/test.sh` passes before commit, push, release, or PR;
+- `git diff --check` passes;
+- versioning remains correct;
+- relevant documentation is updated;
+- no unrelated files are changed;
+- live or deployment tests were performed only with explicit approval.
 
-      program-name 1.4.2
-
-- `--version` must exit successfully with exit code 0.
-- The versioning logic must not change normal program execution.
-- Scattered or independently maintained duplicate version numbers must be avoided.
-- Tests for the `--version` option must be added or updated.
-- The documentation must mention the `--version` option.
-
-### Implementation
-
-Before making changes:
-
-1. Determine the programming language, build system, and existing command-line parser.
-2. Check whether a central version definition already exists.
-3. Use the project's customary version source, for example:
-   - `pyproject.toml`
-   - `CMakeLists.txt`
-   - `package.json`
-   - Cargo metadata
-   - a dedicated file such as `VERSION`
-4. After making the change, run the existing tests and additionally invoke
-   `program-name --version` directly.
+For documentation-only or packaging-only changes, apply the relevant checks from
+the linked development, deployment, or packaging document instead of forcing the
+full C test matrix when it is not applicable.

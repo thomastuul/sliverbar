@@ -7,6 +7,18 @@
   },
   "configurePresets": [
     {
+      "name": "local",
+      "generator": "Unix Makefiles",
+      "binaryDir": "${sourceDir}/build/local-host",
+      "cacheVariables": {
+        "BUILD_TESTING": "ON",
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+        "SLIVERBAR_EDS": "OFF",
+        "SLIVERBAR_WITH_XCB": "ON"
+      }
+    },
+    {
       "name": "container-base",
       "hidden": true,
       "generator": "Ninja",
@@ -80,6 +92,7 @@
     }
   ],
   "buildPresets": [
+    { "name": "local", "configurePreset": "local" },
     { "name": "container-release", "configurePreset": "container-release" },
     { "name": "container-fallback", "configurePreset": "container-fallback" },
     { "name": "container-sanitizers", "configurePreset": "container-sanitizers" },
@@ -88,6 +101,11 @@
     { "name": "container-minimal", "configurePreset": "container-minimal" }
   ],
   "testPresets": [
+    {
+      "name": "local",
+      "configurePreset": "local",
+      "output": { "outputOnFailure": true }
+    },
     {
       "name": "container-release",
       "configurePreset": "container-release",
