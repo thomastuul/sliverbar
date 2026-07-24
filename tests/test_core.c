@@ -647,8 +647,12 @@ int main(int argc, char **argv) {
   CHECK(currentNumericLocale != NULL);
   char numericLocale[128];
   snprintf(numericLocale, sizeof(numericLocale), "%s", currentNumericLocale);
-  CHECK(setlocale(LC_NUMERIC, "de_DE.UTF-8") != NULL);
-  CHECK(strcmp(localeconv()->decimal_point, ",") == 0);
+  const char *germanNumericLocale = setlocale(LC_NUMERIC, "de_DE.UTF-8");
+  if (germanNumericLocale != NULL) {
+    CHECK(strcmp(localeconv()->decimal_point, ",") == 0);
+  } else {
+    CHECK(setlocale(LC_NUMERIC, "C") != NULL);
+  }
   char brightnessFactor[16];
   int brightnessPercent = 0;
   CHECK(brightnessFactorFormat(99, brightnessFactor, sizeof(brightnessFactor)));
