@@ -157,17 +157,9 @@ reserves the host's measured width. Sliverbar does not require the external
 
 ## Architecture
 
-- one `poll(2)` loop handles `timerfd`, `signalfd`, native mouse actions,
-  optional bspwm reports, NetworkManager and X11;
-- an XCB window with EWMH dock and strut properties provides the panel surface;
-- Cairo and Pango render the existing block model with measured left, centered,
-  and right-aligned regions;
-- mouse actions use a private `|`-separated protocol and are never evaluated by
-  a shell;
-- CPU, battery, clock, screencast, network state and cache parsing are native C;
-- XCB property events update the active-window title without polling;
-- weather downloads run in a supervised child and are atomically published;
-- optional programs are detected at runtime and executed with explicit argv.
+The technical architecture, build targets, runtime flow, optional integrations,
+process-safety model, testing architecture, and extension guidelines are
+documented in [docs/architecture.md](docs/architecture.md).
 
 ## Configuration
 
