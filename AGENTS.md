@@ -1,8 +1,10 @@
 ## Code
 
 - Use C17.
-- Use the Codex profile `fast` for formatting/linting-only work.
-- Use the Codex profile `dev` for all other work.
+- Start coding sessions with the Codex profile `dev`.
+- Run formatting and linting tools directly in the current session.
+- Do not attempt to switch Codex profiles within a running session.
+- Use a separate `codex --profile fast` session only for an optional AI review focused on formatting or linting.
 - Format changed C files with clang-format.
 - Run clang-tidy on changed translation units.
 - Run CTest after every code change.
