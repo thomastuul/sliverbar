@@ -37,3 +37,16 @@ before deployment.
   runtime diagnosis.
 - Restore the previous live state after temporary validation changes.
 - A full `codex-security` scan is optional and requires explicit user approval.
+
+## Release publishing
+
+GitHub release publishing is separate from live deployment of the panel.
+Use the repository workflows for package publication:
+
+- `.github/workflows/test.yml` validates pushes and pull requests.
+- `.github/workflows/release.yml` builds the Debian and Fedora packages from
+  tagged releases and uploads the resulting files as GitHub Release assets.
+
+Do not treat package publication as a replacement for runtime validation on the
+target host. Verify the candidate panel in the actual graphical session before
+replacing a live instance.

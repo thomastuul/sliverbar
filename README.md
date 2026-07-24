@@ -86,6 +86,14 @@ Set `CONTAINER_ENGINE=podman` to package with rootless Podman. The resulting
 by Git. Package production is deliberately separate from a routine build. A
 full Codex Security scan remains optional and requires explicit user approval.
 
+For GitHub publishing, use the repository workflows:
+
+- `.github/workflows/test.yml` runs `./scripts/test.sh` on pushes and pull
+  requests.
+- `.github/workflows/release.yml` builds both package formats on tags matching
+  `v*` and uploads the resulting `.deb`, `.rpm`, and `SHA256SUMS` files as
+  release assets.
+
 The native release is dynamically linked. Inspect it with `ldd` before
 distributing it to another system. `-DSLIVERBAR_WITH_XCB=OFF` intentionally
 builds the CLI-only variant used to verify that configuration and version

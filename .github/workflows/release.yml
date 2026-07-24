@@ -1,0 +1,59 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SLIVERBAR_STATIC_REVIEWED: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Verify tag version
+        run: |
+          set -eu
+          version=$(cat VERSION)
+          tag=${GITHUB_REF_NAME#v}
+          test "$tag" = "$version"
+
+      - name: Build Debian and RPM packages
+        run: ./scripts/package-build.sh
+
+      - name: Verify package versions
+        run: |
+          set -eu
+          version=$(cat VERSION)
+          deb=$(find build/package -maxdepth 1 -type f -name "sliverbar_${version}_*.deb" -print -quit)
+          rpm=$(find build/package -maxdepth 1 -type f -name "sliverbar-${version}-*.rpm" -print -quit)
+          test -n "$deb"
+          test -n "$rpm"
+
+      - name: Generate checksums
+        run: |
+          set -eu
+          sha256sum build/package/*.deb build/package/*.rpm > build/package/SHA256SUMS
+
+      - name: Upload Debian and RPM artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: sliverbar ${{ github.ref_name }}
+          files: |
+            build/package/*.deb
+            build/package/*.rpm
+            build/package/SHA256SUMS

@@ -20,6 +20,15 @@ Use the existing scripts rather than duplicating package build commands:
 ./scripts/package-build.sh
 ```
 
+On GitHub, keep packaging orchestration in workflow files and reuse the same
+repository scripts:
+
+- `.github/workflows/test.yml` runs `./scripts/test.sh` for push and pull
+  request validation.
+- `.github/workflows/release.yml` runs `SLIVERBAR_STATIC_REVIEWED=1
+  ./scripts/package-build.sh` for tag builds and publishes the generated
+  package files.
+
 ## Security review
 
 Before producing a distributable package, perform a restricted, read-only
