@@ -1,6 +1,10 @@
 ## Code
 
 - Use C17.
+- Use `./scripts/inspect.sh` for a read-only repository overview before reading files.
+- Use `rg --files` first to inspect the repository structure before reading files.
+- Prefer targeted `rg` searches and read only files relevant to the task.
+- Exclude generated files, build directories, caches, dependencies, and `.git` unless they are explicitly relevant.
 - Start coding sessions with the Codex profile `dev`.
 - Run formatting and linting tools directly in the current session.
 - Do not attempt to switch Codex profiles within a running session.
@@ -9,6 +13,13 @@
 - Run clang-tidy on changed translation units.
 - Run CTest after every code change.
 - Keep the project buildable without XCB development headers.
+
+## Scripts
+
+- Use `./scripts/inspect.sh` for a bundled read-only overview.
+- Use `./scripts/format-check.sh` for the local clang-format check.
+- Use `./scripts/lint.sh` for formatting and clang-tidy validation.
+- Use `./scripts/test.sh` for the complete authoritative container validation.
 
 ## Standard validation
 
