@@ -19,7 +19,15 @@
 - Use `./scripts/inspect.sh` for a bundled read-only overview.
 - Use `./scripts/format-check.sh` for the local clang-format check.
 - Use `./scripts/lint.sh` for formatting and clang-tidy validation.
+- Use `./scripts/quick-check.sh` after small changes for the fast validation stage.
+- Use `./scripts/test-local.sh` for the local build and CTest stage.
 - Use `./scripts/test.sh` for the complete authoritative container validation.
+
+## Staged validation
+
+1. Run `./scripts/quick-check.sh` during iterative development.
+2. Run `./scripts/test-local.sh` after normal C changes.
+3. Run `./scripts/test.sh` before committing, pushing, releasing, or opening a PR.
 
 ## Standard validation
 
