@@ -53,7 +53,9 @@ struct NativePanel {
   xcb_screen_t *screen;
   xcb_window_t window;
   cairo_surface_t *surface;
+  cairo_surface_t *backSurface;
   cairo_t *cairo;
+  cairo_t *presentCairo;
   PangoLayout *layout;
   PangoFontDescription *font;
   PangoFontDescription *iconFont;
@@ -69,6 +71,7 @@ struct NativePanel {
   ActionRegion regions[MAX_REGIONS];
   size_t regionCount;
   char lastMarkup[32768];
+  bool repaintRequested;
 };
 
 static void useRootBounds(NativePanel *panel) {
@@ -164,6 +167,26 @@ static xcb_visualtype_t *findVisual(xcb_screen_t *screen) {
         return visuals.data;
   }
   return NULL;
+}
+
+static int createBackBuffer(NativePanel *panel) {
+  cairo_surface_t *surface = cairo_image_surface_create(
+      CAIRO_FORMAT_RGB24, panel->width, panel->config.height);
+  cairo_t *cairo = cairo_create(surface);
+  if (cairo_surface_status(surface) != CAIRO_STATUS_SUCCESS ||
+      cairo_status(cairo) != CAIRO_STATUS_SUCCESS) {
+    cairo_destroy(cairo);
+    cairo_surface_destroy(surface);
+    return -1;
+  }
+  if (panel->cairo)
+    cairo_destroy(panel->cairo);
+  if (panel->backSurface)
+    cairo_surface_destroy(panel->backSurface);
+  panel->backSurface = surface;
+  panel->cairo = cairo;
+  panel->repaintRequested = true;
+  return 0;
 }
 
 static bool
@@ -331,7 +354,12 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
   }
   panel->surface = cairo_xcb_surface_create(
       connection, panel->window, visual, panel->width, config->height);
-  panel->cairo = cairo_create(panel->surface);
+  panel->presentCairo = cairo_create(panel->surface);
+  if (createBackBuffer(panel)) {
+    snprintf(error, errorSize, "cannot create the panel back buffer");
+    nativePanelDestroy(panel);
+    return NULL;
+  }
   panel->layout = pango_cairo_create_layout(panel->cairo);
   char description[256];
   fontName(config->font, description, sizeof(description));
@@ -344,7 +372,8 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
   }
   pango_layout_set_font_description(panel->layout, panel->font);
   xcb_flush(connection);
-  if (cairo_surface_status(panel->surface) != CAIRO_STATUS_SUCCESS) {
+  if (cairo_surface_status(panel->surface) != CAIRO_STATUS_SUCCESS ||
+      cairo_status(panel->presentCairo) != CAIRO_STATUS_SUCCESS) {
     snprintf(error, errorSize, "cannot create the Cairo X11 surface");
     nativePanelDestroy(panel);
     return NULL;
@@ -364,6 +393,10 @@ void nativePanelDestroy(NativePanel *panel) {
     pango_font_description_free(panel->iconFont);
   if (panel->cairo)
     cairo_destroy(panel->cairo);
+  if (panel->presentCairo)
+    cairo_destroy(panel->presentCairo);
+  if (panel->backSurface)
+    cairo_surface_destroy(panel->backSurface);
   if (panel->surface)
     cairo_surface_destroy(panel->surface);
   if (panel->window)
@@ -629,13 +662,21 @@ static int drawMarkup(NativePanel *panel, const char *markup) {
     drawSegmentContent(panel, &segments[i], segmentX[i]);
     addRegions(panel, &segments[i], segmentX[i]);
   }
+  cairo_surface_flush(panel->backSurface);
+  cairo_set_source_surface(panel->presentCairo, panel->backSurface, 0, 0);
+  cairo_set_operator(panel->presentCairo, CAIRO_OPERATOR_SOURCE);
+  cairo_paint(panel->presentCairo);
   cairo_surface_flush(panel->surface);
   xcb_flush(panel->connection);
-  return cairo_status(panel->cairo) == CAIRO_STATUS_SUCCESS ? 0 : -1;
+  return cairo_status(panel->cairo) == CAIRO_STATUS_SUCCESS &&
+                 cairo_status(panel->presentCairo) == CAIRO_STATUS_SUCCESS
+             ? 0
+             : -1;
 }
 
 int nativePanelDraw(NativePanel *panel, const PanelState *state) {
   PanelState rendered = *state;
+  char markup[sizeof(panel->lastMarkup)];
   if (moduleModeActive(panel->config.moduleTray,
                        nativeTrayAvailable(panel->tray))) {
     int width = nativeTrayWidth(panel->tray);
@@ -646,8 +687,13 @@ int nativePanelDraw(NativePanel *panel, const PanelState *state) {
              panel->config.colorBg,
              width + 4);
   }
-  renderPanel(&rendered, panel->lastMarkup, sizeof(panel->lastMarkup));
-  int result = drawMarkup(panel, panel->lastMarkup);
+  renderPanel(&rendered, markup, sizeof(markup));
+  if (!panel->repaintRequested && !strcmp(markup, panel->lastMarkup))
+    return 0;
+  snprintf(panel->lastMarkup, sizeof(panel->lastMarkup), "%s", markup);
+  int result = drawMarkup(panel, markup);
+  if (!result)
+    panel->repaintRequested = false;
   if (!result && moduleModeActive(panel->config.moduleTray,
                                   nativeTrayAvailable(panel->tray)))
     nativeTrayAcquire(panel->tray);
@@ -684,6 +730,8 @@ bool nativePanelHandleEvent(NativePanel *panel,
                            geometry);
       cairo_xcb_surface_set_size(
           panel->surface, panel->width, panel->config.height);
+      if (createBackBuffer(panel))
+        return false;
       configureEwmh(panel);
       *redraw = true;
     }
@@ -691,10 +739,12 @@ bool nativePanelHandleEvent(NativePanel *panel,
   }
 #endif
   if (nativeTrayHandleEvent(panel->tray, event)) {
+    panel->repaintRequested = true;
     *redraw = true;
     return false;
   }
   if (type == XCB_EXPOSE) {
+    panel->repaintRequested = true;
     *redraw = true;
     return false;
   }
