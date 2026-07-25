@@ -63,6 +63,7 @@ int main(int argc, char **argv) {
   PanelConfig cfg;
   configDefaults(&cfg);
   CHECK(cfg.height == 25);
+  CHECK(cfg.blockPadding == 6);
   CHECK(cfg.volumeStep == 2);
   CHECK(strcmp(cfg.colorPanelBg, "#191A21") == 0);
   CHECK(strcmp(cfg.colorBg, "#282A36") == 0);
@@ -366,7 +367,8 @@ int main(int argc, char **argv) {
   int fd = mkstemp(path);
   CHECK(fd >= 0);
   const char TEXT[] =
-      "height=31\nvolume_step=4\ncolor_bg=#000000\nmodule_cpu=disabled\n"
+      "height=31\nblock_padding=9\nvolume_step=4\ncolor_bg=#000000\n"
+      "module_cpu=disabled\n"
       "power_actions=lock,reboot,poweroff\npower_confirm=reboot,poweroff\n"
       "module_timer=enabled\ntimer_sound=/tmp/timer.oga\n";
   CHECK(write(fd, TEXT, sizeof(TEXT) - 1) == (ssize_t)(sizeof(TEXT) - 1));
@@ -375,6 +377,7 @@ int main(int argc, char **argv) {
   char error[256];
   CHECK(configLoad(&cfg, path, error, sizeof(error)) == 0);
   CHECK(cfg.height == 31);
+  CHECK(cfg.blockPadding == 9);
   CHECK(cfg.volumeStep == 4);
   CHECK(strcmp(cfg.colorBg, "#000000") == 0);
   CHECK(strcmp(cfg.colorOccupied, "#ff5555") == 0);
@@ -685,7 +688,8 @@ int main(int argc, char **argv) {
   CHECK(setlocale(LC_NUMERIC, numericLocale) != NULL);
   PanelState brightnessState = {0};
   moduleBrightnessValue(&cfg, &brightnessState, 42);
-  CHECK(strstr(brightnessState.brightness, "  42%") != NULL);
+  CHECK(strstr(brightnessState.brightness, "%{O4}42%") != NULL);
+  CHECK(strstr(brightnessState.brightness, "%{O9}") != NULL);
   brightnessState.brightnessInitialized = true;
   strcpy(brightnessState.brightnessOutput, "DP-3");
   brightnessState.brightnessPercent = 42;
@@ -694,7 +698,7 @@ int main(int argc, char **argv) {
   CHECK(moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
   CHECK(moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
   CHECK(brightnessState.brightnessPercent == 39);
-  CHECK(strstr(brightnessState.brightness, "  39%") != NULL);
+  CHECK(strstr(brightnessState.brightness, "%{O4}39%") != NULL);
   brightnessState.brightnessUpdatePending = true;
   CHECK(!moduleBrightnessAdjust(&cfg, &brightnessState, "down"));
   CHECK(brightnessState.brightnessPercent == 39);
@@ -741,6 +745,7 @@ int main(int argc, char **argv) {
   CHECK(strstr(timerPanelState.timer, cfg.colorUrgent) != NULL);
   CHECK(strstr(timerPanelState.timer, "12 ") != NULL);
   CHECK(strstr(timerPanelState.timer, "󰀡") != NULL);
+  CHECK(strstr(timerPanelState.timer, "%{O13}") != NULL);
   static const char *const TIMER_ANIMATION_GLYPHS[] = {
       "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥"};
   for (unsigned frame = 0; frame < TIMER_ANIMATION_FRAMES; frame++) {
@@ -841,8 +846,10 @@ int main(int argc, char **argv) {
   timerReset(&timer);
   PanelState batteryState = {0};
   moduleBattery(&cfg, &batteryState);
-  if (access("/sys/class/power_supply", R_OK) == 0)
+  if (access("/sys/class/power_supply", R_OK) == 0) {
     CHECK(batteryState.battery[0] != '\0');
+    CHECK(strstr(batteryState.battery, "%{O4}") != NULL);
+  }
 
   PanelState state = {0};
   strcpy(state.launcher, "L");

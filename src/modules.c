@@ -17,9 +17,29 @@
 #include <gio/gio.h>
 #endif
 
-static void
-block(char *out, size_t n, const char *bg, const char *fg, const char *text) {
-  snprintf(out, n, "%%{B%s}%%{F%s}%%{+u} %s %%{-u}%%{F-}%%{B-}", bg, fg, text);
+static void blockPadded(char *out,
+                        size_t n,
+                        const PanelConfig *c,
+                        const char *fg,
+                        const char *text,
+                        int leftPadding,
+                        int rightPadding) {
+  snprintf(out,
+           n,
+           "%%{B%s}%%{F%s}%%{+u}%%{O%d}%s%%{O%d}%%{-u}%%{F-}%%{B-}",
+           c->colorBg,
+           fg,
+           leftPadding,
+           text,
+           rightPadding);
+}
+
+static void block(char *out,
+                  size_t n,
+                  const PanelConfig *c,
+                  const char *fg,
+                  const char *text) {
+  blockPadded(out, n, c, fg, text, c->blockPadding, c->blockPadding);
 }
 static void
 action(char *out, size_t n, int button, const char *command, const char *body) {
@@ -92,7 +112,7 @@ void moduleClock(const PanelConfig *c, PanelState *s) {
   const char *clockGlyph = moduleClockGlyph(c, (unsigned)tm.tm_hour);
   snprintf(text, sizeof(text), " %s %s %s", d, clockGlyph, t);
   char body[256];
-  block(body, sizeof(body), c->colorBg, c->colorClock, text);
+  block(body, sizeof(body), c, c->colorClock, text);
   char leftAction[384];
   if (appRoleAvailable(c, APP_ROLE_CALENDAR))
     action(leftAction, sizeof(leftAction), 1, "role|calendar", body);
@@ -141,7 +161,7 @@ void moduleCpu(const PanelConfig *c, PanelState *s) {
   if (padding < 0)
     padding = 0;
   snprintf(text, sizeof(text), " %s%%%*s", usage, padding, "");
-  block(body, sizeof(body), c->colorBg, c->colorSystem, text);
+  block(body, sizeof(body), c, c->colorSystem, text);
   if (appRoleAvailable(c, APP_ROLE_SYSTEM_MONITOR))
     action(s->cpu, sizeof(s->cpu), 1, "role|system_monitor", body);
   else
@@ -186,7 +206,7 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
     return;
   char text[96];
   if (!count)
-    snprintf(text, sizeof(text), " AC");
+    snprintf(text, sizeof(text), "%%{O4}AC");
   else {
     int p = sum / count;
     const char *icon = p >= 95   ? ""
@@ -194,20 +214,17 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
                        : p >= 50 ? ""
                        : p >= 25 ? ""
                                  : "";
-    snprintf(text,
-             sizeof(text),
-             "%s %3d%% %s",
-             icon,
-             p,
-             charging ? ""
-             : full   ? ""
-                      : " ");
+    const char *status = charging ? "" : full ? "" : "";
+    if (status[0])
+      snprintf(text, sizeof(text), "%s%%{O4}%d%%%%{O4}%s", icon, p, status);
+    else
+      snprintf(text, sizeof(text), "%s%%{O4}%d%%", icon, p);
   }
   const char *fg = charging                       ? c->colorFocus
                    : (count && sum / count <= 10) ? c->colorCritical
                    : (count && sum / count <= 20) ? c->colorWarning
                                                   : c->colorBattery;
-  block(s->battery, sizeof(s->battery), c->colorBg, fg, text);
+  block(s->battery, sizeof(s->battery), c, fg, text);
 }
 
 void moduleScreencast(const PanelConfig *c,
@@ -221,7 +238,7 @@ void moduleScreencast(const PanelConfig *c,
     return;
   block(s->screencast,
         sizeof(s->screencast),
-        c->colorBg,
+        c,
         active ? c->colorCritical : c->colorFree,
         "壘");
 }
@@ -330,11 +347,7 @@ void moduleVolume(const PanelConfig *c, PanelState *s) {
            levelText,
            padding,
            "");
-  block(body,
-        sizeof(body),
-        c->colorBg,
-        muted ? c->colorMuted : c->colorVolume,
-        text);
+  block(body, sizeof(body), c, muted ? c->colorMuted : c->colorVolume, text);
   if (appRoleAvailable(c, APP_ROLE_VOLUME_SETTINGS))
     action(tmp, sizeof(tmp), 1, "role|volume_settings", body);
   else
@@ -605,7 +618,7 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
     snprintf(text, sizeof(text), " %s", wifiText);
   else
     snprintf(text, sizeof(text), "%s", eth ? "" : wifiText);
-  block(body, sizeof(body), c->colorBg, c->colorNetwork, text);
+  block(body, sizeof(body), c, c->colorNetwork, text);
   char tmp[768];
   char cmd[180];
   snprintf(cmd, sizeof(cmd), "notify|Network|%s", safe);
@@ -621,8 +634,8 @@ void moduleBrightnessValue(const PanelConfig *c, PanelState *s, int pct) {
   if (!moduleModeActive(c->moduleBrightness, true))
     return;
   char text[64], body[256], tmp[512];
-  snprintf(text, sizeof(text), " %3d%%", pct);
-  block(body, sizeof(body), c->colorBg, c->colorBrightness, text);
+  snprintf(text, sizeof(text), "%%{O4}%d%%", pct);
+  block(body, sizeof(body), c, c->colorBrightness, text);
   action(tmp, sizeof(tmp), 5, "brightness|down", body);
   action(s->brightness, sizeof(s->brightness), 4, "brightness|up", tmp);
 }
@@ -923,7 +936,7 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   max = jsonInteger(p);
   char text[96], body[256], right[512], middle[768];
   snprintf(text, sizeof(text), "爫%3d%% %3d° %3d°", rain, min, max);
-  block(body, sizeof(body), c->colorBg, c->colorWeather, text);
+  block(body, sizeof(body), c, c->colorWeather, text);
   if (c->internalWeatherForecastAvailable)
     action(right, sizeof(right), 3, "weather|forecast", body);
   else
@@ -1057,7 +1070,7 @@ void moduleWorkspaceEwmh(const PanelConfig *c,
 }
 
 void moduleStatic(const PanelConfig *c, PanelState *s) {
-  char body[128];
+  char body[256];
   s->launcher[0] = '\0';
   s->power[0] = '\0';
   bool internalLauncher = strcmp(c->applicationLauncher, "external") != 0 &&
@@ -1068,7 +1081,7 @@ void moduleStatic(const PanelConfig *c, PanelState *s) {
                           appSpecAvailable(c, c->launcher);
   if (moduleModeActive(c->moduleLauncher,
                        internalLauncher || externalLauncher)) {
-    block(body, sizeof(body), c->colorBg, c->colorFg, "");
+    block(body, sizeof(body), c, c->colorFg, "");
     action(s->launcher, sizeof(s->launcher), 1, "launcher", body);
   }
   bool internalPower = strcmp(c->powerMenuMode, "external") != 0 &&
@@ -1078,7 +1091,7 @@ void moduleStatic(const PanelConfig *c, PanelState *s) {
                        strcmp(c->powerMenuMode, "disabled") != 0 &&
                        appSpecAvailable(c, c->powerMenu);
   if (moduleModeActive(c->modulePower, internalPower || externalPower)) {
-    block(body, sizeof(body), c->colorBg, c->colorFg, "");
+    block(body, sizeof(body), c, c->colorFg, "");
     action(s->power, sizeof(s->power), 1, "power", body);
   }
 }
@@ -1093,7 +1106,7 @@ void moduleInhibitor(const PanelConfig *c,
   char body[128];
   block(body,
         sizeof(body),
-        c->colorBg,
+        c,
         active ? c->colorWarning : c->colorFree,
         c->iconFont[0] ? "" : "☕");
   action(s->inhibitor, sizeof(s->inhibitor), 1, "inhibitor|toggle", body);
@@ -1107,7 +1120,7 @@ void moduleTimer(const PanelConfig *c,
   s->timer[0] = '\0';
   if (!moduleModeActive(c->moduleTimer, true))
     return;
-  char text[64], body[128];
+  char text[64], body[256];
   static const char *const ANIMATION_GLYPHS[TIMER_ANIMATION_FRAMES] = {
       "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥"};
   const char *glyph = "⏲";
@@ -1141,11 +1154,13 @@ void moduleTimer(const PanelConfig *c,
     snprintf(text, sizeof(text), "%u %s", minutes, glyph);
   else
     snprintf(text, sizeof(text), "%s", glyph);
-  block(body,
-        sizeof(body),
-        c->colorBg,
-        active ? c->colorUrgent : c->colorClock,
-        text);
+  blockPadded(body,
+              sizeof(body),
+              c,
+              active ? c->colorUrgent : c->colorClock,
+              text,
+              c->blockPadding,
+              c->blockPadding + 4);
   snprintf(s->timer,
            sizeof(s->timer),
            "%%{A1:timer|toggle:}%%{A3:timer|reset:}"

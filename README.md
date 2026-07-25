@@ -423,6 +423,9 @@ backend, raw value, and rendered percentage.
 
 The Bash directory is not read or executed by `sliverbar`.
 
+Module blocks use configurable pixel padding (`block_padding`) rather than
+font-dependent leading and trailing spaces.
+
 ## Compatibility matrix
 
 | Area | Status | Coverage |

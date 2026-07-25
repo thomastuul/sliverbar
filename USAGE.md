@@ -421,6 +421,10 @@ Sliverbar setzt außerdem einen EWMH-Docktyp und eine Strut. Das explizite
 `top_padding` bleibt in einer bspwm-Konfiguration sinnvoll, besonders wenn die
 Leiste per Tastenkürzel verborgen wird.
 
+`block_padding` legt den horizontalen Innenabstand auf jeder Seite eines
+Modulblocks in Pixeln fest. Die Abstände hängen dadurch nicht von der Breite
+eines Leerzeichens oder von den Seitenabständen einzelner Glyphen ab.
+
 Die Sitzung kann Sliverbar beispielsweise aus dem bspwm-Autostart starten:
 
 ```sh

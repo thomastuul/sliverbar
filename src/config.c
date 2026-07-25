@@ -71,6 +71,7 @@ void configDefaults(PanelConfig *c) {
   copy(c->agendaSourceColor, 16, "#6272A4");
   c->height = 25;
   c->clickableAreas = 30;
+  c->blockPadding = 6;
   c->volumeStep = 2;
   c->brightnessStep = 5;
   c->weatherInterval = 1800;
@@ -414,6 +415,7 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   NUM("height", height, 1, 512);
   NUM("clickable_areas", clickableAreas, 1, 255);
   NUM("underline", underline, 0, 32);
+  NUM("block_padding", blockPadding, 0, 64);
   NUM("volume_step", volumeStep, 1, 100);
   NUM("brightness_step", brightnessStep, 1, 100);
 #undef NUM

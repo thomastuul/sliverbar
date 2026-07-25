@@ -40,8 +40,22 @@ The complete validation workflow is documented in [docs/development.md](docs/dev
 ## Versioning
 
 - The single version source is `VERSION` and must use `MAJOR.MINOR.PATCH`.
+- Increment `PATCH` for bug fixes and other backward-compatible corrections.
+- Increment `MINOR` for backward-compatible feature changes.
+- Increment `MAJOR` for breaking or otherwise major changes, after agreeing the
+  major-version change with the user.
 - The program must support `sliverbar --version` and exit successfully.
 - Keep version tests and documentation synchronized with `VERSION`.
+
+## Live validation
+
+- Every completed Sliverbar validation must include a test of the candidate on
+  the live system and a visual comparison using screenshots.
+- Obtain explicit user approval before replacing or testing a live instance.
+- Capture the current panel as a baseline, run the candidate with the complete
+  production configuration, capture the result, and inspect both screenshots.
+- A change that has not completed the approved live test and screenshot review
+  remains incomplete.
 
 ## Definition of Done
 

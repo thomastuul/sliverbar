@@ -1659,7 +1659,7 @@ int main(int argc, char **argv) {
     snprintf(smoke.workspace,
              sizeof(smoke.workspace),
              "%%{F%s}%%{B%s}%%{A3:notify|Native panel|space preserved:}"
-             "%%{A4:volume|up:}%%{A1:workspace|I:} native "
+             "%%{A4:volume|up:}%%{A1:workspace|I:}%%{O6}native%%{O6}"
              "%%{A}%%{A}%%{A}%%{B-}%%{F-}",
              cfg.colorFocus,
              cfg.colorBg);
@@ -1711,7 +1711,7 @@ int main(int argc, char **argv) {
                                  "notify|Native panel|space preserved",
                                  &actionX,
                                  &actionWidth) ||
-        actionX < smokeX || actionWidth <= 0) {
+        actionX != smokeX || actionWidth <= 12) {
       logMessage("ERROR", "native smoke-test action bounds failed");
       nativePanelDestroy(panel);
       xcb_disconnect(x);

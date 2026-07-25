@@ -9,6 +9,10 @@ before publication:
 quick-check.sh → test-local.sh → test.sh
 ```
 
+After the automated stages, every completed validation also requires an
+explicitly approved live-system test and visual baseline/candidate screenshot
+comparison as documented in [deployment.md](deployment.md).
+
 ### Fast iterative checks
 
 ```bash

@@ -90,8 +90,9 @@ prefers bspwm when a reachable
 .B bspc
 is available and otherwise uses EWMH.
 .TP
-.B height, underline, title_max
-Set panel height, underline thickness, and the maximum active-title length.
+.B height, underline, block_padding, title_max
+Set panel height, underline thickness, horizontal module padding in pixels, and
+the maximum active-title length.
 .TP
 .B language
 .BR auto ,

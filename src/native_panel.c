@@ -28,10 +28,11 @@ typedef struct {
 
 typedef struct {
   Alignment align;
-  DrawStyle style;
-  char text[512];
   int offset;
   int width;
+  bool tray;
+  DrawStyle style;
+  char text[512];
   char actions[5][256];
 } Segment;
 
@@ -388,7 +389,8 @@ static void applyCommand(char *command,
                          ActionEntry *actions,
                          size_t *actionCount,
                          const PanelConfig *config,
-                         int *offset) {
+                         int *offset,
+                         bool *tray) {
   if (!strcmp(command, "l"))
     *align = ALIGN_LEFT;
   else if (!strcmp(command, "c"))
@@ -416,6 +418,10 @@ static void applyCommand(char *command,
              command[1] == '-' ? config->colorFg : command + 1);
   else if (command[0] == 'O')
     *offset = atoi(command + 1);
+  else if (!strcmp(command, "t"))
+    *tray = true;
+  else if (!strcmp(command, "t-"))
+    *tray = false;
   else if (!strcmp(command, "A")) {
     if (*actionCount)
       (*actionCount)--;
@@ -434,6 +440,18 @@ static void applyCommand(char *command,
   }
 }
 
+static void
+copyActions(Segment *item, const ActionEntry *actions, size_t actionCount) {
+  for (size_t i = 0; i < actionCount; i++) {
+    uint8_t button = actions[i].button;
+    if (button >= 1 && button <= 5)
+      snprintf(item->actions[button - 1],
+               sizeof(item->actions[button - 1]),
+               "%s",
+               actions[i].command);
+  }
+}
+
 static size_t
 parseMarkup(NativePanel *panel, const char *markup, Segment *segments) {
   DrawStyle style;
@@ -441,6 +459,7 @@ parseMarkup(NativePanel *panel, const char *markup, Segment *segments) {
   Alignment align = ALIGN_LEFT;
   ActionEntry actions[MAX_ACTION_DEPTH] = {0};
   size_t actionCount = 0, count = 0;
+  bool tray = false;
   const char *cursor = markup;
   while (*cursor && count < MAX_SEGMENTS) {
     if (!strncmp(cursor, "%{", 2)) {
@@ -460,12 +479,15 @@ parseMarkup(NativePanel *panel, const char *markup, Segment *segments) {
                    actions,
                    &actionCount,
                    &panel->config,
-                   &offset);
+                   &offset,
+                   &tray);
       if (offset && count < MAX_SEGMENTS) {
         segments[count].align = align;
         segments[count].style = style;
         segments[count].offset = offset;
         segments[count].width = offset;
+        segments[count].tray = tray;
+        copyActions(&segments[count], actions, actionCount);
         count++;
       }
       cursor = end + 1;
@@ -483,14 +505,7 @@ parseMarkup(NativePanel *panel, const char *markup, Segment *segments) {
         length = sizeof(item->text) - 1;
       memcpy(item->text, cursor, length);
       item->text[length] = '\0';
-      for (size_t i = 0; i < actionCount; i++) {
-        uint8_t button = actions[i].button;
-        if (button >= 1 && button <= 5)
-          snprintf(item->actions[button - 1],
-                   sizeof(item->actions[button - 1]),
-                   "%s",
-                   actions[i].command);
-      }
+      copyActions(item, actions, actionCount);
     }
     cursor += length;
     if (!end)
@@ -531,9 +546,20 @@ static int textWidth(NativePanel *panel, const char *text) {
 }
 
 static void addRegions(NativePanel *panel, const Segment *item, int x) {
-  for (uint8_t button = 1; button <= 5 && panel->regionCount < MAX_REGIONS;
-       button++) {
+  for (uint8_t button = 1; button <= 5; button++) {
     if (!item->actions[button - 1][0])
+      continue;
+    bool extended = false;
+    for (size_t i = panel->regionCount; i > 0; i--) {
+      ActionRegion *existing = &panel->regions[i - 1];
+      if (existing->button == button && existing->x1 == x &&
+          !strcmp(existing->command, item->actions[button - 1])) {
+        existing->x1 += item->width;
+        extended = true;
+        break;
+      }
+    }
+    if (extended || panel->regionCount >= MAX_REGIONS)
       continue;
     ActionRegion *region = &panel->regions[panel->regionCount++];
     region->x0 = x;
@@ -546,10 +572,14 @@ static void addRegions(NativePanel *panel, const Segment *item, int x) {
   }
 }
 
-static void drawSegment(NativePanel *panel, const Segment *item, int x) {
+static void
+drawSegmentBackground(NativePanel *panel, const Segment *item, int x) {
   setColor(panel->cairo, item->style.background, panel->config.colorPanelBg);
   cairo_rectangle(panel->cairo, x, 0, item->width, panel->config.height);
   cairo_fill(panel->cairo);
+}
+
+static void drawSegmentContent(NativePanel *panel, const Segment *item, int x) {
   if (!item->text[0])
     return;
   prepareLayout(panel, item->text);
@@ -584,15 +614,20 @@ static int drawMarkup(NativePanel *panel, const char *markup) {
   setColor(panel->cairo, panel->config.colorPanelBg, "#000000");
   cairo_paint(panel->cairo);
   panel->regionCount = 0;
+  int segmentX[MAX_SEGMENTS] = {0};
   for (size_t i = 0; i < count; i++) {
     int *x = &positions[segments[i].align];
-    drawSegment(panel, &segments[i], *x);
-    if (segments[i].align == ALIGN_RIGHT && segments[i].offset &&
+    segmentX[i] = *x;
+    drawSegmentBackground(panel, &segments[i], *x);
+    if (segments[i].align == ALIGN_RIGHT && segments[i].tray &&
         moduleModeActive(panel->config.moduleTray,
                          nativeTrayAvailable(panel->tray)))
       nativeTrayLayout(panel->tray, *x + 4);
-    addRegions(panel, &segments[i], *x);
     *x += segments[i].width;
+  }
+  for (size_t i = 0; i < count; i++) {
+    drawSegmentContent(panel, &segments[i], segmentX[i]);
+    addRegions(panel, &segments[i], segmentX[i]);
   }
   cairo_surface_flush(panel->surface);
   xcb_flush(panel->connection);
@@ -606,7 +641,7 @@ int nativePanelDraw(NativePanel *panel, const PanelState *state) {
     int width = nativeTrayWidth(panel->tray);
     snprintf(rendered.tray,
              sizeof(rendered.tray),
-             "%%{F%s}%%{B%s}%%{O%d}%%{B-}%%{F-}",
+             "%%{F%s}%%{B%s}%%{t}%%{O%d}%%{t-}%%{B-}%%{F-}",
              panel->config.colorFg,
              panel->config.colorBg,
              width + 4);

@@ -73,7 +73,8 @@ typedef struct {
   char colorWarning[16], colorCritical[16], colorBrightness[16];
   char agendaEventColor[16], agendaTaskColor[16], agendaOverdueColor[16],
       agendaSourceColor[16];
-  int height, clickableAreas, underline, volumeStep, brightnessStep;
+  int height, clickableAreas, underline, blockPadding, volumeStep;
+  int brightnessStep;
   unsigned weatherInterval, networkInterval, titleMax;
   unsigned agendaDays, agendaMaxItems, agendaMaxUndatedTasks;
   unsigned agendaRefreshInterval, agendaPopupWidth;
