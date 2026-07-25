@@ -672,6 +672,16 @@ int main(int argc, char **argv) {
   CHECK(brightnessPercent == 100);
   CHECK(!brightnessFactorParse("0,99\n", &brightnessPercent));
   CHECK(!brightnessFactorParse("invalid", &brightnessPercent));
+  CHECK(brightnessPercentFromRaw(48000, 48000) == 100);
+  CHECK(brightnessPercentFromRaw(24000, 48000) == 50);
+  CHECK(brightnessPercentFromRaw(1, 3) == 33);
+  CHECK(brightnessPercentFromRaw(4, 3) == 100);
+  CHECK(brightnessPercentFromRaw(1, 0) == 0);
+  CHECK(brightnessRawFromPercent(100, 48000) == 48000);
+  CHECK(brightnessRawFromPercent(50, 48000) == 24000);
+  CHECK(brightnessRawFromPercent(33, 3) == 1);
+  CHECK(brightnessRawFromPercent(101, 48000) == 48000);
+  CHECK(brightnessRawFromPercent(-1, 48000) == 0);
   CHECK(setlocale(LC_NUMERIC, numericLocale) != NULL);
   PanelState brightnessState = {0};
   moduleBrightnessValue(&cfg, &brightnessState, 42);

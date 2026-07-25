@@ -419,6 +419,9 @@ static void title_from_event(char *event,
 
 static int setVolume(const PanelConfig *c, const char *op) {
   char ignored[256];
+  if (!op || (strcmp(op, "up") != 0 && strcmp(op, "down") != 0 &&
+              strcmp(op, "toggle") != 0))
+    return -1;
   if (commandExists("pactl")) {
     char value[32];
     if (!strcmp(op, "up")) {
@@ -431,9 +434,21 @@ static int setVolume(const PanelConfig *c, const char *op) {
     } else if (!strcmp(op, "down")) {
       if (!pactlVolumeArgument(NULL, c->volumeStep, op, value, sizeof(value)))
         return -1;
-    } else {
+    } else if (!strcmp(op, "toggle")) {
       char *av[] = {"pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle", NULL};
-      return runCapture(av, ignored, sizeof(ignored), 1500);
+      if (!runCapture(av, ignored, sizeof(ignored), 1500))
+        return 0;
+      if (commandExists("wpctl")) {
+        char *wv[] = {
+            "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle", NULL};
+        if (!runCapture(wv, ignored, sizeof(ignored), 1500))
+          return 0;
+      }
+      if (commandExists("amixer")) {
+        char *mv[] = {"amixer", "set", "Master", "toggle", NULL};
+        return runCapture(mv, ignored, sizeof(ignored), 1500);
+      }
+      return -1;
     }
     char *av[] = {"pactl", "set-sink-volume", "@DEFAULT_SINK@", value, NULL};
     return runCapture(av, ignored, sizeof(ignored), 1500);
@@ -450,15 +465,7 @@ static int setVolume(const PanelConfig *c, const char *op) {
 }
 
 static int applyBrightness(PanelState *s) {
-  if (!s->brightnessInitialized || !*s->brightnessOutput)
-    return -1;
-  char value[32];
-  if (!brightnessFactorFormat(s->brightnessPercent, value, sizeof(value)))
-    return -1;
-  char *outv[] = {
-      "xrandr", "--output", s->brightnessOutput, "--brightness", value, NULL};
-  char ignored[128];
-  return runCapture(outv, ignored, sizeof(ignored), 1500);
+  return moduleBrightnessApply(s);
 }
 
 static int scheduleBrightness(const PanelConfig *c,
@@ -899,7 +906,8 @@ static void doAction(PanelConfig *c,
   if (getenv("SLIVERBAR_DEBUG"))
     logMessage("DEBUG", "action=%s arg=%s", kind, arg ? arg : "");
   if (!strcmp(kind, "volume") && arg) {
-    setVolume(c, arg);
+    if (setVolume(c, arg))
+      logMessage("ERROR", "volume action %s failed", arg);
     *volumeDirty = true;
   } else if (!strcmp(kind, "workspace") && arg) {
     workspaceBackendSwitch(workspaceBackend, arg);
@@ -1123,6 +1131,7 @@ static int runDiagnostics(const PanelConfig *config,
   printf("workspace_backend=unavailable\n");
 #endif
   static const char *const PROGRAMS[] = {"pactl",
+                                         "wpctl",
                                          "amixer",
                                          "nmcli",
                                          "xrandr",

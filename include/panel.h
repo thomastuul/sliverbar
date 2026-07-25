@@ -99,6 +99,8 @@ typedef struct {
   int brightnessPercent;
   bool brightnessInitialized;
   bool brightnessUpdatePending;
+  bool brightnessHardware;
+  unsigned brightnessMaximum;
   bool focusedWorkspaceKnown;
   bool focusedWorkspaceOccupied;
   char brightnessOutput[64];
@@ -174,7 +176,10 @@ int wifiDiagnostic(WifiDiagnostic *diagnostic);
 void moduleNetwork(const PanelConfig *cfg, PanelState *state);
 bool brightnessFactorFormat(int percent, char *value, size_t size);
 bool brightnessFactorParse(const char *value, int *percent);
+int brightnessPercentFromRaw(unsigned value, unsigned maximum);
+unsigned brightnessRawFromPercent(int percent, unsigned maximum);
 void moduleBrightness(const PanelConfig *cfg, PanelState *state);
+int moduleBrightnessApply(const PanelState *state);
 bool moduleBrightnessAdjust(const PanelConfig *cfg,
                             PanelState *state,
                             const char *operation);

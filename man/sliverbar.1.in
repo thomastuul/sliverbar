@@ -254,6 +254,10 @@ viewer is used.
 and
 .B brightness_step
 set scroll-wheel increments.
+Internal displays use the kernel backlight interface through the active
+systemd-logind session when available.  Other outputs fall back to software
+brightness through
+.BR xrandr (1).
 .B network_interval
 sets the network refresh period.
 Keys beginning with

@@ -245,23 +245,28 @@ Verbindungsänderungen können ebenfalls über NetworkManager bezogen werden.
 
 ### J – Helligkeit
 
-Der Helligkeitsblock liest den aktuell verbundenen Ausgang und dessen
-`Brightness`-Wert mit `xrandr`. Änderungen erfolgen in
-`brightness_step`-Schritten, sind auf 5 bis 100 Prozent begrenzt und werden
-kurz entprellt, damit schnelle Mausradbewegungen nicht für jeden Tick einen
-separaten Prozess starten.
+Der Helligkeitsblock verwendet für interne Notebook-Panels bevorzugt die
+Kernel-Schnittstelle unter `/sys/class/backlight`. Änderungen werden über die
+aktive logind-Sitzung ausgeführt, sodass Sliverbar weder als root laufen noch
+direkt in sysfs schreiben muss. Ist keine verwendbare Hardware-Schnittstelle
+vorhanden, liest und verändert Sliverbar den aktuell verbundenen Ausgang mit
+`xrandr`. Änderungen erfolgen in `brightness_step`-Schritten, sind auf 5 bis
+100 Prozent begrenzt und werden kurz entprellt, damit schnelle
+Mausradbewegungen nicht für jeden Tick einen separaten Prozess starten.
 
 **Mausaktionen:** Mausrad hoch erhöht, Mausrad herunter verringert die
 Helligkeit.
 
-Wichtig: `xrandr --brightness` verändert die Ausgabe softwareseitig. Es ist
-nicht dasselbe wie die Hardware-Hintergrundbeleuchtung eines Notebook-Panels.
+Wichtig: Der `xrandr --brightness`-Fallback verändert die Ausgabe nur
+softwareseitig. Er ist nicht dasselbe wie die Hardware-Hintergrundbeleuchtung
+eines Notebook-Panels.
 
 ### K – Lautstärke
 
 Sliverbar verwendet bevorzugt `pactl` für den Standard-Ausgang und fällt auf
-`amixer Master` zurück. Angezeigt werden Lautstärke und Stummschaltung.
-`volume_step` legt die Schrittweite fest.
+`amixer Master` zurück. Schlägt das Stummschalten über `pactl` fehl, werden
+zusätzlich `wpctl` und `amixer` versucht. Angezeigt werden Lautstärke und
+Stummschaltung. `volume_step` legt die Schrittweite fest.
 
 **Mausaktionen:**
 
@@ -544,7 +549,7 @@ betroffene Modul verborgen oder eingeschränkt.
 | Programm oder Dienst | Verwendung |
 | --- | --- |
 | `bspc` | erweitertes bspwm-Workspace-Backend |
-| `pactl` oder `amixer` | Lautstärke lesen und ändern |
+| `pactl`, `wpctl` oder `amixer` | Lautstärke lesen und ändern |
 | `xrandr` | Helligkeit lesen und ändern |
 | `nmcli` | SSID, WLAN-Fallback und Netzwerkereignisse |
 | `curl` | Wetterdaten im JSON-Format |
@@ -552,7 +557,7 @@ betroffene Modul verborgen oder eingeschränkt.
 | `systemd-inhibit` | Standby- und Hibernation-Sperre |
 | `pw-play`, `paplay`, `canberra-gtk-play` oder `aplay` | Timerklang |
 | GIO und `shared-mime-info` | Desktop-Anwendungen und Standard-Dateihandler |
-| logind über D-Bus | internes Power-Menü |
+| logind über D-Bus | Hardware-Helligkeit und internes Power-Menü |
 
 ## Diagnose und sichere Inbetriebnahme
 

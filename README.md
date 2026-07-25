@@ -436,7 +436,8 @@ The Bash directory is not read or executed by `sliverbar`.
 | Fedora 42 and Arch | best effort | reproducible manual compatibility containers |
 | Non-x86-64 | best effort | source build expected, not yet automated |
 
-Optional module backends are not panel prerequisites: `pactl`/`amixer` for
-volume, `nmcli` for NetworkManager details, `xrandr` for brightness, `curl` for
+Optional module backends are not panel prerequisites: `pactl`/`wpctl`/`amixer`
+for volume, logind plus `/sys/class/backlight` for hardware brightness with
+`xrandr` as a software fallback, `nmcli` for NetworkManager details, `curl` for
 weather JSON refresh, `notify-send` for notifications, and `systemd-inhibit`
 for the inhibitor. Missing tools hide or reduce only the affected feature.

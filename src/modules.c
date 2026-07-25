@@ -13,6 +13,10 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef HAVE_GIO
+#include <gio/gio.h>
+#endif
+
 static void
 block(char *out, size_t n, const char *bg, const char *fg, const char *text) {
   snprintf(out, n, "%%{B%s}%%{F%s}%%{+u} %s %%{-u}%%{F-}%%{B-}", bg, fg, text);
@@ -682,6 +686,22 @@ bool brightnessFactorParse(const char *value, int *percent) {
   return true;
 }
 
+int brightnessPercentFromRaw(unsigned value, unsigned maximum) {
+  if (!maximum)
+    return 0;
+  if (value > maximum)
+    value = maximum;
+  return (int)(((uint64_t)value * 100U + maximum / 2U) / maximum);
+}
+
+unsigned brightnessRawFromPercent(int percent, unsigned maximum) {
+  if (percent < 0 || !maximum)
+    return 0;
+  if (percent > 100)
+    percent = 100;
+  return (unsigned)(((uint64_t)(unsigned)percent * maximum + 50U) / 100U);
+}
+
 bool moduleBrightnessAdjust(const PanelConfig *c,
                             PanelState *s,
                             const char *operation) {
@@ -707,12 +727,133 @@ bool moduleBrightnessAdjust(const PanelConfig *c,
   return true;
 }
 
+static bool readBrightnessDevice(PanelState *s) {
+#ifdef HAVE_GIO
+  DIR *directory = opendir("/sys/class/backlight");
+  if (!directory)
+    return false;
+  bool found = false;
+  struct dirent *entry;
+  while ((entry = readdir(directory))) {
+    if (entry->d_name[0] == '.')
+      continue;
+    char path[PANEL_PATH_MAX];
+    char value[64];
+    snprintf(path,
+             sizeof(path),
+             "/sys/class/backlight/%s/max_brightness",
+             entry->d_name);
+    if (readTextFile(path, value, sizeof(value)))
+      continue;
+    char *end = NULL;
+    errno = 0;
+    unsigned long maximum = strtoul(value, &end, 10);
+    if (errno || end == value || *end || !maximum || maximum > UINT_MAX)
+      continue;
+    snprintf(path,
+             sizeof(path),
+             "/sys/class/backlight/%s/actual_brightness",
+             entry->d_name);
+    if (readTextFile(path, value, sizeof(value))) {
+      snprintf(path,
+               sizeof(path),
+               "/sys/class/backlight/%s/brightness",
+               entry->d_name);
+      if (readTextFile(path, value, sizeof(value)))
+        continue;
+    }
+    errno = 0;
+    unsigned long current = strtoul(value, &end, 10);
+    if (errno || end == value || *end || current > maximum)
+      continue;
+    size_t nameLength = strlen(entry->d_name);
+    if (nameLength >= sizeof(s->brightnessOutput))
+      continue;
+    memcpy(s->brightnessOutput, entry->d_name, nameLength + 1);
+    s->brightnessMaximum = (unsigned)maximum;
+    s->brightnessPercent =
+        brightnessPercentFromRaw((unsigned)current, (unsigned)maximum);
+    s->brightnessHardware = true;
+    s->brightnessInitialized = true;
+    found = true;
+    break;
+  }
+  closedir(directory);
+  return found;
+#else
+  (void)s;
+  return false;
+#endif
+}
+
+int moduleBrightnessApply(const PanelState *s) {
+  if (!s || !s->brightnessInitialized || !s->brightnessOutput[0])
+    return -1;
+  if (s->brightnessHardware) {
+#ifdef HAVE_GIO
+    GError *error = NULL;
+    GDBusConnection *connection =
+        g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &error);
+    if (!connection) {
+      logMessage("ERROR",
+                 "cannot connect to logind for brightness: %s",
+                 error ? error->message : "unknown error");
+      g_clear_error(&error);
+      return -1;
+    }
+    unsigned raw =
+        brightnessRawFromPercent(s->brightnessPercent, s->brightnessMaximum);
+    GVariant *reply = g_dbus_connection_call_sync(
+        connection,
+        "org.freedesktop.login1",
+        "/org/freedesktop/login1/session/auto",
+        "org.freedesktop.login1.Session",
+        "SetBrightness",
+        g_variant_new("(ssu)", "backlight", s->brightnessOutput, raw),
+        NULL,
+        G_DBUS_CALL_FLAGS_NONE,
+        1500,
+        NULL,
+        &error);
+    g_object_unref(connection);
+    if (!reply) {
+      logMessage("ERROR",
+                 "logind brightness update failed: %s",
+                 error ? error->message : "unknown error");
+      g_clear_error(&error);
+      return -1;
+    }
+    g_variant_unref(reply);
+    return 0;
+#else
+    return -1;
+#endif
+  }
+  char value[32];
+  if (!brightnessFactorFormat(s->brightnessPercent, value, sizeof(value)))
+    return -1;
+  char output[sizeof(s->brightnessOutput)];
+  snprintf(output, sizeof(output), "%s", s->brightnessOutput);
+  char *argv[] = {"xrandr", "--output", output, "--brightness", value, NULL};
+  char ignored[128];
+  return runCapture(argv, ignored, sizeof(ignored), 1500);
+}
+
 void moduleBrightness(const PanelConfig *c, PanelState *s) {
   s->brightness[0] = '\0';
   s->brightnessInitialized = false;
+  s->brightnessHardware = false;
+  s->brightnessMaximum = 0;
   s->brightnessOutput[0] = '\0';
-  if (!moduleModeActive(c->moduleBrightness, commandExists("xrandr")) ||
-      !commandExists("xrandr"))
+  bool hardware = readBrightnessDevice(s);
+  bool xrandr = commandExists("xrandr");
+  if (!moduleModeActive(c->moduleBrightness, hardware || xrandr))
+    return;
+  if (hardware) {
+    moduleBrightnessValue(c, s, s->brightnessPercent);
+    return;
+  }
+  if (!xrandr)
     return;
   char query[16384], output[64] = "";
   char *qv[] = {"xrandr", "--query", NULL};
