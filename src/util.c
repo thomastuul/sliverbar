@@ -110,6 +110,8 @@ int runCapture(char *const argv[], char *out, size_t size, int timeoutMs) {
       dup2(null, STDERR_FILENO);
     close(pipefd[0]);
     close(pipefd[1]);
+    if (setenv("LC_ALL", "C", 1))
+      _exit(127);
     execvp(argv[0], argv);
     _exit(127);
   }

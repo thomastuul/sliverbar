@@ -423,8 +423,8 @@ backend, raw value, and rendered percentage.
 
 The Bash directory is not read or executed by `sliverbar`.
 
-Module blocks use configurable pixel padding (`block_padding`) rather than
-font-dependent leading and trailing spaces.
+Module blocks use configurable pixel padding (`block_padding`) and fixed pixel
+gaps between glyphs and values rather than font-dependent spaces.
 
 ## Compatibility matrix
 
@@ -439,8 +439,9 @@ font-dependent leading and trailing spaces.
 | Fedora 42 and Arch | best effort | reproducible manual compatibility containers |
 | Non-x86-64 | best effort | source build expected, not yet automated |
 
-Optional module backends are not panel prerequisites: `pactl`/`wpctl`/`amixer`
-for volume, logind plus `/sys/class/backlight` for hardware brightness with
-`xrandr` as a software fallback, `nmcli` for NetworkManager details, `curl` for
-weather JSON refresh, `notify-send` for notifications, and `systemd-inhibit`
-for the inhibitor. Missing tools hide or reduce only the affected feature.
+Optional module backends are not panel prerequisites: `wpctl`/`pactl`/`amixer`
+for volume (with native `wpctl` preferred for mute on PipeWire), logind plus
+`/sys/class/backlight` for hardware brightness with `xrandr` as a software
+fallback, `nmcli` for NetworkManager details, `curl` for weather JSON refresh,
+`notify-send` for notifications, and `systemd-inhibit` for the inhibitor.
+Missing tools hide or reduce only the affected feature.

@@ -110,7 +110,7 @@ void moduleClock(const PanelConfig *c, PanelState *s) {
   char t[32];
   strftime(t, sizeof(t), "%T", &tm);
   const char *clockGlyph = moduleClockGlyph(c, (unsigned)tm.tm_hour);
-  snprintf(text, sizeof(text), " %s %s %s", d, clockGlyph, t);
+  snprintf(text, sizeof(text), "%%{O4}%s%%{O8}%s%%{O4}%s", d, clockGlyph, t);
   char body[256];
   block(body, sizeof(body), c, c->colorClock, text);
   char leftAction[384];
@@ -157,10 +157,7 @@ void moduleCpu(const PanelConfig *c, PanelState *s) {
   s->cpuInitialized = true;
   char text[64], body[256], usage[16];
   snprintf(usage, sizeof(usage), "%.1f", use);
-  int padding = 5 - (int)strlen(usage);
-  if (padding < 0)
-    padding = 0;
-  snprintf(text, sizeof(text), " %s%%%*s", usage, padding, "");
+  snprintf(text, sizeof(text), "%%{O4}%s%%", usage);
   block(body, sizeof(body), c, c->colorSystem, text);
   if (appRoleAvailable(c, APP_ROLE_SYSTEM_MONITOR))
     action(s->cpu, sizeof(s->cpu), 1, "role|system_monitor", body);
@@ -335,18 +332,7 @@ void moduleVolume(const PanelConfig *c, PanelState *s) {
     level = atoi(q);
   }
   char text[64], body[256], tmp[512];
-  char levelText[8];
-  snprintf(levelText, sizeof(levelText), "%d", level);
-  int padding = 3 - (int)strlen(levelText);
-  if (padding < 0)
-    padding = 0;
-  snprintf(text,
-           sizeof(text),
-           "%s %s%%%*s",
-           muted ? "" : "",
-           levelText,
-           padding,
-           "");
+  snprintf(text, sizeof(text), "%s%%{O4}%d%%", muted ? "" : "", level);
   block(body, sizeof(body), c, muted ? c->colorMuted : c->colorVolume, text);
   if (appRoleAvailable(c, APP_ROLE_VOLUME_SETTINGS))
     action(tmp, sizeof(tmp), 1, "role|volume_settings", body);
@@ -604,18 +590,12 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
   strength = kernelStrength >= 0 ? kernelStrength : nmcliStrength;
   char text[256], body[512], safe[128], wifiText[64] = "";
   shellQuoteAction(ssid, safe, sizeof(safe));
-  if (wifi && strength >= 0) {
-    char strengthText[16];
-    snprintf(strengthText, sizeof(strengthText), "%d", strength);
-    int padding = 3 - (int)strlen(strengthText);
-    if (padding < 0)
-      padding = 0;
-    snprintf(
-        wifiText, sizeof(wifiText), "說 %s%%%*s", strengthText, padding, "");
-  } else if (wifi)
+  if (wifi && strength >= 0)
+    snprintf(wifiText, sizeof(wifiText), "說%%{O4}%d%%", strength);
+  else if (wifi)
     snprintf(wifiText, sizeof(wifiText), "說");
   if (eth && wifiText[0])
-    snprintf(text, sizeof(text), " %s", wifiText);
+    snprintf(text, sizeof(text), "%%{O4}%s", wifiText);
   else
     snprintf(text, sizeof(text), "%s", eth ? "" : wifiText);
   block(body, sizeof(body), c, c->colorNetwork, text);
@@ -935,7 +915,12 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   p = strstr(data, "\"maxtempC\"");
   max = jsonInteger(p);
   char text[96], body[256], right[512], middle[768];
-  snprintf(text, sizeof(text), "爫%3d%% %3d° %3d°", rain, min, max);
+  snprintf(text,
+           sizeof(text),
+           "爫%%{O4}%d%%%%{O8}%%{O4}%d°%%{O8}%%{O4}%d°",
+           rain,
+           min,
+           max);
   block(body, sizeof(body), c, c->colorWeather, text);
   if (c->internalWeatherForecastAvailable)
     action(right, sizeof(right), 3, "weather|forecast", body);
@@ -1151,16 +1136,10 @@ void moduleTimer(const PanelConfig *c,
                 display == TIMER_DISPLAY_RUNNING ||
                 display == TIMER_DISPLAY_PAUSED;
   if (active)
-    snprintf(text, sizeof(text), "%u %s", minutes, glyph);
+    snprintf(text, sizeof(text), "%u%%{O4}%s", minutes, glyph);
   else
     snprintf(text, sizeof(text), "%s", glyph);
-  blockPadded(body,
-              sizeof(body),
-              c,
-              active ? c->colorUrgent : c->colorClock,
-              text,
-              c->blockPadding,
-              c->blockPadding + 4);
+  block(body, sizeof(body), c, active ? c->colorUrgent : c->colorClock, text);
   snprintf(s->timer,
            sizeof(s->timer),
            "%%{A1:timer|toggle:}%%{A3:timer|reset:}"
