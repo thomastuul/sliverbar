@@ -342,6 +342,9 @@ int main(int argc, char **argv) {
   CHECK(strstr(agendaClockState.clock, "role|calendar") != NULL);
   CHECK(strstr(agendaClockState.clock, "agenda|toggle") != NULL);
   CHECK(strstr(agendaClockState.clock, "%{O4}") != NULL);
+  const char *clockPadding = strstr(agendaClockState.clock, "%{O8}");
+  CHECK(clockPadding != NULL);
+  CHECK(strstr(clockPadding + 1, "%{O8}") != NULL);
   forecastConfig.internalAgendaAvailable = false;
   moduleClock(&forecastConfig, &agendaClockState);
   CHECK(strstr(agendaClockState.clock, "agenda|toggle") == NULL);

@@ -1260,6 +1260,21 @@ static int smokeTestNativeTray(NativePanel *panel,
     xcb_destroy_window(connection, icon);
     return -1;
   }
+  xcb_atom_t windowType = atom(connection, "_NET_WM_WINDOW_TYPE");
+  xcb_atom_t dockType = atom(connection, "_NET_WM_WINDOW_TYPE_DOCK");
+  xcb_get_property_reply_t *type = xcb_get_property_reply(
+      connection,
+      xcb_get_property(connection, 0, host, windowType, XCB_ATOM_ATOM, 0, 1),
+      NULL);
+  bool hostIsDock =
+      type && xcb_get_property_value_length(type) == (int)sizeof(xcb_atom_t) &&
+      *(const xcb_atom_t *)xcb_get_property_value(type) == dockType;
+  free(type);
+  if (!hostIsDock) {
+    logMessage("ERROR", "native smoke-test tray host is not a dock window");
+    xcb_destroy_window(connection, icon);
+    return -1;
+  }
   PanelState state = {0};
   if (nativePanelDraw(panel, &state)) {
     logMessage("ERROR", "native smoke-test tray layout failed");

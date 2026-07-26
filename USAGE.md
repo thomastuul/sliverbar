@@ -348,8 +348,10 @@ Popup geöffnet. Es entsteht kein Agenda-Cache auf der Festplatte.
 Sliverbar besitzt einen nativen XEmbed-System-Tray und übernimmt die
 `_NET_SYSTEM_TRAY_Sn`-Auswahl des verwendeten X-Screens. Tray-Clients werden in
 ein eigenes Hostfenster eingebettet; dessen gemessene Breite wird beim Rendern
-reserviert. Ein zusätzliches `trayer` ist nicht erforderlich und sollte nicht
-parallel laufen.
+reserviert. Das Hostfenster verwendet den konfigurierten Blockhintergrund und
+wird gegenüber Compositors als Dockfenster ausgewiesen, damit es nahtlos in der
+Leiste erscheint. Ein zusätzliches `trayer` ist nicht erforderlich und sollte
+nicht parallel laufen.
 
 **Mausaktionen:** hängen von der jeweils eingebetteten Tray-Anwendung ab.
 

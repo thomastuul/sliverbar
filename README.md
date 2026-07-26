@@ -159,9 +159,11 @@ is intentionally not changed by this project.
 
 Visibility keybindings should target the `sliverbar` application name. A
 dedicated top-level tray host gives XEmbed clients correct screen coordinates
-for their popups and follows the panel's visibility internally. The renderer
-reserves the host's measured width. Sliverbar does not require the external
-`trayer` package.
+for their popups and follows the panel's visibility internally. It uses the
+configured block background and advertises itself as a dock window so
+compositors render it as a seamless part of the panel. The renderer reserves
+the host's measured width. Sliverbar does not require the external `trayer`
+package.
 
 ## Architecture
 

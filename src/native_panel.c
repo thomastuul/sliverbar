@@ -345,8 +345,8 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
                     XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK,
                     values);
   configureEwmh(panel);
-  panel->tray =
-      nativeTrayCreate(connection, screen, panel->window, config->height);
+  panel->tray = nativeTrayCreate(
+      connection, screen, panel->window, config->height, config->colorBg);
   if (!panel->tray) {
     snprintf(error, errorSize, "cannot allocate the native system tray");
     nativePanelDestroy(panel);

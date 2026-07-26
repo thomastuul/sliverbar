@@ -11,7 +11,8 @@ typedef struct NativeTray NativeTray;
 NativeTray *nativeTrayCreate(xcb_connection_t *connection,
                              xcb_screen_t *screen,
                              xcb_window_t panelWindow,
-                             int panelHeight);
+                             int panelHeight,
+                             const char *background);
 void nativeTrayDestroy(NativeTray *tray);
 bool nativeTrayAcquire(NativeTray *tray);
 bool nativeTrayHandleEvent(NativeTray *tray, const xcb_generic_event_t *event);
