@@ -263,10 +263,10 @@ eines Notebook-Panels.
 
 ### K – Lautstärke
 
-Sliverbar verwendet bevorzugt `pactl` für den Standard-Ausgang und fällt auf
-`amixer Master` zurück. Schlägt das Stummschalten über `pactl` fehl, werden
-zusätzlich `wpctl` und `amixer` versucht. Angezeigt werden Lautstärke und
-Stummschaltung. `volume_step` legt die Schrittweite fest.
+Sliverbar liest Lautstärke und Stummschaltung bevorzugt mit `pactl` und fällt
+auf `amixer Master` zurück. Zum Stummschalten wird auf PipeWire-Systemen zuerst
+das native `wpctl` verwendet; danach folgen `pactl` und `amixer` als Fallbacks.
+`volume_step` legt die Schrittweite fest.
 
 **Mausaktionen:**
 
@@ -422,8 +422,9 @@ Sliverbar setzt außerdem einen EWMH-Docktyp und eine Strut. Das explizite
 Leiste per Tastenkürzel verborgen wird.
 
 `block_padding` legt den horizontalen Innenabstand auf jeder Seite eines
-Modulblocks in Pixeln fest. Die Abstände hängen dadurch nicht von der Breite
-eines Leerzeichens oder von den Seitenabständen einzelner Glyphen ab.
+Modulblocks in Pixeln fest. Auch der Abstand zwischen Glyphen und Werten wird
+in Pixeln gesetzt. Die Abstände hängen dadurch nicht von der Breite eines
+Leerzeichens oder von den Seitenabständen einzelner Glyphen ab.
 
 Die Sitzung kann Sliverbar beispielsweise aus dem bspwm-Autostart starten:
 

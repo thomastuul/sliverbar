@@ -309,6 +309,9 @@ int main(int argc, char **argv) {
   moduleWeather(&forecastConfig, &forecastState);
   CHECK(strstr(forecastState.weather, "weather|forecast") != NULL);
   CHECK(strstr(forecastState.weather, "weather|open") == NULL);
+  CHECK(strstr(forecastState.weather, "爫%{O4}") != NULL);
+  CHECK(strstr(forecastState.weather, "%{O8}%{O4}") != NULL);
+  CHECK(strstr(forecastState.weather, "%{O8}%{O4}") != NULL);
   forecastConfig.internalWeatherForecastAvailable = false;
   moduleWeather(&forecastConfig, &forecastState);
   CHECK(strstr(forecastState.weather, "weather|forecast") == NULL);
@@ -321,6 +324,7 @@ int main(int argc, char **argv) {
   moduleClock(&forecastConfig, &agendaClockState);
   CHECK(strstr(agendaClockState.clock, "role|calendar") != NULL);
   CHECK(strstr(agendaClockState.clock, "agenda|toggle") != NULL);
+  CHECK(strstr(agendaClockState.clock, "%{O4}") != NULL);
   forecastConfig.internalAgendaAvailable = false;
   moduleClock(&forecastConfig, &agendaClockState);
   CHECK(strstr(agendaClockState.clock, "agenda|toggle") == NULL);
@@ -743,9 +747,9 @@ int main(int argc, char **argv) {
   CHECK(strstr(timerPanelState.timer, "timer|down") != NULL);
   moduleTimer(&cfg, &timerPanelState, 12, TIMER_DISPLAY_SET, 0);
   CHECK(strstr(timerPanelState.timer, cfg.colorUrgent) != NULL);
-  CHECK(strstr(timerPanelState.timer, "12 ") != NULL);
+  CHECK(strstr(timerPanelState.timer, "12%{O4}") != NULL);
   CHECK(strstr(timerPanelState.timer, "󰀡") != NULL);
-  CHECK(strstr(timerPanelState.timer, "%{O13}") != NULL);
+  CHECK(strstr(timerPanelState.timer, "%{O9}") != NULL);
   static const char *const TIMER_ANIMATION_GLYPHS[] = {
       "󰪞", "󰪟", "󰪠", "󰪡", "󰪢", "󰪣", "󰪤", "󰪥"};
   for (unsigned frame = 0; frame < TIMER_ANIMATION_FRAMES; frame++) {

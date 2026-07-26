@@ -435,15 +435,15 @@ static int setVolume(const PanelConfig *c, const char *op) {
       if (!pactlVolumeArgument(NULL, c->volumeStep, op, value, sizeof(value)))
         return -1;
     } else if (!strcmp(op, "toggle")) {
-      char *av[] = {"pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle", NULL};
-      if (!runCapture(av, ignored, sizeof(ignored), 1500))
-        return 0;
       if (commandExists("wpctl")) {
         char *wv[] = {
             "wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle", NULL};
         if (!runCapture(wv, ignored, sizeof(ignored), 1500))
           return 0;
       }
+      char *av[] = {"pactl", "set-sink-mute", "@DEFAULT_SINK@", "toggle", NULL};
+      if (!runCapture(av, ignored, sizeof(ignored), 1500))
+        return 0;
       if (commandExists("amixer")) {
         char *mv[] = {"amixer", "set", "Master", "toggle", NULL};
         return runCapture(mv, ignored, sizeof(ignored), 1500);
