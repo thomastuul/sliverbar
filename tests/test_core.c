@@ -369,6 +369,24 @@ int main(int argc, char **argv) {
   forecastConfig.internalWeatherForecastAvailable = false;
   moduleWeather(&forecastConfig, &forecastState);
   CHECK(strstr(forecastState.weather, "weather|forecast") == NULL);
+  snprintf(forecastConfig.location,
+           sizeof(forecastConfig.location),
+           "%s",
+           "Hiiumaa, Estonia");
+  snprintf(forecastConfig.weatherCache,
+           sizeof(forecastConfig.weatherCache),
+           "%s",
+           "/tmp/sliverbar-weather-cache-does-not-exist");
+  forecastConfig.moduleWeather = MODULE_AUTO;
+  forecastConfig.weatherLocationCount = 2;
+  moduleWeather(&forecastConfig, &forecastState);
+  CHECK(forecastState.weather[0] != '\0');
+  CHECK(strstr(forecastState.weather, "weather|locations") != NULL);
+  CHECK(strstr(forecastState.weather, "weather|refresh") != NULL);
+  CHECK(strstr(forecastState.weather, "—") != NULL);
+  forecastConfig.location[0] = '\0';
+  moduleWeather(&forecastConfig, &forecastState);
+  CHECK(forecastState.weather[0] == '\0');
   PanelState agendaClockState = {0};
   snprintf(forecastConfig.calendar,
            sizeof(forecastConfig.calendar),

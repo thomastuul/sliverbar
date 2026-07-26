@@ -263,6 +263,9 @@ The time labels are drawn as fixed Cairo fields.  Missing values are shown as
 dashes, and monochrome Unicode symbols are used when no icon font is available.
 The popup header shows the location on the left and the last successful cache
 update time on the right.  Older cache data also shows its date.
+If a configured location cannot be fetched, the weather block stays visible
+and shows placeholder values so the location picker and refresh action remain
+reachable.
 Only JSON weather data is downloaded; no forecast image or external image
 viewer is used.
 .SS Other commonly changed keys
