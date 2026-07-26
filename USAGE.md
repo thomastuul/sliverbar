@@ -266,7 +266,8 @@ eines Notebook-Panels.
 Sliverbar liest Lautstärke und Stummschaltung bevorzugt mit `pactl` und fällt
 auf `amixer Master` zurück. Zum Stummschalten wird auf PipeWire-Systemen zuerst
 das native `wpctl` verwendet; danach folgen `pactl` und `amixer` als Fallbacks.
-`volume_step` legt die Schrittweite fest.
+Die maschinell ausgewerteten Backend-Ausgaben sind von der Desktop-Sprache
+unabhängig. `volume_step` legt die Schrittweite fest.
 
 **Mausaktionen:**
 

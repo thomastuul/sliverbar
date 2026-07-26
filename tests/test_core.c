@@ -59,6 +59,23 @@ int main(int argc, char **argv) {
           probe);
     return fclose(probe) == 0 ? 0 : 2;
   }
+  if (argc == 2 && strcmp(argv[1], "--locale-probe") == 0) {
+    const char *locale = getenv("LC_ALL");
+    fputs(locale ? locale : "", stdout);
+    return 0;
+  }
+
+  const char *originalLocale = getenv("LC_ALL");
+  char savedLocale[128] = "";
+  if (originalLocale)
+    snprintf(savedLocale, sizeof(savedLocale), "%s", originalLocale);
+  CHECK(setenv("LC_ALL", "de_DE.UTF-8", 1) == 0);
+  char localeOutput[32];
+  char *localeProbe[] = {argv[0], "--locale-probe", NULL};
+  CHECK(runCapture(localeProbe, localeOutput, sizeof(localeOutput), 1000) == 0);
+  CHECK(strcmp(localeOutput, "C") == 0);
+  CHECK(originalLocale ? setenv("LC_ALL", savedLocale, 1) == 0
+                       : unsetenv("LC_ALL") == 0);
 
   PanelConfig cfg;
   configDefaults(&cfg);
