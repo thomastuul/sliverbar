@@ -135,6 +135,14 @@ sliverbar --config ~/.config/sliverbar/panel.conf --check-config
 sliverbar --config ~/.config/sliverbar/panel.conf --diagnose
 ```
 
+Send a validated action to the running panel:
+
+```sh
+sliverbar --action volume up
+sliverbar --action brightness down
+sliverbar --action refresh volume
+```
+
 The installed usage manual is available with:
 
 ```sh
@@ -150,8 +158,9 @@ The program owns its X11 dock window and the `_NET_SYSTEM_TRAY_Sn` selection
 for the selected X screen,
 subscribes to workspace and X11 events, embeds tray clients through XEmbed, handles
 clicks through a private action protocol, and shuts down all direct children.
-It uses `$XDG_RUNTIME_DIR/sliverbar` for its lock. It does not evaluate shell
-code.
+It uses `$XDG_RUNTIME_DIR/sliverbar` for its lock and user-only control socket.
+The control socket accepts only the documented volume, brightness, and refresh
+actions. Sliverbar does not evaluate shell code.
 
 The Bash panel and C panel must not be displayed simultaneously during visual
 testing. The external `trayer` process must also be stopped before starting the

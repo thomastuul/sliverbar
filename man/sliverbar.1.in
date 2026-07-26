@@ -8,6 +8,9 @@ sliverbar \- lightweight native X11 panel
 .RB [ \-\-diagnose ]
 .RB [ \-\-list-pim-sources ]
 .RB [ \-\-version ]
+.br
+.B sliverbar
+.BI \-\-action\ MODULE\ OPERATION
 .SH DESCRIPTION
 .B sliverbar
 is a C17 panel for Linux desktops running X11 and an EWMH-compatible window
@@ -39,6 +42,18 @@ List Evolution Data Server calendar and task sources as tab-separated type,
 enabled state, stable ID, and display name.  Credentials, DAV URLs, and server
 addresses are not printed.  The command fails when EDS support is not compiled
 in or the registry is unavailable.
+.TP
+.BI \-\-action\ MODULE\ OPERATION
+Send a validated action to the running panel through its user-only runtime
+socket.  Supported combinations are
+.BR "volume up" ,
+.BR "volume down" ,
+.BR "volume toggle" ,
+.BR "brightness up" ,
+.BR "brightness down" ,
+.BR "refresh volume" ,
+and
+.BR "refresh brightness" .
 .TP
 .B \-\-version
 Print the program name and version, then exit successfully.

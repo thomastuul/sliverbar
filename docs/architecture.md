@@ -54,6 +54,7 @@ main event loop
       ├── X11/XCB events
       ├── bspwm workspace reports
       ├── NetworkManager updates
+      ├── validated local control actions
       └── supervised child processes
       │
       ▼
@@ -67,7 +68,10 @@ panel layout and rendering
       └── XCB window
 ```
 
-The main process uses one `poll(2)`-based event loop. It does not evaluate
+The main process uses one `poll(2)`-based event loop. External volume,
+brightness, and refresh actions arrive through a mode-0600 Unix datagram
+socket below `$XDG_RUNTIME_DIR/sliverbar`; the server validates a fixed command
+grammar before dispatch. It does not evaluate
 shell code.
 
 ## Native panel
