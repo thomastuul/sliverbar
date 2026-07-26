@@ -373,6 +373,10 @@ Sliverbar no longer downloads or caches a forecast PNG and does not launch an
 external image viewer for weather. The legacy `weather_image=` key is accepted
 for compatibility, ignored, and reported as deprecated.
 
+If a configured weather location cannot be fetched, the weather block stays
+visible and shows placeholder values instead of disappearing. That keeps the
+location picker and refresh action reachable even after a failed query.
+
 The timer block immediately before the coffee-cup inhibitor uses the mouse
 wheel to add or remove one minute while it is being set. Left click starts the
 countdown; subsequent left clicks pause and resume it. Wheel input is ignored

@@ -215,8 +215,10 @@ Sliverbar lädt kein Vorhersage-PNG mehr herunter und startet keinen externen
 Bildbetrachter. Der alte Schlüssel `weather_image=` wird noch akzeptiert, aber
 ignoriert und als veraltet protokolliert.
 
-Ohne konfigurierten Ort oder ohne verwertbare Daten bleibt der Block im
-`auto`-Modus verborgen.
+Ohne konfigurierten Ort bleibt der Block im `auto`-Modus verborgen. Wenn ein
+konfigurierter Ort nicht liefert oder noch kein Cache vorhanden ist, bleibt der
+Block sichtbar und zeigt Platzhalterwerte, damit Ort wechseln und Aktualisieren
+weiter erreichbar bleiben.
 
 ### H – Energieversorgung und Akku
 

@@ -901,26 +901,33 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   if (*c->weatherCache)
     readTextFile(c->weatherCache, data, sizeof(data));
   s->weather[0] = '\0';
-  if (!moduleModeActive(c->moduleWeather, c->location[0] && data[0]))
+  if (!moduleModeActive(c->moduleWeather, c->location[0] != '\0'))
     return;
   int rain = 0, min = 0, max = 0;
-  char *p = strstr(data, "\"chanceofrain\"");
-  for (int i = 0; p && i < 8; i++, p = strstr(p + 1, "\"chanceofrain\"")) {
-    int v = jsonInteger(p);
-    if (v > rain)
-      rain = v;
+  if (data[0]) {
+    char *p = strstr(data, "\"chanceofrain\"");
+    for (int i = 0; p && i < 8; i++, p = strstr(p + 1, "\"chanceofrain\"")) {
+      int v = jsonInteger(p);
+      if (v > rain)
+        rain = v;
+    }
+    p = strstr(data, "\"mintempC\"");
+    min = jsonInteger(p);
+    p = strstr(data, "\"maxtempC\"");
+    max = jsonInteger(p);
   }
-  p = strstr(data, "\"mintempC\"");
-  min = jsonInteger(p);
-  p = strstr(data, "\"maxtempC\"");
-  max = jsonInteger(p);
   char text[96], body[256], right[512], middle[768];
-  snprintf(text,
-           sizeof(text),
-           "爫%%{O4}%d%%%%{O8}%%{O4}%d°%%{O8}%%{O4}%d°",
-           rain,
-           min,
-           max);
+  if (data[0]) {
+    snprintf(text,
+             sizeof(text),
+             "爫%%{O4}%d%%%%{O8}%%{O4}%d°%%{O8}%%{O4}%d°",
+             rain,
+             min,
+             max);
+  } else {
+    snprintf(
+        text, sizeof(text), "爫%%{O4}—%%{O8}%%{O4}—%%{O8}%%{O4}—");
+  }
   block(body, sizeof(body), c, c->colorWeather, text);
   if (c->internalWeatherForecastAvailable)
     action(right, sizeof(right), 3, "weather|forecast", body);
