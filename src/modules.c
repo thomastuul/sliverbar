@@ -110,7 +110,7 @@ void moduleClock(const PanelConfig *c, PanelState *s) {
   char t[32];
   strftime(t, sizeof(t), "%T", &tm);
   const char *clockGlyph = moduleClockGlyph(c, (unsigned)tm.tm_hour);
-  snprintf(text, sizeof(text), "%%{O4}%s%%{O8}%s%%{O4}%s", d, clockGlyph, t);
+  snprintf(text, sizeof(text), "%%{O4}%s%%{O8}%s%%{O8}%s", d, clockGlyph, t);
   char body[256];
   block(body, sizeof(body), c, c->colorClock, text);
   char leftAction[384];

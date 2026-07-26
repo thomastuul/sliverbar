@@ -54,6 +54,26 @@ static xcb_atom_t internAtom(xcb_connection_t *connection, const char *name) {
   return result;
 }
 
+static uint32_t backgroundPixel(xcb_connection_t *connection,
+                                xcb_screen_t *screen,
+                                const char *background) {
+  unsigned red, green, blue;
+  if (!background || strlen(background) != 7 ||
+      sscanf(background, "#%02x%02x%02x", &red, &green, &blue) != 3)
+    return screen->black_pixel;
+  xcb_alloc_color_reply_t *reply =
+      xcb_alloc_color_reply(connection,
+                            xcb_alloc_color(connection,
+                                            screen->default_colormap,
+                                            (uint16_t)(red * 257U),
+                                            (uint16_t)(green * 257U),
+                                            (uint16_t)(blue * 257U)),
+                            NULL);
+  uint32_t pixel = reply ? reply->pixel : screen->black_pixel;
+  free(reply);
+  return pixel;
+}
+
 static bool hasIcon(const NativeTray *tray, xcb_window_t window) {
   for (size_t i = 0; i < tray->iconCount; i++)
     if (tray->icons[i].window == window)
@@ -198,7 +218,8 @@ static bool removeIcon(NativeTray *tray, xcb_window_t window, bool reparent) {
 NativeTray *nativeTrayCreate(xcb_connection_t *connection,
                              xcb_screen_t *screen,
                              xcb_window_t panelWindow,
-                             int panelHeight) {
+                             int panelHeight,
+                             const char *background) {
   NativeTray *tray = calloc(1, sizeof(*tray));
   if (!tray)
     return NULL;
@@ -227,7 +248,7 @@ NativeTray *nativeTrayCreate(xcb_connection_t *connection,
   tray->xembed = internAtom(connection, "_XEMBED");
   tray->xembedInfo = internAtom(connection, "_XEMBED_INFO");
   tray->hostWindow = xcb_generate_id(connection);
-  uint32_t hostValues[] = {screen->black_pixel,
+  uint32_t hostValues[] = {backgroundPixel(connection, screen, background),
                            1,
                            XCB_EVENT_MASK_STRUCTURE_NOTIFY |
                                XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY};
@@ -254,6 +275,17 @@ NativeTray *nativeTrayCreate(xcb_connection_t *connection,
                       8,
                       sizeof(WINDOW_CLASS),
                       WINDOW_CLASS);
+  xcb_atom_t windowType = internAtom(connection, "_NET_WM_WINDOW_TYPE");
+  xcb_atom_t dockType = internAtom(connection, "_NET_WM_WINDOW_TYPE_DOCK");
+  if (windowType != XCB_ATOM_NONE && dockType != XCB_ATOM_NONE)
+    xcb_change_property(connection,
+                        XCB_PROP_MODE_REPLACE,
+                        tray->hostWindow,
+                        windowType,
+                        XCB_ATOM_ATOM,
+                        32,
+                        1,
+                        &dockType);
   xcb_get_selection_owner_reply_t *owner = xcb_get_selection_owner_reply(
       connection, xcb_get_selection_owner(connection, tray->selection), NULL);
   bool available = owner && owner->owner == XCB_WINDOW_NONE;
