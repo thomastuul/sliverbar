@@ -593,6 +593,17 @@ Die installierte Version wird mit folgendem Befehl ausgegeben:
 sliverbar --version
 ```
 
+Eine laufende Instanz nimmt validierte Lautstärke- und Helligkeitsaktionen über
+einen benutzereigenen Unix-Socket entgegen:
+
+```sh
+sliverbar --action volume up
+sliverbar --action brightness down
+sliverbar --action refresh brightness
+```
+
+Andere interne Panelaktionen sind über diesen Steuerkanal nicht erreichbar.
+
 ## Technische Eigenschaften
 
 Neben den sichtbaren Blöcken besitzt Sliverbar folgende übergreifende
@@ -604,6 +615,7 @@ Eigenschaften:
   Modulskripte;
 - `timerfd` und monotone Zeit für periodische und kurzzeitige Zustände;
 - `signalfd` für kontrolliertes Beenden und Aufräumen;
+- ein benutzereigener Unix-Socket für validierte externe Aktionen;
 - natives XEmbed-System-Tray;
 - interne, tastaturbedienbare Launcher- und Power-Popups;
 - Multi-Monitor- und Multi-X-Screen-Unterstützung über RandR;
@@ -611,7 +623,7 @@ Eigenschaften:
 - optionale Programme werden mit expliziten argv-Listen und ohne
   Shellauswertung gestartet;
 - ein CLI-only-Build bleibt ohne XCB-Entwicklungsheader für
-  `--check-config`, `--diagnose` und `--version` baubar.
+  `--check-config`, `--diagnose`, `--action` und `--version` baubar.
 
 Damit ist Sliverbar nicht nur eine formatierte Statuszeile, sondern ein
 eigenständiges Panel mit Anzeige, Eingabe, Zustandsverwaltung, Popups,

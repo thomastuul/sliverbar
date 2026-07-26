@@ -40,6 +40,7 @@ add_library(sliverbar_core
     src/agenda_provider.c
     src/app_launcher.c
     src/config.c
+    src/control_ipc.c
     src/inhibitor.c
     src/modules.c
     src/power_actions.c
@@ -197,6 +198,8 @@ if(BUILD_TESTING)
     add_test(NAME core COMMAND test_core)
     add_test(NAME check_config COMMAND sliverbar --config ${CMAKE_CURRENT_BINARY_DIR}/panel.conf --check-config)
     add_test(NAME version COMMAND sliverbar --version)
+    add_test(NAME invalid_action COMMAND sliverbar --action volume invalid)
+    set_tests_properties(invalid_action PROPERTIES WILL_FAIL TRUE)
     add_test(NAME diagnose COMMAND sliverbar --config ${CMAKE_CURRENT_BINARY_DIR}/panel.conf --diagnose)
     add_test(
         NAME weather_json_only
@@ -237,6 +240,13 @@ if(BUILD_TESTING)
                 NAME native_workspace_backends
                 COMMAND ${XVFB_RUN} -a
                         ${CMAKE_CURRENT_SOURCE_DIR}/tests/xvfb-workspace-backends.sh
+                        $<TARGET_FILE:sliverbar>
+                        ${CMAKE_CURRENT_BINARY_DIR}/panel.conf
+            )
+            add_test(
+                NAME native_control_ipc
+                COMMAND ${XVFB_RUN} -a
+                        ${CMAKE_CURRENT_SOURCE_DIR}/tests/xvfb-control-ipc.sh
                         $<TARGET_FILE:sliverbar>
                         ${CMAKE_CURRENT_BINARY_DIR}/panel.conf
             )

@@ -2,6 +2,7 @@
 
 #include "agenda.h"
 #include "app_launcher.h"
+#include "control_ipc.h"
 #include "inhibitor.h"
 #include "power_actions.h"
 #include "timer.h"
@@ -76,6 +77,42 @@ int main(int argc, char **argv) {
   CHECK(strcmp(localeOutput, "C") == 0);
   CHECK(originalLocale ? setenv("LC_ALL", savedLocale, 1) == 0
                        : unsetenv("LC_ALL") == 0);
+
+  char controlAction[CONTROL_ACTION_MAX];
+  CHECK(
+      controlActionBuild("volume", "up", controlAction, sizeof(controlAction)));
+  CHECK(strcmp(controlAction, "volume|up") == 0);
+  CHECK(controlActionBuild(
+      "brightness", "down", controlAction, sizeof(controlAction)));
+  CHECK(strcmp(controlAction, "brightness|down") == 0);
+  CHECK(controlActionBuild(
+      "refresh", "volume", controlAction, sizeof(controlAction)));
+  CHECK(strcmp(controlAction, "refresh|volume") == 0);
+  CHECK(!controlActionBuild(
+      "power_action", "poweroff", controlAction, sizeof(controlAction)));
+  CHECK(controlActionValid("volume|toggle"));
+  CHECK(controlActionValid("refresh|brightness"));
+  CHECK(!controlActionValid("volume|invalid"));
+  CHECK(!controlActionValid("power_action|poweroff"));
+  CHECK(!controlActionValid("volume|up|extra"));
+
+  char controlDirectory[] = "/tmp/sliverbar-control-XXXXXX";
+  CHECK(mkdtemp(controlDirectory) != NULL);
+  char controlPath[PANEL_PATH_MAX];
+  CHECK(snprintf(controlPath,
+                 sizeof(controlPath),
+                 "%s/control.sock",
+                 controlDirectory) > 0);
+  int controlFd = controlServerOpen(controlPath);
+  CHECK(controlFd >= 0);
+  CHECK(controlClientSend(controlPath, "volume|up") == 0);
+  char receivedAction[CONTROL_ACTION_MAX];
+  CHECK(controlServerReceive(
+            controlFd, receivedAction, sizeof(receivedAction)) > 0);
+  CHECK(strcmp(receivedAction, "volume|up") == 0);
+  controlServerClose(controlFd, controlPath);
+  CHECK(access(controlPath, F_OK) != 0);
+  CHECK(rmdir(controlDirectory) == 0);
 
   PanelConfig cfg;
   configDefaults(&cfg);

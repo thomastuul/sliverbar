@@ -1,4 +1,5 @@
 #include "agenda_provider.h"
+#include "control_ipc.h"
 #include "native_panel.h"
 #include "native_popup.h"
 #include "panel.h"
@@ -1043,6 +1044,11 @@ static void doAction(PanelConfig *c,
     if (scheduleBrightness(c, s, arg, brightnessTimerFd))
       logMessage(
           "ERROR", "cannot schedule brightness update: %s", strerror(errno));
+  } else if (!strcmp(kind, "refresh") && arg) {
+    if (!strcmp(arg, "volume"))
+      moduleVolume(c, s);
+    else if (!strcmp(arg, "brightness") && !s->brightnessUpdatePending)
+      moduleBrightness(c, s);
   }
 }
 #endif
@@ -1050,7 +1056,10 @@ static void doAction(PanelConfig *c,
 static void usage(FILE *f, const char *name) {
   fprintf(f,
           "Usage: %s [--config PATH] [--check-config] [--diagnose] "
-          "[--list-pim-sources] [--smoke-test] [--version]\n",
+          "[--list-pim-sources] [--smoke-test] [--version]\n"
+          "       %s --action {volume {up|down|toggle}|"
+          "brightness {up|down}|refresh {volume|brightness}}\n",
+          name,
           name);
 }
 
@@ -1325,6 +1334,7 @@ int main(int argc, char **argv) {
   PanelConfig cfg;
   configDefaults(&cfg);
   const char *config = NULL;
+  const char *actionModule = NULL, *actionOperation = NULL;
   char defaultConfig[PANEL_PATH_MAX];
   bool check = false, diagnose = false, listPimSources = false,
        smokeTest = false;
@@ -1340,13 +1350,32 @@ int main(int argc, char **argv) {
       listPimSources = true;
     else if (!strcmp(argv[i], "--smoke-test"))
       smokeTest = true;
-    else if (!strcmp(argv[i], "--version")) {
+    else if (!strcmp(argv[i], "--action") && i + 2 < argc) {
+      actionModule = argv[++i];
+      actionOperation = argv[++i];
+    } else if (!strcmp(argv[i], "--version")) {
       puts("sliverbar " SLIVERBAR_VERSION);
       return 0;
     } else {
       usage(stderr, argv[0]);
       return 2;
     }
+  }
+  if (actionModule) {
+    char controlAction[CONTROL_ACTION_MAX], controlPath[PANEL_PATH_MAX];
+    if (argc != 4 || !controlActionBuild(actionModule,
+                                         actionOperation,
+                                         controlAction,
+                                         sizeof(controlAction))) {
+      usage(stderr, argv[0]);
+      return 2;
+    }
+    if (controlSocketPath(controlPath, sizeof(controlPath)) ||
+        controlClientSend(controlPath, controlAction)) {
+      logMessage("ERROR", "cannot send panel action: %s", strerror(errno));
+      return 1;
+    }
+    return 0;
   }
   if (!config) {
     config = getenv("SLIVERBAR_CONFIG");
@@ -2252,6 +2281,16 @@ int main(int argc, char **argv) {
   workspaceBackendRefresh(workspaceBackend, &state);
   updateTitleXcb(x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
   char action[1024] = "";
+  char controlPath[PANEL_PATH_MAX] = "";
+  int controlFd = -1;
+  if (controlSocketPath(controlPath, sizeof(controlPath))) {
+    logMessage(
+        "WARNING", "control socket path is unavailable: %s", strerror(errno));
+  } else {
+    controlFd = controlServerOpen(controlPath);
+    if (controlFd < 0)
+      logMessage("WARNING", "cannot open control socket: %s", strerror(errno));
+  }
   unsigned ticks = 0;
   bool running = true, dirty = true, vd = false;
   while (running) {
@@ -2266,8 +2305,9 @@ int main(int argc, char **argv) {
         {titleWindow.readFd, POLLIN, 0},
         {timerFeedbackTfd, POLLIN, 0},
         {timerAnimationTfd, POLLIN, 0},
-        {agendaProviderPollFd(agendaProvider), POLLIN, 0}};
-    if (poll(fds, 11, -1) < 0) {
+        {agendaProviderPollFd(agendaProvider), POLLIN, 0},
+        {controlFd, POLLIN, 0}};
+    if (poll(fds, 12, -1) < 0) {
       if (errno == EINTR)
         continue;
       logMessage("ERROR", "poll failed: %s", strerror(errno));
@@ -2458,11 +2498,6 @@ int main(int argc, char **argv) {
           dirty = true;
         free(ev);
       }
-      if (vd) {
-        moduleVolume(&cfg, &state);
-        vd = false;
-        dirty = true;
-      }
     }
     if (fds[3].revents & POLLIN) {
       uint64_t expirations;
@@ -2520,6 +2555,32 @@ int main(int argc, char **argv) {
         dirty = true;
       }
     }
+    if (fds[11].revents & POLLIN) {
+      char controlAction[CONTROL_ACTION_MAX];
+      while (controlServerReceive(
+                 controlFd, controlAction, sizeof(controlAction)) > 0) {
+        if (!controlActionValid(controlAction)) {
+          logMessage("WARNING", "ignored invalid control action");
+          continue;
+        }
+        doAction(&cfg,
+                 &state,
+                 controlAction,
+                 &vd,
+                 brightnessTfd,
+                 timerFeedbackTfd,
+                 timerAnimationTfd,
+                 workspaceBackend,
+                 panel,
+                 popup,
+                 &weatherPid,
+                 inhibitor,
+                 &timer,
+                 &timerSoundPid,
+                 &agendaSnapshot);
+        dirty = true;
+      }
+    }
 #ifndef HAVE_XCB
     if (fds[6].revents & POLLIN) {
       char event[2048];
@@ -2551,6 +2612,11 @@ int main(int argc, char **argv) {
       dirty = true;
     }
 #endif
+    if (vd) {
+      moduleVolume(&cfg, &state);
+      vd = false;
+      dirty = true;
+    }
     if (dirty) {
       if (nativePanelDraw(panel, &state)) {
         logMessage("ERROR", "native panel rendering failed");
@@ -2568,6 +2634,7 @@ int main(int argc, char **argv) {
   close(timerFeedbackTfd);
   close(timerAnimationTfd);
   close(sfd);
+  controlServerClose(controlFd, controlPath[0] ? controlPath : NULL);
   stopTimerSound(timerSoundPid);
   if (weatherPid > 0) {
     kill(weatherPid, SIGTERM);
