@@ -1,0 +1,13 @@
+# Portable project-local Codex configuration example.
+#
+# Copy this file to `.codex/config.toml` when no local project configuration
+# exists. Otherwise, merge the MCP server blocks into the existing file.
+
+[mcp_servers.context7]
+command = "npx"
+args = ["-y", "@upstash/context7-mcp"]
+startup_timeout_sec = 20
+# Expects CONTEXT7_API_KEY in the environment.
+
+[mcp_servers.openaiDeveloperDocs]
+url = "https://developers.openai.com/mcp"
