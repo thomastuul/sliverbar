@@ -18,6 +18,29 @@
   relevant to the task.
 - Exclude generated files, build directories, caches, dependencies, and `.git` unless explicitly relevant.
 
+## Context7
+
+- Wenn eine Aufgabe aktuelle Bibliotheks-, Framework-, SDK- oder
+  API-Dokumentation erfordert, zuerst Context7 verwenden.
+- Falls Context7 in der aktuellen Codex-Sitzung nicht verfügbar oder nicht
+  ladbar ist, den Anwender ausdrücklich darauf hinweisen, dass Codex
+  möglicherweise ohne den Context7-Wrapper gestartet wurde.
+- Dabei folgenden Neustartbefehl nennen:
+
+  ```bash
+  cd /home/thomas/.config/bspwm/sliverbar
+  ./scripts/codex-context7.sh
+  ```
+
+- Zum Fortsetzen einer bestehenden Sitzung den Wrapper so verwenden:
+
+  ```bash
+  ./scripts/codex-context7.sh resume <SESSION-ID>
+  ```
+
+- Nicht stillschweigend auf andere Dokumentationsquellen ausweichen, bevor der
+  Anwender über das fehlende Context7 informiert wurde.
+
 ## Validation scripts
 
 - `./scripts/quick-check.sh`: fast iterative checks.
