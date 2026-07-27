@@ -200,6 +200,19 @@ path given in `CONTEXT7_ENV_FILE`, and then starts Codex with your arguments.
 That keeps the API token out of `config.toml` while still making Context7
 available in this repository.
 
+The portable MCP configuration is provided as `.codex/config.toml.example`.
+Codex does not load the example file automatically. If no local project
+configuration exists, copy it before starting Codex:
+
+```bash
+cp .codex/config.toml.example .codex/config.toml
+```
+
+If `.codex/config.toml` already exists, merge the `mcp_servers.context7` and
+`mcp_servers.openaiDeveloperDocs` blocks instead of overwriting the file. Both
+the active configuration and `.codex/context7.env` are ignored so personal
+settings and API keys remain local.
+
 Each main block has a `module_NAME=auto|enabled|disabled` switch. `auto` hides
 blocks whose data source or optional runtime command is unavailable. The
 supported names are `clock`, `title`, `cpu`, `battery`, `screencast`, `volume`,
