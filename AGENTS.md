@@ -5,15 +5,17 @@
 - Use C17 and preserve the existing CMake architecture.
 - Keep the project buildable without XCB development headers.
 - Format changed C files with clang-format.
-- Run clang-tidy on changed translation units.
-- Run CTest after every code change.
+- Run clang-tidy on translation units affected by C or header changes.
+- Run CTest after each coherent C or header change before considering it locally
+  validated.
 - Keep generated files in out-of-source build directories.
 
 ## Repository search
 
-- Use `./scripts/inspect.sh` for a read-only repository overview before reading files.
-- Use `rg --files` first to inspect the repository structure.
-- Prefer targeted `rg` searches and read only files relevant to the task.
+- Run `./scripts/inspect.sh` first for a read-only repository overview; it
+  includes the initial `rg --files` inventory.
+- After that overview, prefer targeted `rg` searches and read only files
+  relevant to the task.
 - Exclude generated files, build directories, caches, dependencies, and `.git` unless explicitly relevant.
 
 ## Validation scripts
@@ -25,9 +27,14 @@
 
 ## Staged validation
 
-1. Run `./scripts/quick-check.sh` during iterative development.
-2. Run `./scripts/test-local.sh` after normal C changes.
-3. Run `./scripts/test.sh` before committing, pushing, releasing, or opening a PR.
+1. Run `./scripts/quick-check.sh` during iterative C or header development.
+2. Run `./scripts/test-local.sh` and `./scripts/lint.sh` after each coherent C
+   or header change.
+3. For build-system, test-infrastructure, configuration, documentation, and
+   packaging changes, follow the change-type matrix in `docs/development.md`.
+4. Run `./scripts/test.sh` before committing C, header, build-system, or
+   test-infrastructure changes and before pushing, releasing, or opening a PR,
+   subject to the task-specific exceptions below.
 
 The complete validation workflow is documented in [docs/development.md](docs/development.md).
 
@@ -40,37 +47,61 @@ The complete validation workflow is documented in [docs/development.md](docs/dev
 ## Versioning
 
 - The single version source is `VERSION` and must use `MAJOR.MINOR.PATCH`.
-- Increment `PATCH` for bug fixes and other backward-compatible corrections.
+- Increment `PATCH` for user-facing bug fixes and other backward-compatible
+  product corrections.
 - Increment `MINOR` for backward-compatible feature changes.
 - Increment `MAJOR` for breaking or otherwise major changes, after agreeing the
   major-version change with the user.
+- Do not increment the version solely for documentation, test, CI, or internal
+  build-maintenance changes unless they change installed files, package
+  metadata, compatibility, or runtime behavior.
 - The program must support `sliverbar --version` and exit successfully.
 - Keep version tests and documentation synchronized with `VERSION`.
 
 ## Live validation
 
-- Every completed Sliverbar validation must include a test of the candidate on
-  the live system and a visual comparison using screenshots.
 - Obtain explicit user approval before replacing or testing a live instance.
-- Capture the current panel as a baseline, run the candidate with the complete
-  production configuration, capture the result, and inspect both screenshots.
-- A change that has not completed the approved live test and screenshot review
-  remains incomplete.
+- For runtime-affecting changes, exercise the changed behavior on the live
+  system with the complete production configuration and record the result.
+- For visually affecting changes, capture the current panel as a baseline, run
+  the candidate with the complete production configuration, capture the result,
+  and inspect both screenshots.
+- Changes affecting both runtime behavior and visual output require both forms
+  of validation.
+- An applicable change remains incomplete until all required functional and
+  visual live validations have passed.
 
 ## Definition of Done
 
 A change is complete when:
 
 - relevant files were located and inspected with targeted searches;
-- `./scripts/quick-check.sh` passes when applicable;
-- `./scripts/test-local.sh` passes for C changes;
-- `./scripts/test.sh` passes before commit, push, release, or PR;
-- `git diff --check` passes;
+- `./scripts/quick-check.sh` passes when applicable; if it fails solely because
+  of preserved unrelated changes, equivalent task-scoped checks pass and the
+  limitation is reported;
+- `./scripts/test-local.sh` and `./scripts/lint.sh` pass for C or header changes;
+- `./scripts/test.sh` passes before committing C, header, build-system, or
+  test-infrastructure changes and before push, release, or PR, subject to the
+  task-specific exceptions below;
+- task-scoped unstaged and staged changes pass `git diff --check` and
+  `git diff --cached --check`, respectively;
+- newly created task files are deliberately staged before the cached check or
+  receive an equivalent whitespace-error check;
+- unrelated full-worktree failures are reported but not modified;
 - versioning remains correct;
 - relevant documentation is updated;
-- no unrelated files are changed;
+- the task did not create, modify, stage, or remove unrelated files;
+- runtime-affecting changes passed an approved functional live test;
+- visually affecting changes passed an approved baseline/candidate screenshot
+  comparison;
 - live or deployment tests were performed only with explicit approval.
 
-For documentation-only or packaging-only changes, apply the relevant checks from
-the linked development, deployment, or packaging document instead of forcing the
-full C test matrix when it is not applicable.
+Documentation-only changes use the documentation checks in
+`docs/development.md` and do not require the C test matrix or a live-system test
+solely because documentation changed. Validate newly introduced or modified
+executable runtime and deployment steps as applicable; any live execution still
+requires explicit approval.
+
+Packaging changes follow `docs/packaging.md`, including `./scripts/test.sh` and
+package validation. They require a live-system test only when they affect
+installation or runtime behavior on the target host.
