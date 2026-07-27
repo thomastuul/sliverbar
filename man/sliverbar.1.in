@@ -134,6 +134,7 @@ Supported names are
 .BR network ,
 .BR brightness ,
 .BR weather ,
+.BR timer ,
 .BR inhibitor ,
 .BR launcher ,
 .BR tray ,
@@ -214,7 +215,7 @@ The accepted ranges are 1\-31, 4\-20, and 0\-5 respectively.
 .TP
 .B agenda_refresh_interval, agenda_popup_width
 Consistency refresh in seconds (default 300, range 60\-3600) and popup width
-in pixels (default 480, range 320\-720).
+in pixels (default 720, range 320\-720).
 .TP
 .B agenda_show_source
 .B true
@@ -300,6 +301,7 @@ module_volume=disabled
 module_network=disabled
 module_brightness=disabled
 module_weather=disabled
+module_timer=disabled
 module_inhibitor=disabled
 module_launcher=disabled
 module_tray=disabled

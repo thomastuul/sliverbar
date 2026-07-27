@@ -23,6 +23,7 @@ sliverbar_core
     ├── agenda_provider
     ├── app_launcher
     ├── config
+    ├── control_ipc
     ├── inhibitor
     ├── modules
     ├── power_actions

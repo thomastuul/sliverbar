@@ -201,8 +201,14 @@ That keeps the API token out of `config.toml` while still making Context7
 available in this repository.
 
 The portable MCP configuration is provided as `.codex/config.toml.example`.
-Codex does not load the example file automatically. If no local project
-configuration exists, copy it before starting Codex:
+Codex does not load the example file automatically, and it loads project-local
+`.codex/config.toml` only after the repository has been marked as trusted.
+Review and accept the project trust prompt before relying on this
+configuration. If the checkout must remain untrusted, merge the same MCP blocks
+into the user-level `~/.codex/config.toml` instead.
+
+If no local project configuration exists, copy the example before starting
+Codex:
 
 ```bash
 cp .codex/config.toml.example .codex/config.toml
@@ -222,11 +228,13 @@ example, a deliberately minimal panel can start from the example configuration
 and set every module except `clock` and `title` to `disabled`, plus
 `workspace_backend=none`.
 
-The default text font is the generic Pango `Monospace` family. An empty
-`icon_font` uses the regular font and Pango's installed fallback fonts; a Nerd
-Font remains an optional visual enhancement. Weather is disabled automatically
-until `location` is configured. The example assumes neither a terminal nor a
-launcher or power-menu script.
+The compiled text-font fallback is the generic Pango `Monospace` family; the
+shipped example selects `JetBrainsMono Nerd Font Mono`. An empty `icon_font`
+uses the regular font and Pango's installed fallback fonts, so a Nerd Font
+remains optional. The shipped example already defines several
+`weather_location` entries. A custom configuration without either
+`weather_location` or the legacy `location` key hides the weather block. The
+example assumes neither a terminal nor a launcher or power-menu script.
 
 `monitor=primary` selects the primary RandR monitor. A monitor name or
 zero-based RandR index selects one explicitly; `all` spans the complete X
