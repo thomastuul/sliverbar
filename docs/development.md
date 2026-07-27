@@ -6,12 +6,14 @@ Use the smallest suitable stage during development and the complete workflow
 before publication:
 
 ```text
-quick-check.sh → test-local.sh → test.sh
+quick-check.sh → test-local.sh + lint.sh → test.sh
 ```
 
-After the automated stages, every completed validation also requires an
-explicitly approved live-system test and visual baseline/candidate screenshot
-comparison as documented in [deployment.md](deployment.md).
+After the automated stages, runtime-affecting changes require an explicitly
+approved functional live-system test. Visually affecting changes require an
+approved visual baseline/candidate screenshot comparison. Changes affecting both
+areas require both forms of validation as documented in
+[deployment.md](deployment.md).
 
 ### Fast iterative checks
 
@@ -41,6 +43,9 @@ The local lint entry point is:
 
 It runs clang-format and clang-tidy against the local compile database.
 
+Run `test-local.sh` before `lint.sh` after CMake, C, or header changes so that the
+compile database is regenerated before clang-tidy reads it.
+
 ### Authoritative container validation
 
 ```bash
@@ -48,8 +53,9 @@ It runs clang-format and clang-tidy against the local compile database.
 ```
 
 This delegates to `scripts/container-build.sh` and is the required validation
-before committing C changes, pushing, releasing, or opening a pull request. It
-runs:
+before committing C, header, build-system, or test-infrastructure changes and
+before pushing, releasing, or opening a pull request, subject to the documented
+task-specific exceptions. It runs:
 
 - clang-format validation;
 - clang-tidy;
@@ -91,3 +97,21 @@ ctest --preset local
 ```
 
 Do not manually duplicate long CMake command lines in project instructions.
+
+## Validation by change type
+
+| Change type | Required validation before considering the change complete |
+| --- | --- |
+| C source or header | `quick-check.sh`, `test-local.sh`, `lint.sh`, then `test.sh` before commit or publication |
+| CMake, presets, Dockerfiles, build or test infrastructure | Relevant syntax checks and affected build/test entry points, then `test.sh` before commit or publication |
+| Runtime configuration or defaults | Relevant config tests and `--check-config`; add `test.sh` when compiled behavior or release output is affected |
+| Documentation only | Task-scoped `git diff --check` and `git diff --cached --check`, including new files after deliberate staging or an equivalent check, plus available link, format, and documentation checks; validate modified executable runtime or deployment steps as applicable |
+| Packaging | `test.sh` followed by the package workflow in [packaging.md](packaging.md) |
+
+For shell-script changes, also follow the inherited repository rules for
+`bash -n` and ShellCheck.
+
+When the working tree already contains unrelated changes, scope path-based checks
+and staging to the task files. Report failures caused by unrelated paths without
+modifying those paths. If `quick-check.sh` fails solely because it inspects such
+paths, run the equivalent checks on the task paths and report that limitation.

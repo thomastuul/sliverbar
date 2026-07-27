@@ -193,6 +193,13 @@ Without `--config` or `SLIVERBAR_CONFIG`, configuration is searched in
 finally the local development configuration. No bspwm-specific path is
 implicitly selected.
 
+For local Codex use, `sliverbar` also ships a helper wrapper at
+`scripts/codex-context7.sh`. It loads `CONTEXT7_API_KEY` from
+`$HOME/.config/bspwm/sliverbar/.codex/context7.env` by default, or from the
+path given in `CONTEXT7_ENV_FILE`, and then starts Codex with your arguments.
+That keeps the API token out of `config.toml` while still making Context7
+available in this repository.
+
 Each main block has a `module_NAME=auto|enabled|disabled` switch. `auto` hides
 blocks whose data source or optional runtime command is unavailable. The
 supported names are `clock`, `title`, `cpu`, `battery`, `screencast`, `volume`,

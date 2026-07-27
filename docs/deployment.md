@@ -6,16 +6,24 @@ current runtime behavior.
 ## Before replacing the live instance
 
 - Run CTest successfully.
-- Capture the current panel as the visual baseline.
 - Record the complete configuration used by the running process.
+- For visually affecting changes, capture the current panel as the visual
+  baseline.
 - Start the candidate with the same complete configuration.
 - Put feature-specific test settings in a configuration copy instead of using
   a minimal configuration.
 
+## Functional validation
+
+For runtime-affecting changes, exercise the changed behavior directly with the
+complete production configuration. Verify the expected result, relevant failure
+paths, and observable diagnostics such as logs or process state. Record what was
+tested and whether it passed.
+
 ## Visual comparison
 
-Compare the candidate and baseline across the complete panel and every changed
-popup. Check:
+For visually affecting changes, compare the candidate and baseline across the
+complete panel and every changed popup. Check:
 
 - font family and size;
 - glyph selection;
