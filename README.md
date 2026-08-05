@@ -366,6 +366,25 @@ except lock. Lock appears only when a known session ScreenSaver service is
 registered; the logind lock signal alone is not treated as proof that a locker
 exists.
 
+### Battery power profiles
+
+When `power-profiles-daemon` is available on the system D-Bus and the native
+popup is compiled in, left-clicking the battery block opens the profiles
+reported by `net.hadess.PowerProfiles`. The active profile is marked, and only
+an identifier currently offered by the service can be selected. Sliverbar sets
+`ActiveProfile` through D-Bus with interactive authorization enabled and reads
+the property back before treating the change as successful.
+
+The integration is automatic and optional. Without the service, GIO, or the
+native popup, the battery block remains visible but has no profile click action.
+Sliverbar never writes power policy directly to `/sys` and never invokes
+`sudo`. Do not run `power-profiles-daemon` alongside another power-policy
+manager such as TLP or TuneD unless that combination is explicitly supported
+by the installed tools. Command backends for those managers are not guessed.
+
+`--diagnose` reports `power_profiles.backend`, `power_profiles.active`, the
+number of offered profiles, and each profile identifier.
+
 ### Weather, timer, and inhibitor
 
 Repeat `weather_location=safe-id|Display name|service query` for up to 4

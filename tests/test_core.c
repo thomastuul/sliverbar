@@ -5,6 +5,7 @@
 #include "control_ipc.h"
 #include "inhibitor.h"
 #include "power_actions.h"
+#include "power_profiles.h"
 #include "timer.h"
 #include "weather_forecast.h"
 
@@ -29,6 +30,35 @@
       return 1;                                                                \
     }                                                                          \
   } while (0)
+
+typedef struct {
+  PowerProfileState state;
+  bool reject;
+  unsigned setCalls;
+} FakePowerProfiles;
+
+static int fakePowerProfilesQuery(const PanelConfig *config,
+                                  PowerProfileState *state,
+                                  void *context) {
+  (void)config;
+  FakePowerProfiles *fake = context;
+  *state = fake->state;
+  return state->available ? 0 : -1;
+}
+
+static int fakePowerProfileSet(const char *id,
+                               char *error,
+                               size_t errorSize,
+                               void *context) {
+  FakePowerProfiles *fake = context;
+  fake->setCalls++;
+  if (fake->reject) {
+    snprintf(error, errorSize, "authorization rejected");
+    return -1;
+  }
+  snprintf(fake->state.active, sizeof(fake->state.active), "%s", id);
+  return 0;
+}
 
 static time_t localTime(int year, int month, int day, int hour, int minute) {
   struct tm value = {
@@ -935,6 +965,56 @@ int main(int argc, char **argv) {
     CHECK(batteryState.battery[0] != '\0');
     CHECK(strstr(batteryState.battery, "%{O4}") != NULL);
   }
+  cfg.internalPowerProfilesAvailable = true;
+  moduleBattery(&cfg, &batteryState);
+  CHECK(strstr(batteryState.battery, "%{A1:power_profile|menu:}") != NULL);
+  cfg.internalPowerProfilesAvailable = false;
+  PowerProfileState profileState = {
+      .available = true,
+      .count = 2,
+      .profiles = {{.id = "power-saver"}, {.id = "balanced"}},
+  };
+  CHECK(powerProfileOffered(&profileState, "power-saver"));
+  CHECK(powerProfileOffered(&profileState, "balanced"));
+  CHECK(!powerProfileOffered(&profileState, "performance"));
+  CHECK(powerProfileIdValid("power-saver"));
+  CHECK(!powerProfileIdValid("power-saver|poweroff"));
+  CHECK(!powerProfileIdValid("Performance"));
+  CHECK(strcmp(powerProfilesBackendName(&profileState),
+               "power-profiles-daemon-dbus") == 0);
+  strcpy(cfg.language, "de");
+  CHECK(strcmp(powerProfileLabel(&cfg, "balanced"), "Ausgeglichen") == 0);
+  strcpy(cfg.language, "en");
+  CHECK(strcmp(powerProfileLabel(&cfg, "power-saver"), "Power saver") == 0);
+  FakePowerProfiles fakeProfiles = {
+      .state =
+          {
+              .available = true,
+              .active = "balanced",
+              .profiles = {{.id = "power-saver"}, {.id = "balanced"}},
+              .count = 2,
+          },
+  };
+  PowerProfilesBackend fakeBackend = {
+      .query = fakePowerProfilesQuery,
+      .set = fakePowerProfileSet,
+      .context = &fakeProfiles,
+  };
+  powerProfilesSetBackendForTests(&fakeBackend);
+  PowerProfileState queriedProfiles;
+  CHECK(powerProfilesQuery(&cfg, &queriedProfiles) == 0);
+  CHECK(strcmp(queriedProfiles.active, "balanced") == 0);
+  char profileError[64];
+  CHECK(powerProfileSet("power-saver", profileError, sizeof(profileError)) ==
+        0);
+  CHECK(fakeProfiles.setCalls == 1);
+  CHECK(strcmp(fakeProfiles.state.active, "power-saver") == 0);
+  fakeProfiles.reject = true;
+  CHECK(powerProfileSet("balanced", profileError, sizeof(profileError)) != 0);
+  CHECK(strcmp(profileError, "authorization rejected") == 0);
+  fakeProfiles.state.available = false;
+  CHECK(powerProfilesQuery(&cfg, &queriedProfiles) != 0);
+  powerProfilesSetBackendForTests(NULL);
 
   PanelState state = {0};
   strcpy(state.launcher, "L");
