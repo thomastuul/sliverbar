@@ -1374,6 +1374,16 @@ englische Texte, ohne dass weitere Uebersetzungen eingebaut werden muessen.
 Akzeptanzkriterium: Auf einem Desktop ohne Batterie steht `AC` im Battery-
 Block; auf einem Notebook werden Ladezustand und Ladestatus angezeigt.
 
+## Bugfix: Vollstaendige Ladestatus-Glyphen
+
+- [x] Einen sich entladenden Akku mit `` kennzeichnen.
+- [x] Einen durch eine Ladeschwelle pausierten Ladevorgang (`Not charging`) mit
+  `` kennzeichnen.
+- [x] Die bestehenden Glyphen fuer `Charging` und `Full` beibehalten.
+- [x] Die Statuszuordnung mit Unit-Tests abdecken und dokumentieren.
+
+Akzeptanzkriterium: Der Battery-Block unterscheidet Laden, vollstaendige Ladung,
+Entladen und pausiertes Laden sichtbar voneinander.
 ## Feature: Energieprofile ueber die Batterieanzeige auswaehlen
 
 Ein Linksklick auf den Batterie-Block soll ein natives Auswahlmenue fuer die

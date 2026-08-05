@@ -165,6 +165,20 @@ void moduleCpu(const PanelConfig *c, PanelState *s) {
     snprintf(s->cpu, sizeof(s->cpu), "%s", body);
 }
 
+const char *moduleBatteryStatusGlyph(const char *status) {
+  if (!status)
+    return "";
+  if (!strcasecmp(status, "Charging"))
+    return "";
+  if (!strcasecmp(status, "Full"))
+    return "";
+  if (!strcasecmp(status, "Discharging"))
+    return "";
+  if (!strcasecmp(status, "Not charging"))
+    return "";
+  return "";
+}
+
 void moduleBattery(const PanelConfig *c, PanelState *s) {
   s->battery[0] = '\0';
   if (c->moduleBattery == MODULE_DISABLED)
@@ -172,7 +186,7 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
   DIR *d = opendir("/sys/class/power_supply");
   bool powerSupplyAvailable = d != NULL;
   int sum = 0, count = 0;
-  bool charging = false, full = true;
+  bool charging = false, full = true, discharging = false, notCharging = false;
   if (d) {
     struct dirent *e;
     while ((e = readdir(d))) {
@@ -193,6 +207,12 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
         if (!strcasecmp(v, "Charging")) {
           charging = true;
           full = false;
+        } else if (!strcasecmp(v, "Discharging")) {
+          discharging = true;
+          full = false;
+        } else if (!strcasecmp(v, "Not charging")) {
+          notCharging = true;
+          full = false;
         } else if (strcasecmp(v, "Full") != 0)
           full = false;
       }
@@ -211,7 +231,11 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
                        : p >= 50 ? ""
                        : p >= 25 ? ""
                                  : "";
-    const char *status = charging ? "" : full ? "" : "";
+    const char *status = moduleBatteryStatusGlyph(charging      ? "Charging"
+                                                  : full        ? "Full"
+                                                  : discharging ? "Discharging"
+                                                  : notCharging ? "Not charging"
+                                                                : NULL);
     if (status[0])
       snprintf(text, sizeof(text), "%s%%{O4}%d%%%%{O4}%s", icon, p, status);
     else

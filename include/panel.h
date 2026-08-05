@@ -152,6 +152,7 @@ void logMessage(const char *level, const char *format, ...);
 const char *moduleClockGlyph(const PanelConfig *cfg, unsigned hour);
 void moduleClock(const PanelConfig *cfg, PanelState *state);
 void moduleCpu(const PanelConfig *cfg, PanelState *state);
+const char *moduleBatteryStatusGlyph(const char *status);
 void moduleBattery(const PanelConfig *cfg, PanelState *state);
 void moduleScreencast(const PanelConfig *cfg,
                       PanelState *state,

@@ -953,6 +953,12 @@ int main(int argc, char **argv) {
   CHECK(timerMinutes(&timer) == TIMER_MAX_MINUTES);
   CHECK(!timerAdjust(&timer, 1));
   timerReset(&timer);
+  CHECK(strcmp(moduleBatteryStatusGlyph("Charging"), "") == 0);
+  CHECK(strcmp(moduleBatteryStatusGlyph("Full"), "") == 0);
+  CHECK(strcmp(moduleBatteryStatusGlyph("Discharging"), "") == 0);
+  CHECK(strcmp(moduleBatteryStatusGlyph("Not charging"), "") == 0);
+  CHECK(strcmp(moduleBatteryStatusGlyph("Unknown"), "") == 0);
+  CHECK(strcmp(moduleBatteryStatusGlyph(NULL), "") == 0);
   PanelState batteryState = {0};
   moduleBattery(&cfg, &batteryState);
   if (access("/sys/class/power_supply", R_OK) == 0) {

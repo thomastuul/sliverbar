@@ -230,6 +230,11 @@ voller Akku, Warnschwelle und kritische Schwelle werden farblich
 unterschieden. Ist eine Stromversorgung vorhanden, aber kein Akku, erscheint
 wie in der Abbildung `AC`.
 
+Der Ladestatus erscheint hinter dem Prozentwert: `` kennzeichnet einen
+ladenden Akku, `` einen vollen Akku, `` einen sich entladenden Akku und
+`` einen pausierten Ladevorgang (`Not charging`), etwa an einer konfigurierten
+Ladeschwelle.
+
 **Mausaktion:** keine.
 
 ### I – Netzwerk
