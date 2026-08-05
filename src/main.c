@@ -1703,12 +1703,14 @@ int main(int argc, char **argv) {
              cfg.colorBg);
     snprintf(smoke.title,
              sizeof(smoke.title),
-             "%%{B%s}%%{F%s} Native X11 panel %%{F-}%%{B-}",
+             "%%{B%s}%%{F%s}%%{A1:smoke|title:} Native X11 panel with a "
+             "deliberately long centered title that must never overlap either "
+             "aligned side %%{A}%%{F-}%%{B-}",
              cfg.colorBg,
              cfg.colorFree);
     snprintf(smoke.clock,
              sizeof(smoke.clock),
-             "%%{B%s}%%{F%s} smoke test %%{F-}%%{B-}",
+             "%%{B%s}%%{F%s}%%{A1:smoke|right:} smoke test %%{A}%%{F-}%%{B-}",
              cfg.colorBg,
              cfg.colorClock);
     if (nativePanelDraw(panel, &smoke)) {
@@ -1751,6 +1753,19 @@ int main(int argc, char **argv) {
                                  &actionWidth) ||
         actionX != smokeX || actionWidth <= 12) {
       logMessage("ERROR", "native smoke-test action bounds failed");
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    int leftX = 0, leftWidth = 0, titleX = 0, titleWidth = 0, rightX = 0;
+    if (!nativePanelActionBounds(
+            panel, "notify|Native panel|space preserved", &leftX, &leftWidth) ||
+        !nativePanelActionBounds(panel, "smoke|title", &titleX, &titleWidth) ||
+        !nativePanelActionBounds(panel, "smoke|right", &rightX, NULL) ||
+        titleWidth <= 0 || titleX < leftX + leftWidth + 8 ||
+        titleX + titleWidth > rightX - 8) {
+      logMessage("ERROR", "native smoke-test aligned content overlap");
       nativePanelDestroy(panel);
       xcb_disconnect(x);
       close(lock);

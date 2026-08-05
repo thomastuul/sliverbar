@@ -109,7 +109,9 @@ EWMH-Backend besitzt keine standardisierte Eigenschaft für das bspwm-Layout.
 Der mittlere Block zeigt den Titel des aktuell aktiven X11-Fensters. Im
 nativen Build überwacht Sliverbar `_NET_ACTIVE_WINDOW` und `_NET_WM_NAME`
 ereignisbasiert über XCB; es ist kein dauerndes `xprop`-Polling nötig.
-`title_max` begrenzt die angezeigte Länge.
+`title_max` begrenzt die angezeigte Länge. Zusätzlich begrenzt die native
+Darstellung den Titel pixelgenau auf den freien Platz zwischen den linken und
+rechten Blöcken und kürzt ihn bei Bedarf mit einer Ellipse.
 
 **Mausaktion:** keine.
 

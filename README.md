@@ -164,7 +164,8 @@ actions. Sliverbar does not evaluate shell code.
 
 The Bash panel and C panel must not be displayed simultaneously during visual
 testing. The external `trayer` process must also be stopped before starting the
-is intentionally not changed by this project.
+native panel. Existing desktop keybindings are intentionally not changed by
+this project.
 
 Visibility keybindings should target the `sliverbar` application name. A
 dedicated top-level tray host gives XEmbed clients correct screen coordinates
