@@ -235,7 +235,15 @@ ladenden Akku, `` einen vollen Akku, `` einen sich entladenden Akku und
 `` einen pausierten Ladevorgang (`Not charging`), etwa an einer konfigurierten
 Ladeschwelle.
 
-**Mausaktion:** keine.
+**Mausaktionen:**
+
+- Linksklick öffnet bei verfügbarem `power-profiles-daemon` die Auswahl der
+  Energieprofile.
+- Rechtsklick öffnet ein natives Detailfenster, sofern mindestens ein Akku
+  vorhanden ist. Angezeigt werden nur vom Kernel auslesbare Werte:
+  Ladezustand, Status, aktuelle Ladungsmenge, volle Ladekapazität,
+  Designkapazität, der daraus berechnete Gesundheitszustand und der aktuelle
+  Strom. Auf Systemen ohne Akku wird kein Detailfenster angeboten.
 
 ### I – Netzwerk
 

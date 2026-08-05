@@ -12,6 +12,24 @@ nicht EWMH-kompatible Window Manager zu verstehen. Unterstuetzte
 Laufzeitbibliotheken, Architekturen und getestete Umgebungen muessen explizit
 dokumentiert werden.
 
+## Batterieinformationen per Rechtsklick
+
+- [x] Den Batterieblock nur bei vorhandenem Akku um die Rechtsklick-Aktion
+  `battery|details` ergaenzen; den vorhandenen Linksklick auf Energieprofile
+  unveraendert lassen.
+- [x] Ladezustand, Status, aktuelle Ladungsmenge, volle Ladekapazitaet,
+  Designkapazitaet, daraus berechneten Gesundheitszustand und aktuellen Strom
+  aus `/sys/class/power_supply` lesen.
+- [x] Im nativen Popup ausschliesslich Attribute anzeigen, die der Kernel fuer
+  alle erkannten Akkus bereitstellt. Ohne Akku oder ohne lesbare Detailwerte
+  keine Rechtsklick-Aktion anbieten.
+- [x] Deutsche und englische Beschriftungen sowie synthetische Tests fuer die
+  sysfs-Auswertung ergaenzen.
+
+Akzeptanzkriterium: Rechtsklick auf einen vorhandenen Batterieblock zeigt die
+verfuegbaren aktuellen Akkuwerte in einem am Block verankerten nativen Popup;
+Systeme ohne Akku behalten ihr bisheriges Verhalten ohne leeres Popup.
+
 ## Bugfix: Unplausible WLAN-Signalstaerke
 
 Beobachtete Reproduktion am 20.07.2026:

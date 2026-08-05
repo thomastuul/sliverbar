@@ -382,6 +382,12 @@ Sliverbar never writes power policy directly to `/sys` and never invokes
 manager such as TLP or TuneD unless that combination is explicitly supported
 by the installed tools. Command backends for those managers are not guessed.
 
+When a battery is present, right-clicking the battery block toggles a native
+details popup anchored to that block. It shows only values exposed by the
+kernel: charge level, status, current charge, full charge capacity, design
+capacity, calculated battery health, and current. Missing attributes are
+omitted, and systems without a battery do not expose the right-click action.
+
 `--diagnose` reports `power_profiles.backend`, `power_profiles.active`, the
 number of offered profiles, and each profile identifier.
 

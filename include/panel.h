@@ -88,12 +88,31 @@ typedef struct {
   ModuleMode moduleInhibitor, moduleTimer;
   bool internalLauncherAvailable, internalPowerAvailable;
   bool internalPowerProfilesAvailable;
+  bool internalBatteryDetailsAvailable;
   bool internalWeatherForecastAvailable;
   bool internalAgendaAvailable;
   WeatherLocation weatherLocations[PANEL_WEATHER_LOCATION_MAX];
   size_t weatherLocationCount, activeWeatherLocation;
   char defaultWeatherLocation[64];
 } PanelConfig;
+
+typedef struct {
+  bool available;
+  bool capacityValid;
+  int capacityPercent;
+  bool statusValid;
+  char status[32];
+  bool chargeNowValid;
+  uint64_t chargeNow;
+  bool chargeFullValid;
+  uint64_t chargeFull;
+  bool chargeFullDesignValid;
+  uint64_t chargeFullDesign;
+  bool healthValid;
+  double healthPercent;
+  bool currentNowValid;
+  int64_t currentNow;
+} BatteryDetails;
 
 typedef struct {
   uint64_t cpuTotal, cpuIdle;
@@ -114,6 +133,7 @@ typedef struct {
   char cpu[PANEL_TEXT_MAX], clock[PANEL_TEXT_MAX], tray[PANEL_TEXT_MAX];
   char power[PANEL_TEXT_MAX], screencast[PANEL_TEXT_MAX];
   char inhibitor[PANEL_TEXT_MAX], timer[PANEL_TEXT_MAX];
+  BatteryDetails batteryDetails;
 } PanelState;
 
 typedef struct {
@@ -153,6 +173,7 @@ const char *moduleClockGlyph(const PanelConfig *cfg, unsigned hour);
 void moduleClock(const PanelConfig *cfg, PanelState *state);
 void moduleCpu(const PanelConfig *cfg, PanelState *state);
 const char *moduleBatteryStatusGlyph(const char *status);
+bool batteryDetailsRead(const char *powerSupplyRoot, BatteryDetails *details);
 void moduleBattery(const PanelConfig *cfg, PanelState *state);
 void moduleScreencast(const PanelConfig *cfg,
                       PanelState *state,

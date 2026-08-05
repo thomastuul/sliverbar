@@ -959,6 +959,57 @@ int main(int argc, char **argv) {
   CHECK(strcmp(moduleBatteryStatusGlyph("Not charging"), "") == 0);
   CHECK(strcmp(moduleBatteryStatusGlyph("Unknown"), "") == 0);
   CHECK(strcmp(moduleBatteryStatusGlyph(NULL), "") == 0);
+  char batteryRoot[] = "/tmp/sliverbar-battery-XXXXXX";
+  CHECK(mkdtemp(batteryRoot) != NULL);
+  char batteryPath[sizeof(batteryRoot) + sizeof("/BAT0")];
+  snprintf(batteryPath, sizeof(batteryPath), "%s/BAT0", batteryRoot);
+  CHECK(mkdir(batteryPath, 0700) == 0);
+  const struct {
+    const char *name;
+    const char *value;
+  } batteryAttributes[] = {{"capacity", "60\n"},
+                           {"status", "Not charging\n"},
+                           {"charge_now", "4982000\n"},
+                           {"charge_full", "8192000\n"},
+                           {"charge_full_design", "9600000\n"},
+                           {"current_now", "0\n"}};
+  for (size_t i = 0;
+       i < sizeof(batteryAttributes) / sizeof(batteryAttributes[0]);
+       i++) {
+    char attributePath[sizeof(batteryRoot) + 64];
+    snprintf(attributePath,
+             sizeof(attributePath),
+             "%s/%s%s",
+             batteryRoot,
+             "BAT0/",
+             batteryAttributes[i].name);
+    CHECK(writeAtomic(attributePath, batteryAttributes[i].value, 0600) == 0);
+  }
+  BatteryDetails details = {0};
+  CHECK(batteryDetailsRead(batteryRoot, &details));
+  CHECK(details.available);
+  CHECK(details.capacityValid && details.capacityPercent == 60);
+  CHECK(details.statusValid && !strcmp(details.status, "Not charging"));
+  CHECK(details.chargeNowValid && details.chargeNow == 4982000);
+  CHECK(details.chargeFullValid && details.chargeFull == 8192000);
+  CHECK(details.chargeFullDesignValid && details.chargeFullDesign == 9600000);
+  CHECK(details.healthValid && details.healthPercent > 85.3 &&
+        details.healthPercent < 85.4);
+  CHECK(details.currentNowValid && details.currentNow == 0);
+  for (size_t i = 0;
+       i < sizeof(batteryAttributes) / sizeof(batteryAttributes[0]);
+       i++) {
+    char attributePath[sizeof(batteryRoot) + 64];
+    snprintf(attributePath,
+             sizeof(attributePath),
+             "%s/%s%s",
+             batteryRoot,
+             "BAT0/",
+             batteryAttributes[i].name);
+    CHECK(unlink(attributePath) == 0);
+  }
+  CHECK(rmdir(batteryPath) == 0);
+  CHECK(rmdir(batteryRoot) == 0);
   PanelState batteryState = {0};
   moduleBattery(&cfg, &batteryState);
   if (access("/sys/class/power_supply", R_OK) == 0) {
@@ -966,9 +1017,13 @@ int main(int argc, char **argv) {
     CHECK(strstr(batteryState.battery, "%{O4}") != NULL);
   }
   cfg.internalPowerProfilesAvailable = true;
+  cfg.internalBatteryDetailsAvailable = true;
   moduleBattery(&cfg, &batteryState);
   CHECK(strstr(batteryState.battery, "%{A1:power_profile|menu:}") != NULL);
+  if (batteryState.batteryDetails.available)
+    CHECK(strstr(batteryState.battery, "%{A3:battery|details:}") != NULL);
   cfg.internalPowerProfilesAvailable = false;
+  cfg.internalBatteryDetailsAvailable = false;
   PowerProfileState profileState = {
       .available = true,
       .count = 2,
