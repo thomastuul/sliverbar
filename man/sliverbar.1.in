@@ -250,6 +250,12 @@ Without a compatible service the battery block remains visible without a
 profile click action.  Sliverbar does not write power policy directly to
 .B /sys
 or invoke sudo, and it does not guess command backends for TLP or TuneD.
+.PP
+When at least one battery is present, right click toggles a native details
+popup anchored to the battery block.  It shows only kernel-provided charge
+level, status, current charge, full charge capacity, design capacity, calculated
+battery health, and current values.  Missing attributes are omitted.  Systems
+without a battery do not expose this right-click action.
 .SS Weather
 .TP
 .B weather_location

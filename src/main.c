@@ -16,6 +16,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <locale.h>
 #include <poll.h>
 #include <signal.h>
@@ -637,6 +638,71 @@ static int openPowerProfiles(NativePopup *popup,
       popup, items, state.count, false, actionX, actionWidth);
 }
 
+static const char *batteryStatusLabel(const char *status, bool german) {
+  if (!status)
+    return german ? "Unbekannt" : "Unknown";
+  if (!strcmp(status, "Charging"))
+    return german ? "Wird geladen" : "Charging";
+  if (!strcmp(status, "Discharging"))
+    return german ? "Wird entladen" : "Discharging";
+  if (!strcmp(status, "Not charging"))
+    return german ? "Wird nicht geladen" : "Not charging";
+  if (!strcmp(status, "Full"))
+    return german ? "Voll" : "Full";
+  return german ? "Unbekannt" : "Unknown";
+}
+
+static int openBatteryDetails(NativePopup *popup,
+                              const NativePanel *panel,
+                              const PanelConfig *config,
+                              const BatteryDetails *details) {
+  if (!details || !details->available)
+    return -1;
+  PopupItem items[7] = {0};
+  size_t count = 0;
+  bool german = panelLanguageIsGerman(config);
+#define ADD_BATTERY_ROW(...)                                                   \
+  do {                                                                         \
+    snprintf(items[count].label, sizeof(items[count].label), __VA_ARGS__);     \
+    count++;                                                                   \
+  } while (0)
+  if (details->capacityValid)
+    ADD_BATTERY_ROW(german ? "Ladezustand: %d %%" : "Charge level: %d %%",
+                    details->capacityPercent);
+  if (details->statusValid)
+    ADD_BATTERY_ROW(german ? "Status: %s" : "Status: %s",
+                    batteryStatusLabel(details->status, german));
+  if (details->chargeNowValid)
+    ADD_BATTERY_ROW(german ? "Aktuelle Ladungsmenge: %.3f Ah"
+                           : "Current charge: %.3f Ah",
+                    (double)details->chargeNow / 1000000.0);
+  if (details->chargeFullValid)
+    ADD_BATTERY_ROW(german ? "Volle Ladekapazität: %.3f Ah"
+                           : "Full charge capacity: %.3f Ah",
+                    (double)details->chargeFull / 1000000.0);
+  if (details->chargeFullDesignValid)
+    ADD_BATTERY_ROW(german ? "Designkapazität: %.3f Ah"
+                           : "Design capacity: %.3f Ah",
+                    (double)details->chargeFullDesign / 1000000.0);
+  if (details->healthValid)
+    ADD_BATTERY_ROW(german ? "Gesundheitszustand: %.1f %%" : "Health: %.1f %%",
+                    details->healthPercent);
+  if (details->currentNowValid)
+    ADD_BATTERY_ROW(german ? "Aktueller Strom: %.3f A" : "Current: %.3f A",
+                    (double)details->currentNow / 1000000.0);
+#undef ADD_BATTERY_ROW
+  if (!count)
+    return -1;
+  int actionX = 0, actionWidth = 1;
+  if (!nativePanelActionBounds(
+          panel, "battery|details", &actionX, &actionWidth)) {
+    int panelY = 0, panelWidth = 0, panelHeight = 0;
+    nativePanelBounds(panel, &actionX, &panelY, &panelWidth, &panelHeight);
+    actionX += panelWidth;
+  }
+  return nativePopupOpenInfoAt(popup, items, count, actionX, actionWidth);
+}
+
 static bool sleepPowerAction(const char *id) {
   return !strcmp(id, "suspend") || !strcmp(id, "hibernate") ||
          !strcmp(id, "suspend_then_hibernate") || !strcmp(id, "hybrid_sleep");
@@ -1046,6 +1112,11 @@ static void doAction(PanelConfig *c,
       moduleBattery(c, s);
       nativePopupClose(popup);
     }
+  } else if (!strcmp(kind, "battery") && arg && !strcmp(arg, "details")) {
+    if (nativePopupIsOpen(popup))
+      nativePopupClose(popup);
+    else if (c->internalBatteryDetailsAvailable)
+      openBatteryDetails(popup, panel, c, &s->batteryDetails);
   } else if (!strcmp(kind, "weather_location") && arg) {
     if (selectWeatherLocation(c, arg)) {
       if (c->weatherState[0])
@@ -2284,6 +2355,7 @@ int main(int argc, char **argv) {
       nativePopupAvailable(popup) &&
       !powerProfilesQuery(&cfg, &initialProfileState);
   cfg.internalWeatherForecastAvailable = nativePopupAvailable(popup);
+  cfg.internalBatteryDetailsAvailable = nativePopupAvailable(popup);
   AgendaSnapshot agendaSnapshot = {0};
   AgendaProviderStatus agendaStatus = {0};
   bool agendaStatusLogged = false;

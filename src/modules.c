@@ -179,78 +179,164 @@ const char *moduleBatteryStatusGlyph(const char *status) {
   return "";
 }
 
-void moduleBattery(const PanelConfig *c, PanelState *s) {
-  s->battery[0] = '\0';
-  if (c->moduleBattery == MODULE_DISABLED)
-    return;
-  DIR *d = opendir("/sys/class/power_supply");
-  bool powerSupplyAvailable = d != NULL;
-  int sum = 0, count = 0;
-  bool charging = false, full = true, discharging = false, notCharging = false;
-  if (d) {
-    struct dirent *e;
-    while ((e = readdir(d))) {
-      if (strncmp(e->d_name, "BAT", 3) != 0)
-        continue;
-      char p[PANEL_PATH_MAX], v[64];
-      snprintf(p, sizeof(p), "/sys/class/power_supply/%s/capacity", e->d_name);
-      if (!readTextFile(p, v, sizeof(v))) {
-        char *end;
-        long x = strtol(v, &end, 10);
-        if (end != v && x >= 0 && x <= 100) {
-          sum += (int)x;
-          count++;
-        }
-      }
-      snprintf(p, sizeof(p), "/sys/class/power_supply/%s/status", e->d_name);
-      if (!readTextFile(p, v, sizeof(v))) {
-        if (!strcasecmp(v, "Charging")) {
-          charging = true;
-          full = false;
-        } else if (!strcasecmp(v, "Discharging")) {
-          discharging = true;
-          full = false;
-        } else if (!strcasecmp(v, "Not charging")) {
-          notCharging = true;
-          full = false;
-        } else if (strcasecmp(v, "Full") != 0)
-          full = false;
+static bool readBatteryInteger(const char *root,
+                               const char *battery,
+                               const char *attribute,
+                               int64_t *value) {
+  char path[PANEL_PATH_MAX], text[64], *end = NULL;
+  snprintf(path, sizeof(path), "%s/%s/%s", root, battery, attribute);
+  if (readTextFile(path, text, sizeof(text)))
+    return false;
+  errno = 0;
+  long long parsed = strtoll(text, &end, 10);
+  if (errno || end == text)
+    return false;
+  *value = parsed;
+  return true;
+}
+
+bool batteryDetailsRead(const char *root, BatteryDetails *details) {
+  if (!root || !details)
+    return false;
+  memset(details, 0, sizeof(*details));
+  DIR *directory = opendir(root);
+  if (!directory)
+    return false;
+  int capacitySum = 0, capacityCount = 0;
+  uint64_t chargeNow = 0, chargeFull = 0, chargeFullDesign = 0;
+  int64_t currentNow = 0;
+  size_t batteries = 0, nowCount = 0, fullCount = 0, designCount = 0,
+         currentCount = 0;
+  bool charging = false, full = true, discharging = false, notCharging = false,
+       statusSeen = false;
+  struct dirent *entry;
+  while ((entry = readdir(directory))) {
+    if (strncmp(entry->d_name, "BAT", 3) != 0)
+      continue;
+    batteries++;
+    int64_t value;
+    if (readBatteryInteger(root, entry->d_name, "capacity", &value) &&
+        value >= 0 && value <= 100) {
+      capacitySum += (int)value;
+      capacityCount++;
+    }
+    char path[PANEL_PATH_MAX], status[64];
+    snprintf(path, sizeof(path), "%s/%s/status", root, entry->d_name);
+    if (!readTextFile(path, status, sizeof(status))) {
+      statusSeen = true;
+      if (!strcasecmp(status, "Charging")) {
+        charging = true;
+        full = false;
+      } else if (!strcasecmp(status, "Discharging")) {
+        discharging = true;
+        full = false;
+      } else if (!strcasecmp(status, "Not charging")) {
+        notCharging = true;
+        full = false;
+      } else if (strcasecmp(status, "Full") != 0) {
+        full = false;
       }
     }
-    closedir(d);
+    if (readBatteryInteger(root, entry->d_name, "charge_now", &value) &&
+        value >= 0) {
+      chargeNow += (uint64_t)value;
+      nowCount++;
+    }
+    if (readBatteryInteger(root, entry->d_name, "charge_full", &value) &&
+        value >= 0) {
+      chargeFull += (uint64_t)value;
+      fullCount++;
+    }
+    if (readBatteryInteger(root, entry->d_name, "charge_full_design", &value) &&
+        value >= 0) {
+      chargeFullDesign += (uint64_t)value;
+      designCount++;
+    }
+    if (readBatteryInteger(root, entry->d_name, "current_now", &value)) {
+      currentNow += value;
+      currentCount++;
+    }
   }
+  closedir(directory);
+  details->available = batteries > 0;
+  details->capacityValid = capacityCount > 0;
+  if (details->capacityValid)
+    details->capacityPercent = capacitySum / capacityCount;
+  details->statusValid = statusSeen;
+  if (statusSeen)
+    snprintf(details->status,
+             sizeof(details->status),
+             "%s",
+             charging      ? "Charging"
+             : full        ? "Full"
+             : discharging ? "Discharging"
+             : notCharging ? "Not charging"
+                           : "Unknown");
+  details->chargeNowValid = nowCount == batteries;
+  details->chargeNow = chargeNow;
+  details->chargeFullValid = fullCount == batteries;
+  details->chargeFull = chargeFull;
+  details->chargeFullDesignValid = designCount == batteries;
+  details->chargeFullDesign = chargeFullDesign;
+  details->healthValid = details->chargeFullValid &&
+                         details->chargeFullDesignValid && chargeFullDesign > 0;
+  if (details->healthValid)
+    details->healthPercent =
+        100.0 * (double)chargeFull / (double)chargeFullDesign;
+  details->currentNowValid = currentCount == batteries;
+  details->currentNow = currentNow;
+  return details->available;
+}
+
+void moduleBattery(const PanelConfig *c, PanelState *s) {
+  s->battery[0] = '\0';
+  memset(&s->batteryDetails, 0, sizeof(s->batteryDetails));
+  if (c->moduleBattery == MODULE_DISABLED)
+    return;
+  bool powerSupplyAvailable = access("/sys/class/power_supply", R_OK) == 0;
+  batteryDetailsRead("/sys/class/power_supply", &s->batteryDetails);
   if (!moduleModeActive(c->moduleBattery, powerSupplyAvailable))
     return;
   char text[96];
-  if (!count)
+  if (!s->batteryDetails.capacityValid)
     snprintf(text, sizeof(text), "%%{O4}AC");
   else {
-    int p = sum / count;
+    int p = s->batteryDetails.capacityPercent;
     const char *icon = p >= 95   ? ""
                        : p >= 75 ? ""
                        : p >= 50 ? ""
                        : p >= 25 ? ""
                                  : "";
-    const char *status = moduleBatteryStatusGlyph(charging      ? "Charging"
-                                                  : full        ? "Full"
-                                                  : discharging ? "Discharging"
-                                                  : notCharging ? "Not charging"
-                                                                : NULL);
+    const char *status = moduleBatteryStatusGlyph(
+        s->batteryDetails.statusValid ? s->batteryDetails.status : NULL);
     if (status[0])
       snprintf(text, sizeof(text), "%s%%{O4}%d%%%%{O4}%s", icon, p, status);
     else
       snprintf(text, sizeof(text), "%s%%{O4}%d%%", icon, p);
   }
-  const char *fg = charging                       ? c->colorFocus
-                   : (count && sum / count <= 10) ? c->colorCritical
-                   : (count && sum / count <= 20) ? c->colorWarning
-                                                  : c->colorBattery;
+  bool charging = s->batteryDetails.statusValid &&
+                  !strcasecmp(s->batteryDetails.status, "Charging");
+  int percent = s->batteryDetails.capacityPercent;
+  const char *fg =
+      charging                                             ? c->colorFocus
+      : (s->batteryDetails.capacityValid && percent <= 10) ? c->colorCritical
+      : (s->batteryDetails.capacityValid && percent <= 20) ? c->colorWarning
+                                                           : c->colorBattery;
   char body[256];
   block(body, sizeof(body), c, fg, text);
+  char leftAction[384];
   if (c->internalPowerProfilesAvailable)
-    action(s->battery, sizeof(s->battery), 1, "power_profile|menu", body);
+    action(leftAction, sizeof(leftAction), 1, "power_profile|menu", body);
   else
-    snprintf(s->battery, sizeof(s->battery), "%s", body);
+    snprintf(leftAction, sizeof(leftAction), "%s", body);
+  if (c->internalBatteryDetailsAvailable && s->batteryDetails.available &&
+      (s->batteryDetails.capacityValid || s->batteryDetails.statusValid ||
+       s->batteryDetails.chargeNowValid || s->batteryDetails.chargeFullValid ||
+       s->batteryDetails.chargeFullDesignValid ||
+       s->batteryDetails.healthValid || s->batteryDetails.currentNowValid))
+    action(s->battery, sizeof(s->battery), 3, "battery|details", leftAction);
+  else
+    snprintf(s->battery, sizeof(s->battery), "%s", leftAction);
 }
 
 void moduleScreencast(const PanelConfig *c,

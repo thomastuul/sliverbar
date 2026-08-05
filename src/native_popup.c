@@ -27,6 +27,7 @@
 
 typedef enum {
   POPUP_MODE_MENU,
+  POPUP_MODE_INFO,
   POPUP_MODE_FORECAST,
   POPUP_MODE_AGENDA,
 } PopupMode;
@@ -653,7 +654,17 @@ static void drawPopup(NativePopup *popup) {
     drawForecast(popup);
   else if (popup->mode == POPUP_MODE_AGENDA)
     drawAgenda(popup);
-  else
+  else if (popup->mode == POPUP_MODE_INFO) {
+    setColor(popup->cairo, popup->config.colorPanelBg, "#000000");
+    cairo_paint(popup->cairo);
+    for (size_t row = 0; row < popup->itemCount; row++)
+      drawEllipsizedText(popup,
+                         popup->items[row].label,
+                         12,
+                         (int)row * popup->rowHeight + 5,
+                         popup->width - 24,
+                         popup->config.colorFree);
+  } else
     drawMenu(popup);
   cairo_surface_flush(popup->surface);
   xcb_flush(popup->connection);
@@ -902,6 +913,18 @@ int nativePopupOpenAt(NativePopup *popup,
   if (popup->x > maximumX)
     popup->x = maximumX;
   configurePopupWindow(popup);
+  drawPopup(popup);
+  return 0;
+}
+
+int nativePopupOpenInfoAt(NativePopup *popup,
+                          const PopupItem *items,
+                          size_t count,
+                          int actionX,
+                          int actionWidth) {
+  if (nativePopupOpenAt(popup, items, count, false, actionX, actionWidth))
+    return -1;
+  popup->mode = POPUP_MODE_INFO;
   drawPopup(popup);
   return 0;
 }
@@ -1232,6 +1255,8 @@ bool nativePopupHandleEvent(NativePopup *popup,
       }
       return true;
     }
+    if (popup->mode == POPUP_MODE_INFO)
+      return false;
     if (button->detail == 4 && popup->selected > 0) {
       popup->selected--;
       ensureSelectedVisible(popup);
