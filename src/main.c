@@ -4,6 +4,7 @@
 #include "native_popup.h"
 #include "panel.h"
 #include "power_actions.h"
+#include "power_profiles.h"
 #include "timer.h"
 #include "version.h"
 #include "weather_forecast.h"
@@ -603,6 +604,39 @@ static int openPowerMenu(NativePopup *popup, const PanelConfig *config) {
   return nativePopupOpen(popup, items, count, false, true);
 }
 
+static int openPowerProfiles(NativePopup *popup,
+                             NativePanel *panel,
+                             const PanelConfig *config) {
+  PowerProfileState state;
+  if (powerProfilesQuery(config, &state))
+    return -1;
+  PopupItem items[POWER_PROFILE_MAX] = {0};
+  for (size_t i = 0; i < state.count; i++) {
+    snprintf(items[i].label,
+             sizeof(items[i].label),
+             "%s%s",
+             state.profiles[i].active ? "✓  " : "   ",
+             state.profiles[i].label);
+    snprintf(items[i].search,
+             sizeof(items[i].search),
+             "%s %s",
+             state.profiles[i].id,
+             state.profiles[i].label);
+    snprintf(items[i].action,
+             sizeof(items[i].action),
+             "power_profile|%.63s",
+             state.profiles[i].id);
+  }
+  int actionX = 0, actionWidth = 1;
+  if (!nativePanelActionBounds(
+          panel, "power_profile|menu", &actionX, &actionWidth)) {
+    int panelY = 0, panelWidth = 0, panelHeight = 0;
+    nativePanelBounds(panel, &actionX, &panelY, &panelWidth, &panelHeight);
+  }
+  return nativePopupOpenAt(
+      popup, items, state.count, false, actionX, actionWidth);
+}
+
 static bool sleepPowerAction(const char *id) {
   return !strcmp(id, "suspend") || !strcmp(id, "hibernate") ||
          !strcmp(id, "suspend_then_hibernate") || !strcmp(id, "hybrid_sleep");
@@ -991,6 +1025,27 @@ static void doAction(PanelConfig *c,
         c, s, inhibitorAvailable(inhibitor), inhibitorActive(inhibitor));
   } else if (!strcmp(kind, "power_cancel")) {
     nativePopupClose(popup);
+  } else if (!strcmp(kind, "power_profile") && arg) {
+    if (!strcmp(arg, "menu")) {
+      if (nativePopupIsOpen(popup))
+        nativePopupClose(popup);
+      else if (!powerProfilesQuery(c, &(PowerProfileState){0}))
+        openPowerProfiles(popup, panel, c);
+    } else {
+      char error[256];
+      if (powerProfileSet(arg, error, sizeof(error))) {
+        logMessage("ERROR", "cannot set power profile %s: %s", arg, error);
+        if (commandExists("notify-send")) {
+          char *arguments[] = {
+              "notify-send", "Sliverbar", "Power profile change failed", NULL};
+          spawnDetached(arguments);
+        }
+      }
+      PowerProfileState profileState;
+      c->internalPowerProfilesAvailable = !powerProfilesQuery(c, &profileState);
+      moduleBattery(c, s);
+      nativePopupClose(popup);
+    }
   } else if (!strcmp(kind, "weather_location") && arg) {
     if (selectWeatherLocation(c, arg)) {
       if (c->weatherState[0])
@@ -1196,6 +1251,15 @@ static int runDiagnostics(const PanelConfig *config,
     printf("power.action.%s=%s\n",
            powerActions[i].id,
            powerActions[i].authorization);
+  PowerProfileState profileState;
+  powerProfilesQuery(config, &profileState);
+  printf("power_profiles.backend=%s\n",
+         powerProfilesBackendName(&profileState));
+  printf("power_profiles.active=%s\n",
+         profileState.active[0] ? profileState.active : "unavailable");
+  printf("power_profiles.profiles=%zu\n", profileState.count);
+  for (size_t i = 0; i < profileState.count; i++)
+    printf("power_profiles.profile.%zu=%s\n", i, profileState.profiles[i].id);
   Inhibitor *inhibitor = inhibitorCreate(executable);
   printf("inhibitor.backend=%s\n", inhibitorBackendName(inhibitor));
   printf("inhibitor.active=no\n");
@@ -1882,6 +1946,26 @@ int main(int argc, char **argv) {
       close(lock);
       return 1;
     }
+    if (nativePopupOpenAt(
+            smokePopup, popupItems, 2, false, rightX, actionWidth)) {
+      logMessage("ERROR", "anchored native popup could not open");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    int anchoredX = 0, anchoredWidth = 0;
+    nativePopupGeometry(smokePopup, &anchoredX, NULL, &anchoredWidth, NULL);
+    if (anchoredX < smokeX || anchoredX + anchoredWidth > smokeX + smokeWidth) {
+      logMessage("ERROR", "anchored native popup exceeded panel bounds");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
+    nativePopupClose(smokePopup);
     if (nativePopupOpen(smokePopup, popupItems, 2, false, false)) {
       logMessage("ERROR", "native popup smoke-test could not reopen");
       nativePopupDestroy(smokePopup);
@@ -2195,6 +2279,10 @@ int main(int argc, char **argv) {
                       availablePowerActions,
                       sizeof(availablePowerActions) /
                           sizeof(availablePowerActions[0])) > 0;
+  PowerProfileState initialProfileState;
+  cfg.internalPowerProfilesAvailable =
+      nativePopupAvailable(popup) &&
+      !powerProfilesQuery(&cfg, &initialProfileState);
   cfg.internalWeatherForecastAvailable = nativePopupAvailable(popup);
   AgendaSnapshot agendaSnapshot = {0};
   AgendaProviderStatus agendaStatus = {0};
@@ -2342,8 +2430,13 @@ int main(int argc, char **argv) {
         moduleCpu(&cfg, &state);
       if (ticks % 5 == 0)
         moduleVolume(&cfg, &state);
-      if (ticks % 10 == 0)
+      if (ticks % 10 == 0) {
+        PowerProfileState currentProfileState;
+        cfg.internalPowerProfilesAvailable =
+            nativePopupAvailable(popup) &&
+            !powerProfilesQuery(&cfg, &currentProfileState);
         moduleBattery(&cfg, &state);
+      }
       if (ticks % cfg.networkInterval == 0)
         moduleNetwork(&cfg, &state);
       if (ticks % cfg.weatherInterval == 0 && weatherPid <= 0)

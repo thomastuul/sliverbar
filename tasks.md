@@ -1374,6 +1374,56 @@ englische Texte, ohne dass weitere Uebersetzungen eingebaut werden muessen.
 Akzeptanzkriterium: Auf einem Desktop ohne Batterie steht `AC` im Battery-
 Block; auf einem Notebook werden Ladezustand und Ladestatus angezeigt.
 
+## Feature: Energieprofile ueber die Batterieanzeige auswaehlen
+
+Ein Linksklick auf den Batterie-Block soll ein natives Auswahlmenue fuer die
+vom System angebotenen Energieprofile oeffnen. Die Integration bleibt optional
+und darf weder einen Energieprofil-Dienst noch XCB-Entwicklungsheader zu einer
+zwingenden Build- oder Laufzeitabhaengigkeit machen.
+
+- [x] Als primaeres Backend die D-Bus-Schnittstelle von
+  `power-profiles-daemon` verwenden und nicht direkt nach `/sys` schreiben
+  oder Befehle mit `sudo` ausfuehren.
+- [x] Beim Oeffnen des Menues die tatsaechlich angebotenen Profile ermitteln,
+  statt `power-saver`, `balanced` und `performance` ungeprueft vorauszusetzen.
+- [x] Das aktive Profil im Menue eindeutig markieren und lokalisierbare
+  deutsche beziehungsweise englische Bezeichnungen anzeigen.
+- [x] Die vorhandene native Popup-Infrastruktur wiederverwenden und das Menue
+  am Batterie-Block verankern. Ein erneuter Linksklick soll es schliessen.
+- [x] Nach einer Auswahl das Profil ueber D-Bus setzen, den vom Dienst
+  bestaetigten Zustand erneut lesen und Anzeige sowie Markierung aktualisieren.
+- [x] D-Bus- und Polkit-Fehler sichtbar melden, ohne Sliverbar zu beenden oder
+  einen nicht bestaetigten Profilwechsel vorzutaeuschen.
+- [x] Dienststart, Dienstende, Dienstneustart sowie zur Laufzeit geaenderte
+  Profilverfuegbarkeit robust behandeln.
+- [x] Den Batterie-Block bei fehlendem Backend weiterhin normal anzeigen, aber
+  keine wirkungslose Klickaktion registrieren. Das Panel muss auch ganz ohne
+  Energieprofil-Dienst unveraendert funktionieren.
+- [x] In `sliverbar --diagnose` Backend-Verfuegbarkeit, aktives Profil und
+  angebotene Profile ausgeben.
+- [x] Ein austauschbares Test-Backend fuer verfuegbare und fehlende Dienste,
+  unterschiedliche Profillisten, erfolgreiche Wechsel, Ablehnung durch
+  Polkit, D-Bus-Fehler und Dienstneustarts vorsehen.
+- [x] Unter Xvfb Menueposition, aktive Markierung, Maus- und Tastaturauswahl,
+  erneutes Schliessen sowie den nicht klickbaren Fallback testen.
+- [x] Konfiguration, Bedienung, optionale Laufzeitabhaengigkeit und das
+  Verhalten bei konkurrierenden Energieverwaltungen wie TLP oder TuneD
+  dokumentieren. Sliverbar darf nicht versuchen, mehrere Energieverwaltungen
+  gleichzeitig zu steuern.
+- [x] Einen alternativen Backend- oder Command-Fallback fuer TLP beziehungsweise
+  TuneD allenfalls spaeter und nur explizit konfiguriert, argv-basiert und ohne
+  Shell-Auswertung entwerfen; er ist nicht Teil der ersten Implementierung.
+- [x] Fuer dieses rueckwaertskompatible, benutzersichtbare Feature die
+  Minor-Version erhoehen und Versions-, Handbuch- und Konfigurationstests
+  synchron halten.
+
+Akzeptanzkriterium: Wenn `power-profiles-daemon` erreichbar ist, oeffnet ein
+Linksklick auf den Batterie-Block ein am Block verankertes natives Menue mit
+allen angebotenen Profilen und markiert das aktive Profil. Eine Auswahl wird
+ueber D-Bus sicher angewendet und bestaetigt. Ohne kompatiblen Dienst bleibt
+die Batterieanzeige voll funktionsfaehig und besitzt keine wirkungslose
+Klickaktion.
+
 ## Prioritaet 4: Mehrmonitor- und Multi-Screen-Unterstuetzung
 
 - [x] Den von `xcb_connect` gewaehlten X-Screen korrekt beruecksichtigen, statt

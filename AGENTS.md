@@ -67,6 +67,10 @@ The complete validation workflow is documented in [docs/development.md](docs/dev
 - Follow [docs/packaging.md](docs/packaging.md) before producing a distributable package.
 - Do not start a full security scan without explicit user approval.
 
+## GitHub CLI
+
+- Run every `gh` command outside the sandbox.
+
 ## Versioning
 
 - The single version source is `VERSION` and must use `MAJOR.MINOR.PATCH`.

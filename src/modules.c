@@ -221,7 +221,12 @@ void moduleBattery(const PanelConfig *c, PanelState *s) {
                    : (count && sum / count <= 10) ? c->colorCritical
                    : (count && sum / count <= 20) ? c->colorWarning
                                                   : c->colorBattery;
-  block(s->battery, sizeof(s->battery), c, fg, text);
+  char body[256];
+  block(body, sizeof(body), c, fg, text);
+  if (c->internalPowerProfilesAvailable)
+    action(s->battery, sizeof(s->battery), 1, "power_profile|menu", body);
+  else
+    snprintf(s->battery, sizeof(s->battery), "%s", body);
 }
 
 void moduleScreencast(const PanelConfig *c,

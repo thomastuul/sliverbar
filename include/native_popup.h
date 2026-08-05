@@ -34,6 +34,12 @@ int nativePopupOpen(NativePopup *popup,
                     size_t count,
                     bool searchable,
                     bool anchorRight);
+int nativePopupOpenAt(NativePopup *popup,
+                      const PopupItem *items,
+                      size_t count,
+                      bool searchable,
+                      int actionX,
+                      int actionWidth);
 int nativePopupOpenForecast(NativePopup *popup,
                             const WeatherForecast *forecast,
                             const char *location,
