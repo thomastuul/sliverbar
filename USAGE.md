@@ -570,6 +570,22 @@ betroffene Modul verborgen oder eingeschränkt.
 | `pw-play`, `paplay`, `canberra-gtk-play` oder `aplay` | Timerklang |
 | GIO und `shared-mime-info` | Desktop-Anwendungen und Standard-Dateihandler |
 | logind über D-Bus | Hardware-Helligkeit und internes Power-Menü |
+| `power-profiles-daemon` über D-Bus | optionale Auswahl von Energieprofilen |
+
+## Energieprofile über die Batterieanzeige
+
+Wenn `power-profiles-daemon`, GIO und das native Popup verfügbar sind, öffnet
+ein Linksklick auf die Batterieanzeige ein Auswahlmenü mit genau den Profilen,
+die der Dienst anbietet. Das aktive Profil ist markiert. Sliverbar übergibt die
+Auswahl über D-Bus mit erlaubter interaktiver Autorisierung und prüft den
+anschließend vom Dienst gemeldeten Zustand.
+
+Ohne kompatiblen Dienst bleibt die Batterieanzeige unverändert sichtbar, ist
+aber nicht wirkungslos anklickbar. Sliverbar schreibt keine Energieeinstellungen
+direkt nach `/sys`, verwendet kein `sudo` und errät keine Befehle für TLP oder
+TuneD. Mehrere konkurrierende Energieverwaltungen sollten nur gemeinsam
+betrieben werden, wenn die installierten Werkzeuge diese Kombination
+ausdrücklich unterstützen.
 
 ## Diagnose und sichere Inbetriebnahme
 
@@ -584,8 +600,8 @@ ungültige Schlüssel werden nicht stillschweigend ignoriert.
 
 Die Laufzeitdiagnose startet kein Panel, sondern meldet unter anderem
 Konfigurationspfad, Display, Workspace-Backend, Schriften, optionale Programme,
-Anwendungsrollen, WLAN-Quelle, Wetterorte, Power-Fähigkeiten und
-Inhibitor-Backend:
+Anwendungsrollen, WLAN-Quelle, Wetterorte, Power-Fähigkeiten, Energieprofile
+und Inhibitor-Backend:
 
 ```sh
 sliverbar --config "$HOME/.config/sliverbar/panel.conf" --diagnose

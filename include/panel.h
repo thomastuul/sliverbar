@@ -87,6 +87,7 @@ typedef struct {
   ModuleMode moduleWeather, moduleLauncher, moduleTray, modulePower;
   ModuleMode moduleInhibitor, moduleTimer;
   bool internalLauncherAvailable, internalPowerAvailable;
+  bool internalPowerProfilesAvailable;
   bool internalWeatherForecastAvailable;
   bool internalAgendaAvailable;
   WeatherLocation weatherLocations[PANEL_WEATHER_LOCATION_MAX];

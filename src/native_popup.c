@@ -887,6 +887,25 @@ int nativePopupOpen(NativePopup *popup,
   return 0;
 }
 
+int nativePopupOpenAt(NativePopup *popup,
+                      const PopupItem *items,
+                      size_t count,
+                      bool searchable,
+                      int actionX,
+                      int actionWidth) {
+  if (nativePopupOpen(popup, items, count, searchable, false))
+    return -1;
+  popup->x = actionX + actionWidth / 2 - popup->width / 2;
+  if (popup->x < popup->anchorX)
+    popup->x = popup->anchorX;
+  int maximumX = popup->anchorX + popup->anchorWidth - popup->width;
+  if (popup->x > maximumX)
+    popup->x = maximumX;
+  configurePopupWindow(popup);
+  drawPopup(popup);
+  return 0;
+}
+
 static void configureForecastGeometry(NativePopup *popup) {
   popup->width =
       popup->anchorWidth < FORECAST_WIDTH ? popup->anchorWidth : FORECAST_WIDTH;

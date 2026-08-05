@@ -27,6 +27,7 @@ sliverbar_core
     ├── inhibitor
     ├── modules
     ├── power_actions
+    ├── power_profiles
     ├── timer
     ├── util
     └── weather_forecast
@@ -94,6 +95,16 @@ When native dependencies are unavailable, the project still builds a CLI-only
 fallback for configuration checks, diagnostics, version output, and tests.
 
 ## Optional integrations
+
+### Power profiles
+
+`power_profiles` queries `net.hadess.PowerProfiles` on the system D-Bus through
+optional GIO support. It validates service-provided identifiers, exposes only
+currently offered profiles, and confirms `ActiveProfile` after a change. The
+main loop periodically recreates the proxy so service starts, stops, restarts,
+and changed profile lists are reflected without making the D-Bus service a
+build or runtime requirement. A replaceable backend keeps tests independent of
+the host power policy and Polkit configuration.
 
 ### Evolution Data Server
 

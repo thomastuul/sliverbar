@@ -238,6 +238,18 @@ Right click on the date/time block toggles the native agenda at the panel
 edge.  Left click retains the calendar action.  Agenda rows open the matching
 calendar or tasks role.  The popup stays disabled until at least one selected
 source is reachable and does not take keyboard focus.
+.SS Battery power profiles
+When power-profiles-daemon is available on the system D-Bus and the native
+popup is compiled in, left click on the battery block opens the profiles
+reported by
+.BR net.hadess.PowerProfiles .
+The active profile is marked.  Sliverbar accepts only identifiers currently
+offered by the service, sets ActiveProfile through D-Bus with interactive
+authorization enabled, and reads the property back to confirm the change.
+Without a compatible service the battery block remains visible without a
+profile click action.  Sliverbar does not write power policy directly to
+.B /sys
+or invoke sudo, and it does not guess command backends for TLP or TuneD.
 .SS Weather
 .TP
 .B weather_location
