@@ -107,7 +107,8 @@ is available and otherwise uses EWMH.
 .TP
 .B height, underline, block_padding, title_max
 Set panel height, underline thickness, horizontal module padding in pixels, and
-the maximum active-title length.
+the maximum active-title length. The native panel also ellipsizes the title to
+the pixel width available between the left- and right-aligned blocks.
 .TP
 .B language
 .BR auto ,

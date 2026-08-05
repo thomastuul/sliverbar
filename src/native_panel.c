@@ -16,6 +16,7 @@
 #define MAX_SEGMENTS 256
 #define MAX_REGIONS 256
 #define MAX_ACTION_DEPTH 32
+#define ALIGNMENT_GAP 8
 
 typedef enum { ALIGN_LEFT, ALIGN_CENTER, ALIGN_RIGHT } Alignment;
 
@@ -30,6 +31,7 @@ typedef struct {
   Alignment align;
   int offset;
   int width;
+  bool ellipsized;
   bool tray;
   DrawStyle style;
   char text[512];
@@ -573,6 +575,8 @@ static void prepareLayout(NativePanel *panel, const char *text) {
 
 static int textWidth(NativePanel *panel, const char *text) {
   prepareLayout(panel, text);
+  pango_layout_set_width(panel->layout, -1);
+  pango_layout_set_ellipsize(panel->layout, PANGO_ELLIPSIZE_NONE);
   int width = 0;
   pango_layout_get_pixel_size(panel->layout, &width, NULL);
   return width;
@@ -613,9 +617,14 @@ drawSegmentBackground(NativePanel *panel, const Segment *item, int x) {
 }
 
 static void drawSegmentContent(NativePanel *panel, const Segment *item, int x) {
-  if (!item->text[0])
+  if (!item->text[0] || item->width <= 0)
     return;
   prepareLayout(panel, item->text);
+  if (item->ellipsized) {
+    pango_layout_set_width(panel->layout, item->width * PANGO_SCALE);
+    pango_layout_set_ellipsize(panel->layout, PANGO_ELLIPSIZE_END);
+    pango_layout_set_single_paragraph_mode(panel->layout, TRUE);
+  }
   int textHeight = 0;
   pango_layout_get_pixel_size(panel->layout, NULL, &textHeight);
   setColor(panel->cairo, item->style.foreground, panel->config.colorFg);
@@ -630,6 +639,40 @@ static void drawSegmentContent(NativePanel *panel, const Segment *item, int x) {
                     panel->config.underline);
     cairo_fill(panel->cairo);
   }
+  if (item->ellipsized) {
+    pango_layout_set_width(panel->layout, -1);
+    pango_layout_set_ellipsize(panel->layout, PANGO_ELLIPSIZE_NONE);
+    pango_layout_set_single_paragraph_mode(panel->layout, FALSE);
+  }
+}
+
+static int constrainCenterSegments(Segment *segments,
+                                   size_t count,
+                                   int centerWidth,
+                                   int availableWidth) {
+  int overflow = centerWidth - availableWidth;
+  if (overflow <= 0)
+    return centerWidth;
+  for (size_t i = count; i > 0 && overflow > 0; i--) {
+    Segment *item = &segments[i - 1];
+    if (item->align != ALIGN_CENTER || item->offset || item->width <= 0)
+      continue;
+    int reduction = item->width < overflow ? item->width : overflow;
+    item->width -= reduction;
+    item->ellipsized = true;
+    overflow -= reduction;
+    centerWidth -= reduction;
+  }
+  for (size_t i = count; i > 0 && overflow > 0; i--) {
+    Segment *item = &segments[i - 1];
+    if (item->align != ALIGN_CENTER || !item->offset || item->width <= 0)
+      continue;
+    int reduction = item->width < overflow ? item->width : overflow;
+    item->width -= reduction;
+    overflow -= reduction;
+    centerWidth -= reduction;
+  }
+  return centerWidth;
 }
 
 static int drawMarkup(NativePanel *panel, const char *markup) {
@@ -641,9 +684,17 @@ static int drawMarkup(NativePanel *panel, const char *markup) {
       segments[i].width = textWidth(panel, segments[i].text);
     widths[segments[i].align] += segments[i].width;
   }
-  int positions[3] = {0,
-                      (panel->width - widths[ALIGN_CENTER]) / 2,
-                      panel->width - widths[ALIGN_RIGHT]};
+  int centerLeft = widths[ALIGN_LEFT] + ALIGNMENT_GAP;
+  int centerRight = panel->width - widths[ALIGN_RIGHT] - ALIGNMENT_GAP;
+  int centerAvailable = centerRight > centerLeft ? centerRight - centerLeft : 0;
+  widths[ALIGN_CENTER] = constrainCenterSegments(
+      segments, count, widths[ALIGN_CENTER], centerAvailable);
+  int centerPosition = (panel->width - widths[ALIGN_CENTER]) / 2;
+  if (centerPosition < centerLeft)
+    centerPosition = centerLeft;
+  if (centerPosition + widths[ALIGN_CENTER] > centerRight)
+    centerPosition = centerRight - widths[ALIGN_CENTER];
+  int positions[3] = {0, centerPosition, panel->width - widths[ALIGN_RIGHT]};
   setColor(panel->cairo, panel->config.colorPanelBg, "#000000");
   cairo_paint(panel->cairo);
   panel->regionCount = 0;
