@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/types.h>
 
 static void copy(char *dst, size_t size, const char *src) {
   if (size > 0)
@@ -264,6 +265,15 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
       return 0;                                                                \
     }                                                                          \
   } while (0)
+#define COLOR(key, field)                                                      \
+  do {                                                                         \
+    if (!strcmp(k, key)) {                                                     \
+      if (!validColor(v))                                                      \
+        return -1;                                                             \
+      copy(c->field, sizeof(c->field), v);                                     \
+      return 0;                                                                \
+    }                                                                          \
+  } while (0)
   STR("font", font);
   STR("icon_font", iconFont);
   STR("wm_name", wmName);
@@ -363,32 +373,32 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
   MODULE("inhibitor", moduleInhibitor);
   MODULE("timer", moduleTimer);
 #undef MODULE
-  STR("color_panel_bg", colorPanelBg);
-  STR("color_bg", colorBg);
-  STR("color_fg", colorFg);
-  STR("color_free", colorFree);
-  STR("color_focus", colorFocus);
-  STR("color_free_bg", colorFreeBg);
-  STR("color_focused_free", colorFocusedFree);
-  STR("color_focused_free_bg", colorFocusedFreeBg);
-  STR("color_occupied", colorOccupied);
-  STR("color_occupied_bg", colorOccupiedBg);
-  STR("color_focused_occupied", colorFocusedOccupied);
-  STR("color_focused_occupied_bg", colorFocusedOccupiedBg);
-  STR("color_urgent", colorUrgent);
-  STR("color_urgent_bg", colorUrgentBg);
-  STR("color_focused_urgent", colorFocusedUrgent);
-  STR("color_focused_urgent_bg", colorFocusedUrgentBg);
-  STR("color_clock", colorClock);
-  STR("color_volume", colorVolume);
-  STR("color_muted", colorMuted);
-  STR("color_system", colorSystem);
-  STR("color_network", colorNetwork);
-  STR("color_weather", colorWeather);
-  STR("color_battery", colorBattery);
-  STR("color_warning", colorWarning);
-  STR("color_critical", colorCritical);
-  STR("color_brightness", colorBrightness);
+  COLOR("color_panel_bg", colorPanelBg);
+  COLOR("color_bg", colorBg);
+  COLOR("color_fg", colorFg);
+  COLOR("color_free", colorFree);
+  COLOR("color_focus", colorFocus);
+  COLOR("color_free_bg", colorFreeBg);
+  COLOR("color_focused_free", colorFocusedFree);
+  COLOR("color_focused_free_bg", colorFocusedFreeBg);
+  COLOR("color_occupied", colorOccupied);
+  COLOR("color_occupied_bg", colorOccupiedBg);
+  COLOR("color_focused_occupied", colorFocusedOccupied);
+  COLOR("color_focused_occupied_bg", colorFocusedOccupiedBg);
+  COLOR("color_urgent", colorUrgent);
+  COLOR("color_urgent_bg", colorUrgentBg);
+  COLOR("color_focused_urgent", colorFocusedUrgent);
+  COLOR("color_focused_urgent_bg", colorFocusedUrgentBg);
+  COLOR("color_clock", colorClock);
+  COLOR("color_volume", colorVolume);
+  COLOR("color_muted", colorMuted);
+  COLOR("color_system", colorSystem);
+  COLOR("color_network", colorNetwork);
+  COLOR("color_weather", colorWeather);
+  COLOR("color_battery", colorBattery);
+  COLOR("color_warning", colorWarning);
+  COLOR("color_critical", colorCritical);
+  COLOR("color_brightness", colorBrightness);
   if (!strcmp(k, "agenda_event_color") || !strcmp(k, "agenda_task_color") ||
       !strcmp(k, "agenda_overdue_color") || !strcmp(k, "agenda_source_color")) {
     if (!validColor(v))
@@ -402,6 +412,7 @@ static int assign(PanelConfig *c, const char *k, const char *v) {
     return 0;
   }
 #undef STR
+#undef COLOR
   long n;
 #define NUM(key, field, min, max)                                              \
   do {                                                                         \
@@ -488,11 +499,18 @@ int configLoad(PanelConfig *c,
     snprintf(error, errorSize, "%s: %s", path, strerror(errno));
     return -1;
   }
-  char line[1024];
+  char *line = NULL;
+  size_t lineCapacity = 0;
   unsigned lineno = 0;
   int rc = 0;
-  while (fgets(line, sizeof(line), f)) {
+  ssize_t lineLength;
+  while ((lineLength = getline(&line, &lineCapacity, f)) >= 0) {
     lineno++;
+    if ((size_t)lineLength >= 1024) {
+      snprintf(error, errorSize, "%s:%u: line too long", path, lineno);
+      rc = -1;
+      break;
+    }
     char *p = trim(line);
     if (!*p || *p == '#')
       continue;
@@ -519,6 +537,7 @@ int configLoad(PanelConfig *c,
     snprintf(error, errorSize, "%s: read failed", path);
     rc = -1;
   }
+  free(line);
   fclose(f);
   const char *const POWER_LISTS[] = {c->powerActions, c->powerConfirm};
   static const char *const POWER_IDS[] = {"lock",

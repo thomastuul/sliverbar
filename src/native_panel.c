@@ -9,6 +9,7 @@
 #include <xcb/randr.h>
 #endif
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -194,8 +195,12 @@ static int createBackBuffer(NativePanel *panel) {
 static bool
 parseColor(const char *value, double *red, double *green, double *blue) {
   unsigned rgb;
-  if (!value || value[0] != '#' || strlen(value) != 7 ||
-      sscanf(value + 1, "%06x", &rgb) != 1)
+  if (!value || value[0] != '#' || strlen(value) != 7)
+    return false;
+  for (size_t i = 1; i < 7; i++)
+    if (!isxdigit((unsigned char)value[i]))
+      return false;
+  if (sscanf(value + 1, "%06x", &rgb) != 1)
     return false;
   *red = (double)((rgb >> 16) & 0xffU) / 255.0;
   *green = (double)((rgb >> 8) & 0xffU) / 255.0;

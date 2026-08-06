@@ -6,7 +6,8 @@ base_config=$2
 test_root=$(mktemp -d "${TMPDIR:-/tmp}/sliverbar-workspaces-XXXXXX")
 trap 'rm -rf -- "$test_root"' EXIT HUP INT TERM
 
-mkdir "$test_root/bin" "$test_root/runtime"
+mkdir "$test_root/bin"
+mkdir -m 700 "$test_root/runtime"
 sed 's/^workspace_backend=.*/workspace_backend=none/' \
     "$base_config" >"$test_root/none.conf"
 sed 's/^workspace_backend=.*/workspace_backend=bspwm/' \

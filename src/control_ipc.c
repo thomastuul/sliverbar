@@ -1,5 +1,7 @@
 #include "control_ipc.h"
 
+#include "panel.h"
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,18 +52,10 @@ int controlSocketPath(char *path, size_t pathSize) {
     errno = EINVAL;
     return -1;
   }
-  const char *runtime = getenv("XDG_RUNTIME_DIR");
-  char fallback[64];
-  if (!runtime || !*runtime) {
-    int length = snprintf(
-        fallback, sizeof(fallback), "/tmp/sliverbar-%ld", (long)getuid());
-    if (length < 0 || (size_t)length >= sizeof(fallback)) {
-      errno = ENAMETOOLONG;
-      return -1;
-    }
-    runtime = fallback;
-  }
-  int length = snprintf(path, pathSize, "%s/sliverbar/control.sock", runtime);
+  char directory[PANEL_PATH_MAX];
+  if (sliverbarRuntimeDirectory(directory, sizeof(directory), false))
+    return -1;
+  int length = snprintf(path, pathSize, "%s/control.sock", directory);
   if (length < 0 || (size_t)length >= pathSize) {
     errno = ENAMETOOLONG;
     return -1;

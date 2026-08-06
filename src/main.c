@@ -1730,20 +1730,15 @@ int main(int argc, char **argv) {
     logMessage("ERROR", "cannot block runtime signals: %s", strerror(errno));
     return 1;
   }
-  const char *runtime = getenv("XDG_RUNTIME_DIR");
-  char fallback[64];
-  if (!runtime) {
-    snprintf(fallback, sizeof(fallback), "/tmp/sliverbar-%ld", (long)getuid());
-    runtime = fallback;
-  }
-  char dir[PANEL_PATH_MAX], lockpath[PANEL_PATH_MAX];
-  if (joinPath(dir, sizeof(dir), runtime, "/sliverbar") ||
-      joinPath(lockpath, sizeof(lockpath), dir, "/panel.lock")) {
-    logMessage("ERROR", "runtime path is too long");
+  char runtime[PANEL_PATH_MAX], dir[PANEL_PATH_MAX], lockpath[PANEL_PATH_MAX];
+  if (sliverbarRuntimeBaseDirectory(runtime, sizeof(runtime), true) ||
+      sliverbarRuntimeDirectory(dir, sizeof(dir), true)) {
+    logMessage(
+        "ERROR", "cannot prepare runtime directory: %s", strerror(errno));
     return 1;
   }
-  if (mkdirP(dir, 0700)) {
-    perror(dir);
+  if (joinPath(lockpath, sizeof(lockpath), dir, "/panel.lock")) {
+    logMessage("ERROR", "runtime path is too long");
     return 1;
   }
   int lock = open(lockpath, O_RDWR | O_CREAT | O_CLOEXEC, 0600);

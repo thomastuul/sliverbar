@@ -26,6 +26,71 @@ int mkdirP(const char *path, mode_t mode) {
   return mkdir(tmp, mode) && errno != EEXIST ? -1 : 0;
 }
 
+static int verifyPrivateDirectory(const char *path) {
+  struct stat status;
+  if (lstat(path, &status))
+    return -1;
+  if (!S_ISDIR(status.st_mode)) {
+    errno = ENOTDIR;
+    return -1;
+  }
+  if (status.st_uid != getuid() || (status.st_mode & 077U)) {
+    errno = EACCES;
+    return -1;
+  }
+  return 0;
+}
+
+static int ensurePrivateDirectory(const char *path) {
+  if (mkdir(path, 0700) && errno != EEXIST)
+    return -1;
+  return verifyPrivateDirectory(path);
+}
+
+int sliverbarRuntimeBaseDirectory(char *path, size_t size, bool create) {
+  if (!path || !size) {
+    errno = EINVAL;
+    return -1;
+  }
+  const char *runtime = getenv("XDG_RUNTIME_DIR");
+  char fallback[64];
+  if (!runtime || !*runtime) {
+    int length = snprintf(
+        fallback, sizeof(fallback), "/tmp/sliverbar-%ld", (long)getuid());
+    if (length < 0 || (size_t)length >= sizeof(fallback)) {
+      errno = ENAMETOOLONG;
+      return -1;
+    }
+    runtime = fallback;
+  }
+  int length = snprintf(path, size, "%s", runtime);
+  if (length < 0 || (size_t)length >= size) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if (create) {
+    return ensurePrivateDirectory(path);
+  }
+  return verifyPrivateDirectory(path);
+}
+
+int sliverbarRuntimeDirectory(char *path, size_t size, bool create) {
+  char runtime[PANEL_PATH_MAX];
+  if (sliverbarRuntimeBaseDirectory(runtime, sizeof(runtime), create))
+    return -1;
+  int length = snprintf(path, size, "%s/sliverbar", runtime);
+  if (length < 0 || (size_t)length >= size) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if (create) {
+    return ensurePrivateDirectory(path);
+  } else if (verifyPrivateDirectory(runtime)) {
+    return -1;
+  }
+  return verifyPrivateDirectory(path);
+}
+
 int readTextFile(const char *path, char *buf, size_t size) {
   if (!size)
     return -1;
@@ -46,11 +111,50 @@ int readTextFile(const char *path, char *buf, size_t size) {
 }
 
 int writeAtomic(const char *path, const char *data, mode_t mode) {
+  if (!path || !*path || !data) {
+    errno = EINVAL;
+    return -1;
+  }
+  const char *base = strrchr(path, '/');
+  char directory[PANEL_PATH_MAX];
+  if (base) {
+    size_t directoryLength = (size_t)(base - path);
+    if (directoryLength == 0) {
+      snprintf(directory, sizeof(directory), "/");
+    } else {
+      if (directoryLength >= sizeof(directory)) {
+        errno = ENAMETOOLONG;
+        return -1;
+      }
+      memcpy(directory, path, directoryLength);
+      directory[directoryLength] = '\0';
+    }
+    base++;
+  } else {
+    snprintf(directory, sizeof(directory), ".");
+    base = path;
+  }
+  if (!*base) {
+    errno = EINVAL;
+    return -1;
+  }
+
   char tmp[PANEL_PATH_MAX];
-  snprintf(tmp, sizeof(tmp), "%s.tmp.%ld", path, (long)getpid());
-  int fd = open(tmp, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, mode);
+  int length = snprintf(tmp, sizeof(tmp), "%s/.%s.tmp.XXXXXX", directory, base);
+  if (length < 0 || (size_t)length >= sizeof(tmp)) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  int fd = mkstemp(tmp);
   if (fd < 0)
     return -1;
+  if (fcntl(fd, F_SETFD, FD_CLOEXEC) || fchmod(fd, mode)) {
+    int e = errno;
+    close(fd);
+    unlink(tmp);
+    errno = e;
+    return -1;
+  }
   size_t len = strlen(data), off = 0;
   while (off < len) {
     ssize_t n = write(fd, data + off, len - off);
@@ -70,6 +174,17 @@ int writeAtomic(const char *path, const char *data, mode_t mode) {
     return -1;
   }
   return 0;
+}
+
+static ssize_t readCapturePipe(int fd, char *out, size_t size, size_t *used) {
+  if (*used < size - 1) {
+    ssize_t n = read(fd, out + *used, size - *used - 1);
+    if (n > 0)
+      *used += (size_t)n;
+    return n;
+  }
+  char discard[256];
+  return read(fd, discard, sizeof(discard));
 }
 
 bool commandExists(const char *name) {
@@ -92,8 +207,11 @@ bool commandExists(const char *name) {
 }
 
 int runCapture(char *const argv[], char *out, size_t size, int timeoutMs) {
-  if (size)
-    out[0] = '\0';
+  if (!argv || !argv[0] || !out || !size) {
+    errno = EINVAL;
+    return -1;
+  }
+  out[0] = '\0';
   int pipefd[2];
   if (pipe2(pipefd, O_CLOEXEC | O_NONBLOCK))
     return -1;
@@ -126,9 +244,9 @@ int runCapture(char *const argv[], char *out, size_t size, int timeoutMs) {
     int pr = poll(&p, 1, step);
     elapsed += step;
     if (pr > 0 && (p.revents & POLLIN)) {
-      ssize_t n = read(pipefd[0], out + used, size ? size - used - 1 : 0);
-      if (n > 0)
-        used += (size_t)n;
+      ssize_t n = readCapturePipe(pipefd[0], out, size, &used);
+      if (n < 0 && errno != EAGAIN && errno != EINTR)
+        break;
     }
     pid_t w = waitpid(pid, &status, WNOHANG);
     if (w == pid)
@@ -146,16 +264,12 @@ int runCapture(char *const argv[], char *out, size_t size, int timeoutMs) {
     }
   }
   for (;;) {
-    ssize_t n = read(
-        pipefd[0], out + used, size && used < size - 1 ? size - used - 1 : 0);
-    if (n > 0)
-      used += (size_t)n;
-    else
+    ssize_t n = readCapturePipe(pipefd[0], out, size, &used);
+    if (n <= 0)
       break;
   }
   close(pipefd[0]);
-  if (size)
-    out[used] = '\0';
+  out[used] = '\0';
   while (used && (out[used - 1] == '\n' || out[used - 1] == '\r'))
     out[--used] = '\0';
   return WIFEXITED(status) ? WEXITSTATUS(status) : -1;
