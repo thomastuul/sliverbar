@@ -253,12 +253,23 @@ möglichst für die Standardroute verwendeten Interfaces aus
 `/proc/net/wireless` genutzt. Liefert der Treiber keinen brauchbaren Wert,
 dient NetworkManager über `nmcli` als Fallback. SSID und
 Verbindungsänderungen können ebenfalls über NetworkManager bezogen werden.
+Der Block bleibt auch ohne aktive Netzwerkverbindung sichtbar. Ethernet wird
+mit `󰈀`, nicht verfügbares WLAN mit `󰤭` dargestellt. Für verfügbare
+WLAN-Verbindungen zeigen `󰤟`, `󰤢`, `󰤥` und `󰤨` die Signalstufen 0–24,
+25–49, 50–74 und 75–100 Prozent. Zwischen WLAN-Glyphe und Prozentwert sorgt
+ein 10-Pixel-Abstand für eine klare Trennung.
 
 **Mausaktionen:**
 
 - Linksklick: die automatisch erkannte oder mit `network_settings=`
   konfigurierte Netzwerkeinstellung öffnen;
-- Rechtsklick: die aktuelle SSID als Benachrichtigung anzeigen.
+- Rechtsklick: ein natives Menü mit den bis zu drei stärksten sichtbaren WLANs
+  öffnen, für die ein gespeichertes NetworkManager-Profil vorhanden ist. Die
+  aktive SSID ist mit `●` markiert; ein Eintrag aktiviert das zugehörige
+  Profil. Zwischen Signal-Glyphe und SSID stehen zwei Leerzeichen. Das Menü ist
+  auch bei einer aktiven Ethernet-Verbindung verfügbar. Beim Öffnen wird
+  asynchron ein WLAN-Scan angefordert; die Liste wird anschließend bis zu fünf
+  Sekunden lang einmal pro Sekunde aktualisiert, ohne das Panel zu blockieren.
 
 ### J – Helligkeit
 

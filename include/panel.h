@@ -26,6 +26,7 @@
 #define PANEL_AGENDA_REFRESH_MAX 3600U
 #define PANEL_AGENDA_WIDTH_MIN 320U
 #define PANEL_AGENDA_WIDTH_MAX 720U
+#define WIFI_NETWORK_MAX 3
 
 typedef enum {
   MODULE_AUTO,
@@ -89,6 +90,7 @@ typedef struct {
   bool internalLauncherAvailable, internalPowerAvailable;
   bool internalPowerProfilesAvailable;
   bool internalBatteryDetailsAvailable;
+  bool internalNetworkMenuAvailable;
   bool internalWeatherForecastAvailable;
   bool internalAgendaAvailable;
   WeatherLocation weatherLocations[PANEL_WEATHER_LOCATION_MAX];
@@ -151,6 +153,18 @@ typedef struct {
   int percent;
 } WifiDiagnostic;
 
+typedef struct {
+  char ssid[128];
+  char uuid[64];
+  int strength;
+  bool active;
+} WifiNetwork;
+
+typedef struct {
+  WifiNetwork networks[WIFI_NETWORK_MAX];
+  size_t count;
+} WifiNetworkList;
+
 void configDefaults(PanelConfig *cfg);
 const char *panelLanguage(const PanelConfig *cfg);
 bool panelLanguageIsGerman(const PanelConfig *cfg);
@@ -189,6 +203,10 @@ int parseNmcliWifi(const char *output,
                    size_t ssidSize,
                    int *strength);
 int wifiQualityPercent(double quality);
+const char *wifiSignalGlyph(int strength);
+int wifiKnownNetworks(WifiNetworkList *list);
+pid_t wifiRequestScan(void);
+pid_t wifiActivate(const char *uuid);
 int parseWirelessQuality(const char *contents,
                          const char *interface,
                          double *quality,
