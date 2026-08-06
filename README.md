@@ -476,6 +476,15 @@ NetworkManager's normalized `nmcli` signal is the fallback. SSID data still
 comes from NetworkManager when available. `--diagnose` reports interface,
 backend, raw value, and rendered percentage.
 
+The network block remains visible without an active connection. Ethernet uses
+`󰈀`, unavailable Wi-Fi uses `󰤭`, and the four Wi-Fi signal ranges use `󰤟`,
+`󰤢`, `󰤥`, and `󰤨`. A ten-pixel gap separates the Wi-Fi glyph from its
+percentage. Right-clicking opens an anchored menu containing up to the three
+strongest visible SSIDs that have saved NetworkManager profiles. A filled dot
+`●` marks the active network, and selecting another entry activates its saved
+profile. Two spaces separate each signal glyph from its SSID. The Wi-Fi menu
+remains available while Ethernet is active.
+
 ## Feature mapping
 
 | Bash component | C implementation |

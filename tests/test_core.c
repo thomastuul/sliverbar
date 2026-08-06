@@ -1108,6 +1108,19 @@ int main(int argc, char **argv) {
   CHECK(wifiQualityPercent(70.0) == 100);
   CHECK(wifiQualityPercent(90.0) == 100);
   CHECK(wifiQualityPercent(-1.0) == -1);
+  CHECK(strcmp(wifiSignalGlyph(-1), "󰤭") == 0);
+  CHECK(strcmp(wifiSignalGlyph(0), "󰤟") == 0);
+  CHECK(strcmp(wifiSignalGlyph(24), "󰤟") == 0);
+  CHECK(strcmp(wifiSignalGlyph(25), "󰤢") == 0);
+  CHECK(strcmp(wifiSignalGlyph(49), "󰤢") == 0);
+  CHECK(strcmp(wifiSignalGlyph(50), "󰤥") == 0);
+  CHECK(strcmp(wifiSignalGlyph(74), "󰤥") == 0);
+  CHECK(strcmp(wifiSignalGlyph(75), "󰤨") == 0);
+  CHECK(strcmp(wifiSignalGlyph(100), "󰤨") == 0);
+  PanelState networkState = {0};
+  cfg.moduleNetwork = MODULE_AUTO;
+  moduleNetwork(&cfg, &networkState);
+  CHECK(networkState.network[0] != '\0');
   const char WIRELESS[] =
       "Inter-| sta-|   Quality        |   Discarded packets\n"
       " face | tus | link level noise |  nwid  crypt   frag\n"

@@ -512,6 +512,167 @@ int wifiQualityPercent(double quality) {
   return (int)((quality * 100.0 + 35.0) / 70.0);
 }
 
+const char *wifiSignalGlyph(int strength) {
+  if (strength < 0)
+    return "󰤭";
+  if (strength < 25)
+    return "󰤟";
+  if (strength < 50)
+    return "󰤢";
+  if (strength < 75)
+    return "󰤥";
+  return "󰤨";
+}
+
+static int compareWifiStrength(const void *left, const void *right) {
+  const WifiNetwork *a = left;
+  const WifiNetwork *b = right;
+  return b->strength - a->strength;
+}
+
+static size_t
+parseVisibleWifi(const char *output, WifiNetwork *networks, size_t capacity) {
+  size_t count = 0;
+  const char *line = output;
+  while (line && *line) {
+    const char *end = strchr(line, '\n');
+    size_t length = end ? (size_t)(end - line) : strlen(line);
+    const char *first = memchr(line, ':', length);
+    const char *last = length ? line + length - 1 : line;
+    while (last > line && *last != ':')
+      last--;
+    if (first && last > first) {
+      char number[16];
+      size_t numberLength = (size_t)(line + length - last - 1);
+      if (numberLength < sizeof(number)) {
+        memcpy(number, last + 1, numberLength);
+        number[numberLength] = '\0';
+        char *numberEnd = NULL;
+        long strength = strtol(number, &numberEnd, 10);
+        size_t ssidLength = (size_t)(last - first - 1);
+        if (*number && !*numberEnd && strength >= 0 && strength <= 100 &&
+            ssidLength > 0 && ssidLength < sizeof(networks[0].ssid)) {
+          char ssid[sizeof(networks[0].ssid)];
+          memcpy(ssid, first + 1, ssidLength);
+          ssid[ssidLength] = '\0';
+          size_t existing = count;
+          for (size_t i = 0; i < count; i++)
+            if (!strcmp(networks[i].ssid, ssid)) {
+              existing = i;
+              break;
+            }
+          if (existing < count) {
+            if ((int)strength > networks[existing].strength)
+              networks[existing].strength = (int)strength;
+            if ((first - line == 1 && line[0] == '*') ||
+                (first - line == 3 && !strncmp(line, "yes", 3)))
+              networks[existing].active = true;
+          } else if (count < capacity) {
+            snprintf(
+                networks[count].ssid, sizeof(networks[count].ssid), "%s", ssid);
+            networks[count].strength = (int)strength;
+            networks[count].active =
+                (first - line == 1 && line[0] == '*') ||
+                (first - line == 3 && !strncmp(line, "yes", 3));
+            count++;
+          }
+        }
+      }
+    }
+    line = end ? end + 1 : NULL;
+  }
+  qsort(networks, count, sizeof(*networks), compareWifiStrength);
+  return count;
+}
+
+int wifiKnownNetworks(WifiNetworkList *list) {
+  if (!list || !commandExists("nmcli"))
+    return -1;
+  memset(list, 0, sizeof(*list));
+  char visibleOutput[16384];
+  char *visibleArguments[] = {"nmcli",
+                              "--terse",
+                              "--escape",
+                              "no",
+                              "--fields",
+                              "IN-USE,SSID,SIGNAL",
+                              "device",
+                              "wifi",
+                              "list",
+                              "--rescan",
+                              "no",
+                              NULL};
+  if (runCapture(visibleArguments, visibleOutput, sizeof(visibleOutput), 5000))
+    return -1;
+
+  WifiNetwork visible[64] = {0};
+  size_t visibleCount = parseVisibleWifi(
+      visibleOutput, visible, sizeof(visible) / sizeof(*visible));
+  char profiles[8192];
+  char *profileArguments[] = {"nmcli",
+                              "--terse",
+                              "--escape",
+                              "no",
+                              "--fields",
+                              "UUID,TYPE",
+                              "connection",
+                              "show",
+                              NULL};
+  if (runCapture(profileArguments, profiles, sizeof(profiles), 2000))
+    return -1;
+
+  const char *line = profiles;
+  size_t inspected = 0;
+  while (line && *line && inspected < 32) {
+    const char *end = strchr(line, '\n');
+    size_t length = end ? (size_t)(end - line) : strlen(line);
+    const char *separator = memchr(line, ':', length);
+    if (separator && (size_t)(separator - line) < sizeof(visible[0].uuid) &&
+        (!strncmp(separator + 1,
+                  "802-11-wireless",
+                  length - (size_t)(separator - line) - 1) ||
+         !strncmp(
+             separator + 1, "wifi", length - (size_t)(separator - line) - 1))) {
+      char uuid[sizeof(visible[0].uuid)] = "";
+      memcpy(uuid, line, (size_t)(separator - line));
+      uuid[separator - line] = '\0';
+      char ssid[sizeof(visible[0].ssid)] = "";
+      char *ssidArguments[] = {"nmcli",
+                               "--escape",
+                               "no",
+                               "--get-values",
+                               "802-11-wireless.ssid",
+                               "connection",
+                               "show",
+                               "uuid",
+                               uuid,
+                               NULL};
+      inspected++;
+      if (!runCapture(ssidArguments, ssid, sizeof(ssid), 1500) && ssid[0]) {
+        for (size_t i = 0; i < visibleCount; i++) {
+          if (strcmp(visible[i].ssid, ssid) != 0 || visible[i].uuid[0])
+            continue;
+          snprintf(visible[i].uuid, sizeof(visible[i].uuid), "%s", uuid);
+          break;
+        }
+      }
+    }
+    line = end ? end + 1 : NULL;
+  }
+  for (size_t i = 0; i < visibleCount && list->count < WIFI_NETWORK_MAX; i++)
+    if (visible[i].uuid[0])
+      list->networks[list->count++] = visible[i];
+  return 0;
+}
+
+pid_t wifiActivate(const char *uuid) {
+  if (!uuid || !uuid[0] || !commandExists("nmcli"))
+    return -1;
+  char *arguments[] = {
+      "nmcli", "--wait", "20", "connection", "up", "uuid", (char *)uuid, NULL};
+  return spawnTracked(arguments);
+}
+
 int parseDefaultRouteInterface(const char *routes,
                                char *interface,
                                size_t interfaceSize) {
@@ -677,8 +838,6 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
   char ssid[128] = "-", wifiInterface[256] = "";
   int strength = -1;
   findNetworkInterfaces(&eth, &wifi, wifiInterface, sizeof(wifiInterface));
-  if (!moduleModeActive(c->moduleNetwork, eth || wifi))
-    return;
   double rawKernelStrength = 0.0;
   int kernelStrength =
       wifi ? wirelessStrength(wifiInterface, &rawKernelStrength) : -1;
@@ -703,21 +862,28 @@ void moduleNetwork(const PanelConfig *c, PanelState *s) {
       parseNmcliWifi(out, ssid, sizeof(ssid), &nmcliStrength);
   }
   strength = kernelStrength >= 0 ? kernelStrength : nmcliStrength;
-  char text[256], body[512], safe[128], wifiText[64] = "";
-  shellQuoteAction(ssid, safe, sizeof(safe));
+  char text[256], body[512], wifiText[64] = "";
   if (wifi && strength >= 0)
-    snprintf(wifiText, sizeof(wifiText), "說%%{O4}%d%%", strength);
+    snprintf(wifiText,
+             sizeof(wifiText),
+             "%s%%{O10}%d%%",
+             wifiSignalGlyph(strength),
+             strength);
   else if (wifi)
-    snprintf(wifiText, sizeof(wifiText), "說");
+    snprintf(wifiText, sizeof(wifiText), "%s", wifiSignalGlyph(-1));
   if (eth && wifiText[0])
-    snprintf(text, sizeof(text), "%%{O4}%s", wifiText);
+    snprintf(text, sizeof(text), "󰈀%%{O4}%s", wifiText);
   else
-    snprintf(text, sizeof(text), "%s", eth ? "" : wifiText);
+    snprintf(text,
+             sizeof(text),
+             "%s",
+             eth ? "󰈀" : (wifiText[0] ? wifiText : wifiSignalGlyph(-1)));
   block(body, sizeof(body), c, c->colorNetwork, text);
   char tmp[768];
-  char cmd[180];
-  snprintf(cmd, sizeof(cmd), "notify|Network|%s", safe);
-  action(tmp, sizeof(tmp), 3, cmd, body);
+  if (c->internalNetworkMenuAvailable)
+    action(tmp, sizeof(tmp), 3, "network|menu", body);
+  else
+    snprintf(tmp, sizeof(tmp), "%s", body);
   if (appRoleAvailable(c, APP_ROLE_NETWORK_SETTINGS))
     action(s->network, sizeof(s->network), 1, "role|network_settings", tmp);
   else

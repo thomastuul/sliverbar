@@ -638,6 +638,59 @@ static int openPowerProfiles(NativePopup *popup,
       popup, items, state.count, false, actionX, actionWidth);
 }
 
+static int openWifiNetworks(NativePopup *popup,
+                            NativePanel *panel,
+                            const PanelConfig *config) {
+  WifiNetworkList networks;
+  if (wifiKnownNetworks(&networks)) {
+    logMessage("ERROR", "cannot query known Wi-Fi networks");
+    return -1;
+  }
+  if (getenv("SLIVERBAR_DEBUG"))
+    logMessage("DEBUG", "known Wi-Fi networks=%zu", networks.count);
+  PopupItem items[WIFI_NETWORK_MAX] = {0};
+  size_t count = networks.count;
+  if (!count) {
+    count = 1;
+    snprintf(items[0].label,
+             sizeof(items[0].label),
+             "%s  %s",
+             wifiSignalGlyph(-1),
+             panelLanguageIsGerman(config)
+                 ? "Keine bekannten WLANs verfügbar"
+                 : "No known Wi-Fi networks available");
+  } else {
+    for (size_t i = 0; i < count; i++) {
+      snprintf(items[i].label,
+               sizeof(items[i].label),
+               "%s %s  %s",
+               networks.networks[i].active ? "●" : " ",
+               wifiSignalGlyph(networks.networks[i].strength),
+               networks.networks[i].ssid);
+      snprintf(items[i].search,
+               sizeof(items[i].search),
+               "%s",
+               networks.networks[i].ssid);
+      snprintf(items[i].action,
+               sizeof(items[i].action),
+               "wifi_connect|%s",
+               networks.networks[i].uuid);
+    }
+  }
+  int actionX = 0, actionWidth = 1;
+  if (!nativePanelActionBounds(panel, "network|menu", &actionX, &actionWidth)) {
+    int panelY = 0, panelWidth = 0, panelHeight = 0;
+    nativePanelBounds(panel, &actionX, &panelY, &panelWidth, &panelHeight);
+  }
+  int result =
+      !networks.count
+          ? nativePopupOpenInfoAt(popup, items, count, actionX, actionWidth)
+          : nativePopupOpenAt(popup, items, count, false, actionX, actionWidth);
+  if (result)
+    logMessage("ERROR", "cannot open Wi-Fi network menu");
+  return result;
+}
+
 static const char *batteryStatusLabel(const char *status, bool german) {
   if (!status)
     return german ? "Unbekannt" : "Unknown";
@@ -988,6 +1041,7 @@ static void doAction(PanelConfig *c,
                      Inhibitor *inhibitor,
                      Timer *timer,
                      pid_t *timerSoundPid,
+                     pid_t *wifiConnectPid,
                      const AgendaSnapshot *agendaSnapshot) {
   char copybuf[1024];
   snprintf(copybuf, sizeof(copybuf), "%s", line);
@@ -1117,6 +1171,15 @@ static void doAction(PanelConfig *c,
       nativePopupClose(popup);
     else if (c->internalBatteryDetailsAvailable)
       openBatteryDetails(popup, panel, c, &s->batteryDetails);
+  } else if (!strcmp(kind, "network") && arg && !strcmp(arg, "menu")) {
+    if (nativePopupIsOpen(popup))
+      nativePopupClose(popup);
+    else if (c->internalNetworkMenuAvailable)
+      openWifiNetworks(popup, panel, c);
+  } else if (!strcmp(kind, "wifi_connect") && arg) {
+    if (*wifiConnectPid <= 0)
+      *wifiConnectPid = wifiActivate(arg);
+    nativePopupClose(popup);
   } else if (!strcmp(kind, "weather_location") && arg) {
     if (selectWeatherLocation(c, arg)) {
       if (c->weatherState[0])
@@ -2356,6 +2419,8 @@ int main(int argc, char **argv) {
       !powerProfilesQuery(&cfg, &initialProfileState);
   cfg.internalWeatherForecastAvailable = nativePopupAvailable(popup);
   cfg.internalBatteryDetailsAvailable = nativePopupAvailable(popup);
+  cfg.internalNetworkMenuAvailable =
+      nativePopupAvailable(popup) && commandExists("nmcli");
   AgendaSnapshot agendaSnapshot = {0};
   AgendaProviderStatus agendaStatus = {0};
   bool agendaStatusLogged = false;
@@ -2434,6 +2499,7 @@ int main(int argc, char **argv) {
   PanelState state = {0};
   Timer timer = {0};
   pid_t timerSoundPid = 0;
+  pid_t wifiConnectPid = 0;
   pid_t weatherPid = startWeatherRefresh(&cfg);
   moduleStatic(&cfg, &state);
   moduleClock(&cfg, &state);
@@ -2569,6 +2635,24 @@ int main(int argc, char **argv) {
                 renderTimer(&cfg, &state, &timer);
                 dirty = true;
               }
+            } else if (reaped == wifiConnectPid) {
+              wifiConnectPid = 0;
+              bool succeeded = WIFEXITED(status) && WEXITSTATUS(status) == 0;
+              if (!succeeded && commandExists("notify-send")) {
+                bool german = panelLanguageIsGerman(&cfg);
+                char *arguments[] = {
+                    "notify-send",
+                    german ? "WLAN-Wechsel fehlgeschlagen"
+                           : "Wi-Fi switch failed",
+                    german
+                        ? "NetworkManager konnte die Verbindung nicht "
+                          "herstellen."
+                        : "NetworkManager could not establish the connection.",
+                    NULL};
+                spawnDetached(arguments);
+              }
+              moduleNetwork(&cfg, &state);
+              dirty = true;
             } else if (reaped == networkEvents.pid) {
               networkEvents.pid = 0;
               if (networkEvents.readFd >= 0)
@@ -2618,6 +2702,7 @@ int main(int argc, char **argv) {
                      inhibitor,
                      &timer,
                      &timerSoundPid,
+                     &wifiConnectPid,
                      &agendaSnapshot);
           free(ev);
           continue;
@@ -2638,6 +2723,7 @@ int main(int argc, char **argv) {
                    inhibitor,
                    &timer,
                    &timerSoundPid,
+                   &wifiConnectPid,
                    &agendaSnapshot);
           dirty = true;
         }
@@ -2751,6 +2837,7 @@ int main(int argc, char **argv) {
                  inhibitor,
                  &timer,
                  &timerSoundPid,
+                 &wifiConnectPid,
                  &agendaSnapshot);
         dirty = true;
       }

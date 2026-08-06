@@ -299,6 +299,14 @@ brightness through
 .BR xrandr (1).
 .B network_interval
 sets the network refresh period.
+.PP
+The network block remains visible without an active connection.  Ethernet and
+Wi-Fi availability and signal strength use dedicated glyphs.  A ten-pixel
+gap separates the Wi-Fi glyph from the rendered percentage.  Right click opens
+an anchored menu with up to the three strongest visible SSIDs for which
+NetworkManager has a saved profile.  A filled dot marks the active SSID, and
+selecting an entry activates that profile.  Two spaces separate a menu signal
+glyph from its SSID.  The menu is also available while Ethernet is active.
 Keys beginning with
 .B color_
 configure panel and module colors using values such as
