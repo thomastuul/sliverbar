@@ -858,14 +858,16 @@ static void showPopup(NativePopup *popup, bool takeFocus) {
                        XCB_CONFIG_WINDOW_STACK_MODE,
                        &STACK_MODE);
   if (takeFocus) {
-    xcb_get_input_focus_reply_t *focusReply = xcb_get_input_focus_reply(
-        popup->connection, xcb_get_input_focus(popup->connection), NULL);
-    popup->focusSaved = focusReply != NULL;
-    if (focusReply) {
-      popup->previousFocus = focusReply->focus;
-      popup->previousRevertTo = focusReply->revert_to;
+    if (!popup->open) {
+      xcb_get_input_focus_reply_t *focusReply = xcb_get_input_focus_reply(
+          popup->connection, xcb_get_input_focus(popup->connection), NULL);
+      popup->focusSaved = focusReply != NULL;
+      if (focusReply) {
+        popup->previousFocus = focusReply->focus;
+        popup->previousRevertTo = focusReply->revert_to;
+      }
+      free(focusReply);
     }
-    free(focusReply);
     xcb_set_input_focus(popup->connection,
                         XCB_INPUT_FOCUS_POINTER_ROOT,
                         popup->window,
@@ -875,11 +877,10 @@ static void showPopup(NativePopup *popup, bool takeFocus) {
   drawPopup(popup);
 }
 
-int nativePopupOpen(NativePopup *popup,
-                    const PopupItem *items,
-                    size_t count,
-                    bool searchable,
-                    bool anchorRight) {
+static int prepareMenuPopup(NativePopup *popup,
+                            const PopupItem *items,
+                            size_t count,
+                            bool searchable) {
   if (!nativePopupAvailable(popup) || !items || count == 0)
     return -1;
   if (count > POPUP_ITEM_MAX)
@@ -896,9 +897,30 @@ int nativePopupOpen(NativePopup *popup,
   popup->height = (int)(rows + (searchable ? 1U : 0U)) * popup->rowHeight;
   popup->width =
       popup->anchorWidth < POPUP_WIDTH ? popup->anchorWidth : POPUP_WIDTH;
+  popup->y = popup->anchorY + popup->panelHeight;
+  return 0;
+}
+
+static int
+popupXAtAction(const NativePopup *popup, int actionX, int actionWidth) {
+  int x = actionX + actionWidth / 2 - popup->width / 2;
+  if (x < popup->anchorX)
+    x = popup->anchorX;
+  int maximumX = popup->anchorX + popup->anchorWidth - popup->width;
+  if (x > maximumX)
+    x = maximumX;
+  return x;
+}
+
+int nativePopupOpen(NativePopup *popup,
+                    const PopupItem *items,
+                    size_t count,
+                    bool searchable,
+                    bool anchorRight) {
+  if (prepareMenuPopup(popup, items, count, searchable))
+    return -1;
   popup->x = anchorRight ? popup->anchorX + popup->anchorWidth - popup->width
                          : popup->anchorX;
-  popup->y = popup->anchorY + popup->panelHeight;
   showPopup(popup, true);
   return 0;
 }
@@ -909,16 +931,10 @@ int nativePopupOpenAt(NativePopup *popup,
                       bool searchable,
                       int actionX,
                       int actionWidth) {
-  if (nativePopupOpen(popup, items, count, searchable, false))
+  if (prepareMenuPopup(popup, items, count, searchable))
     return -1;
-  popup->x = actionX + actionWidth / 2 - popup->width / 2;
-  if (popup->x < popup->anchorX)
-    popup->x = popup->anchorX;
-  int maximumX = popup->anchorX + popup->anchorWidth - popup->width;
-  if (popup->x > maximumX)
-    popup->x = maximumX;
-  configurePopupWindow(popup);
-  drawPopup(popup);
+  popup->x = popupXAtAction(popup, actionX, actionWidth);
+  showPopup(popup, true);
   return 0;
 }
 
@@ -927,10 +943,11 @@ int nativePopupOpenInfoAt(NativePopup *popup,
                           size_t count,
                           int actionX,
                           int actionWidth) {
-  if (nativePopupOpenAt(popup, items, count, false, actionX, actionWidth))
+  if (prepareMenuPopup(popup, items, count, false))
     return -1;
+  popup->x = popupXAtAction(popup, actionX, actionWidth);
   popup->mode = POPUP_MODE_INFO;
-  drawPopup(popup);
+  showPopup(popup, true);
   return 0;
 }
 

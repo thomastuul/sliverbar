@@ -2156,7 +2156,28 @@ int main(int argc, char **argv) {
       close(lock);
       return 1;
     }
+    if (nativePopupOpenInfoAt(smokePopup, popupItems, 1, rightX, actionWidth)) {
+      logMessage("ERROR", "anchored native popup could not update in place");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
     nativePopupClose(smokePopup);
+    xcb_get_input_focus_reply_t *updatedFocus =
+        xcb_get_input_focus_reply(x, xcb_get_input_focus(x), NULL);
+    bool updatedFocusRestored =
+        updatedFocus && updatedFocus->focus == nativePanelWindow(panel);
+    free(updatedFocus);
+    if (!updatedFocusRestored) {
+      logMessage("ERROR", "updated native popup did not restore input focus");
+      nativePopupDestroy(smokePopup);
+      nativePanelDestroy(panel);
+      xcb_disconnect(x);
+      close(lock);
+      return 1;
+    }
     if (nativePopupOpen(smokePopup, popupItems, 2, false, false)) {
       logMessage("ERROR", "native popup smoke-test could not reopen");
       nativePopupDestroy(smokePopup);
