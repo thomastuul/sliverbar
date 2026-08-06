@@ -106,6 +106,10 @@ int main(int argc, char **argv) {
   char *localeProbe[] = {argv[0], "--locale-probe", NULL};
   CHECK(runCapture(localeProbe, localeOutput, sizeof(localeOutput), 1000) == 0);
   CHECK(strcmp(localeOutput, "C") == 0);
+  CHECK(runCapture(localeProbe, NULL, sizeof(localeOutput), 1000) != 0);
+  CHECK(errno == EINVAL);
+  CHECK(runCapture(localeProbe, localeOutput, 0, 1000) != 0);
+  CHECK(errno == EINVAL);
   CHECK(originalLocale ? setenv("LC_ALL", savedLocale, 1) == 0
                        : unsetenv("LC_ALL") == 0);
 
@@ -539,6 +543,20 @@ int main(int argc, char **argv) {
   CHECK(powerActionAllowed(cfg.powerActions, "reboot"));
   CHECK(!powerActionAllowed(cfg.powerActions, "hibernate"));
   CHECK(unlink(path) == 0);
+
+  char invalidColorPath[] = "/tmp/sliverbar-invalid-color-XXXXXX";
+  fd = mkstemp(invalidColorPath);
+  CHECK(fd >= 0);
+  const char INVALID_COLOR_TEXT[] = "color_bg=#12345g\n";
+  CHECK(write(fd, INVALID_COLOR_TEXT, sizeof(INVALID_COLOR_TEXT) - 1) ==
+        (ssize_t)(sizeof(INVALID_COLOR_TEXT) - 1));
+  CHECK(close(fd) == 0);
+  PanelConfig invalidColorConfig;
+  configDefaults(&invalidColorConfig);
+  CHECK(configLoad(
+            &invalidColorConfig, invalidColorPath, error, sizeof(error)) != 0);
+  CHECK(strstr(error, "invalid key") != NULL);
+  CHECK(unlink(invalidColorPath) == 0);
 
   char longConfigPath[] = "/tmp/sliverbar-long-config-XXXXXX";
   fd = mkstemp(longConfigPath);

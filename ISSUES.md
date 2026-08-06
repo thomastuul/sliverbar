@@ -31,6 +31,7 @@
 
 - Most `color_*` configuration keys are copied without validation, while only
   agenda colors use `validColor()`.
+  - Status: fixed on `issues/fix`.
   - Affected code: `src/config.c`, `src/native_panel.c`, `src/native_popup.c`.
   - Impact: invalid colors are accepted by `--check-config` and later fall back
     during rendering. The native color parser is also lenient enough to accept
@@ -40,6 +41,7 @@
 
 - `runCapture()` has undefined/fragile behavior when called with `size == 0`
   or a null output pointer.
+  - Status: fixed on `issues/fix`.
   - Affected code: `src/util.c`, public declaration in `include/panel.h`.
   - Impact: current callers appear to pass real buffers, but the helper is part
     of the project-wide utility API and performs pointer arithmetic on `out`
@@ -51,6 +53,7 @@
 
 - `writeAtomic()` uses a predictable temporary filename and opens it without
   `O_EXCL`.
+  - Status: fixed on `issues/fix`.
   - Affected code: `src/util.c`.
   - Impact: ordinary user-state writes are unlikely to be exploitable in normal
     setups, but the current pattern is unnecessarily race-prone and can interact

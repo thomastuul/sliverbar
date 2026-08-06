@@ -5,6 +5,7 @@
 #ifdef HAVE_NATIVE_PANEL
 
 #include <cairo/cairo-xcb.h>
+#include <ctype.h>
 #include <glib.h>
 #include <locale.h>
 #include <pango/pangocairo.h>
@@ -87,8 +88,12 @@ struct NativePopup {
 static bool
 parseColor(const char *value, double *red, double *green, double *blue) {
   unsigned rgb;
-  if (!value || value[0] != '#' || strlen(value) != 7 ||
-      sscanf(value + 1, "%06x", &rgb) != 1)
+  if (!value || value[0] != '#' || strlen(value) != 7)
+    return false;
+  for (size_t i = 1; i < 7; i++)
+    if (!isxdigit((unsigned char)value[i]))
+      return false;
+  if (sscanf(value + 1, "%06x", &rgb) != 1)
     return false;
   *red = (double)((rgb >> 16U) & 0xffU) / 255.0;
   *green = (double)((rgb >> 8U) & 0xffU) / 255.0;
