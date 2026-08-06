@@ -174,6 +174,8 @@ int configLoad(PanelConfig *cfg,
                char *error,
                size_t errorSize);
 int mkdirP(const char *path, mode_t mode);
+int sliverbarRuntimeBaseDirectory(char *path, size_t size, bool create);
+int sliverbarRuntimeDirectory(char *path, size_t size, bool create);
 int readTextFile(const char *path, char *buffer, size_t size);
 int writeAtomic(const char *path, const char *data, mode_t mode);
 bool commandExists(const char *name);

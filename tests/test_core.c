@@ -9,6 +9,7 @@
 #include "timer.h"
 #include "weather_forecast.h"
 
+#include <errno.h>
 #include <locale.h>
 #include <signal.h>
 #include <stdio.h>
@@ -126,6 +127,42 @@ int main(int argc, char **argv) {
   CHECK(!controlActionValid("power_action|poweroff"));
   CHECK(!controlActionValid("volume|up|extra"));
 
+  const char *oldRuntime = getenv("XDG_RUNTIME_DIR");
+  char oldRuntimeCopy[PANEL_PATH_MAX] = "";
+  if (oldRuntime)
+    snprintf(oldRuntimeCopy, sizeof(oldRuntimeCopy), "%s", oldRuntime);
+  char runtimeDirectory[] = "/tmp/sliverbar-runtime-XXXXXX";
+  CHECK(mkdtemp(runtimeDirectory) != NULL);
+  CHECK(setenv("XDG_RUNTIME_DIR", runtimeDirectory, 1) == 0);
+  char runtimeBase[PANEL_PATH_MAX];
+  CHECK(sliverbarRuntimeBaseDirectory(runtimeBase, sizeof(runtimeBase), true) ==
+        0);
+  CHECK(strcmp(runtimeBase, runtimeDirectory) == 0);
+  char sliverbarRuntime[PANEL_PATH_MAX];
+  CHECK(sliverbarRuntimeDirectory(
+            sliverbarRuntime, sizeof(sliverbarRuntime), true) == 0);
+  CHECK(strstr(sliverbarRuntime, runtimeDirectory) == sliverbarRuntime);
+  struct stat runtimeStatus;
+  CHECK(stat(sliverbarRuntime, &runtimeStatus) == 0);
+  CHECK(S_ISDIR(runtimeStatus.st_mode));
+  CHECK((runtimeStatus.st_mode & 077U) == 0);
+  CHECK(sliverbarRuntimeDirectory(
+            sliverbarRuntime, sizeof(sliverbarRuntime), false) == 0);
+  CHECK(chmod(sliverbarRuntime, 0755) == 0);
+  CHECK(sliverbarRuntimeDirectory(
+            sliverbarRuntime, sizeof(sliverbarRuntime), false) != 0);
+  CHECK(errno == EACCES);
+  CHECK(chmod(sliverbarRuntime, 0700) == 0);
+  CHECK(rmdir(sliverbarRuntime) == 0);
+  CHECK(chmod(runtimeDirectory, 0755) == 0);
+  CHECK(sliverbarRuntimeDirectory(
+            sliverbarRuntime, sizeof(sliverbarRuntime), true) != 0);
+  CHECK(errno == EACCES);
+  CHECK(chmod(runtimeDirectory, 0700) == 0);
+  CHECK(rmdir(runtimeDirectory) == 0);
+  CHECK(oldRuntime ? setenv("XDG_RUNTIME_DIR", oldRuntimeCopy, 1) == 0
+                   : unsetenv("XDG_RUNTIME_DIR") == 0);
+
   char controlDirectory[] = "/tmp/sliverbar-control-XXXXXX";
   CHECK(mkdtemp(controlDirectory) != NULL);
   char controlPath[PANEL_PATH_MAX];
@@ -134,7 +171,13 @@ int main(int argc, char **argv) {
                  "%s/control.sock",
                  controlDirectory) > 0);
   int controlFd = controlServerOpen(controlPath);
-  CHECK(controlFd >= 0);
+  if (controlFd < 0) {
+    fprintf(stderr,
+            "controlServerOpen failed for %s: %s\n",
+            controlPath,
+            strerror(errno));
+    return 1;
+  }
   CHECK(controlClientSend(controlPath, "volume|up") == 0);
   char receivedAction[CONTROL_ACTION_MAX];
   CHECK(controlServerReceive(
@@ -496,6 +539,22 @@ int main(int argc, char **argv) {
   CHECK(powerActionAllowed(cfg.powerActions, "reboot"));
   CHECK(!powerActionAllowed(cfg.powerActions, "hibernate"));
   CHECK(unlink(path) == 0);
+
+  char longConfigPath[] = "/tmp/sliverbar-long-config-XXXXXX";
+  fd = mkstemp(longConfigPath);
+  CHECK(fd >= 0);
+  const char LONG_KEY[] = "terminal=";
+  CHECK(write(fd, LONG_KEY, sizeof(LONG_KEY) - 1) ==
+        (ssize_t)(sizeof(LONG_KEY) - 1));
+  for (int i = 0; i < 1100; i++)
+    CHECK(write(fd, "x", 1) == 1);
+  CHECK(write(fd, "\nheight=30\n", 11) == 11);
+  CHECK(close(fd) == 0);
+  PanelConfig longConfig;
+  configDefaults(&longConfig);
+  CHECK(configLoad(&longConfig, longConfigPath, error, sizeof(error)) != 0);
+  CHECK(strstr(error, "line too long") != NULL);
+  CHECK(unlink(longConfigPath) == 0);
 
   PanelConfig agendaConfig;
   configDefaults(&agendaConfig);

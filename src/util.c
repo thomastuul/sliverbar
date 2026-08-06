@@ -26,6 +26,71 @@ int mkdirP(const char *path, mode_t mode) {
   return mkdir(tmp, mode) && errno != EEXIST ? -1 : 0;
 }
 
+static int verifyPrivateDirectory(const char *path) {
+  struct stat status;
+  if (lstat(path, &status))
+    return -1;
+  if (!S_ISDIR(status.st_mode)) {
+    errno = ENOTDIR;
+    return -1;
+  }
+  if (status.st_uid != getuid() || (status.st_mode & 077U)) {
+    errno = EACCES;
+    return -1;
+  }
+  return 0;
+}
+
+static int ensurePrivateDirectory(const char *path) {
+  if (mkdir(path, 0700) && errno != EEXIST)
+    return -1;
+  return verifyPrivateDirectory(path);
+}
+
+int sliverbarRuntimeBaseDirectory(char *path, size_t size, bool create) {
+  if (!path || !size) {
+    errno = EINVAL;
+    return -1;
+  }
+  const char *runtime = getenv("XDG_RUNTIME_DIR");
+  char fallback[64];
+  if (!runtime || !*runtime) {
+    int length = snprintf(
+        fallback, sizeof(fallback), "/tmp/sliverbar-%ld", (long)getuid());
+    if (length < 0 || (size_t)length >= sizeof(fallback)) {
+      errno = ENAMETOOLONG;
+      return -1;
+    }
+    runtime = fallback;
+  }
+  int length = snprintf(path, size, "%s", runtime);
+  if (length < 0 || (size_t)length >= size) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if (create) {
+    return ensurePrivateDirectory(path);
+  }
+  return verifyPrivateDirectory(path);
+}
+
+int sliverbarRuntimeDirectory(char *path, size_t size, bool create) {
+  char runtime[PANEL_PATH_MAX];
+  if (sliverbarRuntimeBaseDirectory(runtime, sizeof(runtime), create))
+    return -1;
+  int length = snprintf(path, size, "%s/sliverbar", runtime);
+  if (length < 0 || (size_t)length >= size) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  if (create) {
+    return ensurePrivateDirectory(path);
+  } else if (verifyPrivateDirectory(runtime)) {
+    return -1;
+  }
+  return verifyPrivateDirectory(path);
+}
+
 int readTextFile(const char *path, char *buf, size_t size) {
   if (!size)
     return -1;

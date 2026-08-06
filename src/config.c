@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <strings.h>
+#include <sys/types.h>
 
 static void copy(char *dst, size_t size, const char *src) {
   if (size > 0)
@@ -488,11 +489,18 @@ int configLoad(PanelConfig *c,
     snprintf(error, errorSize, "%s: %s", path, strerror(errno));
     return -1;
   }
-  char line[1024];
+  char *line = NULL;
+  size_t lineCapacity = 0;
   unsigned lineno = 0;
   int rc = 0;
-  while (fgets(line, sizeof(line), f)) {
+  ssize_t lineLength;
+  while ((lineLength = getline(&line, &lineCapacity, f)) >= 0) {
     lineno++;
+    if ((size_t)lineLength >= 1024) {
+      snprintf(error, errorSize, "%s:%u: line too long", path, lineno);
+      rc = -1;
+      break;
+    }
     char *p = trim(line);
     if (!*p || *p == '#')
       continue;
@@ -519,6 +527,7 @@ int configLoad(PanelConfig *c,
     snprintf(error, errorSize, "%s: read failed", path);
     rc = -1;
   }
+  free(line);
   fclose(f);
   const char *const POWER_LISTS[] = {c->powerActions, c->powerConfirm};
   static const char *const POWER_IDS[] = {"lock",
