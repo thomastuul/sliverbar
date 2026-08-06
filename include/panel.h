@@ -205,6 +205,7 @@ int parseNmcliWifi(const char *output,
 int wifiQualityPercent(double quality);
 const char *wifiSignalGlyph(int strength);
 int wifiKnownNetworks(WifiNetworkList *list);
+pid_t wifiRequestScan(void);
 pid_t wifiActivate(const char *uuid);
 int parseWirelessQuality(const char *contents,
                          const char *interface,

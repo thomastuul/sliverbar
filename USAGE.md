@@ -267,7 +267,9 @@ ein 10-Pixel-Abstand für eine klare Trennung.
   öffnen, für die ein gespeichertes NetworkManager-Profil vorhanden ist. Die
   aktive SSID ist mit `●` markiert; ein Eintrag aktiviert das zugehörige
   Profil. Zwischen Signal-Glyphe und SSID stehen zwei Leerzeichen. Das Menü ist
-  auch bei einer aktiven Ethernet-Verbindung verfügbar.
+  auch bei einer aktiven Ethernet-Verbindung verfügbar. Beim Öffnen wird
+  asynchron ein WLAN-Scan angefordert; die Liste wird anschließend bis zu fünf
+  Sekunden lang einmal pro Sekunde aktualisiert, ohne das Panel zu blockieren.
 
 ### J – Helligkeit
 

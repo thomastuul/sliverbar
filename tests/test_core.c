@@ -1117,6 +1117,43 @@ int main(int argc, char **argv) {
   CHECK(strcmp(wifiSignalGlyph(74), "󰤥") == 0);
   CHECK(strcmp(wifiSignalGlyph(75), "󰤨") == 0);
   CHECK(strcmp(wifiSignalGlyph(100), "󰤨") == 0);
+  char wifiScanDirectory[] = "/tmp/sliverbar-wifi-scan-XXXXXX";
+  CHECK(mkdtemp(wifiScanDirectory) != NULL);
+  char fakeNmcli[256], wifiScanArguments[256];
+  snprintf(fakeNmcli, sizeof(fakeNmcli), "%s/nmcli", wifiScanDirectory);
+  snprintf(wifiScanArguments,
+           sizeof(wifiScanArguments),
+           "%s/arguments",
+           wifiScanDirectory);
+  FILE *nmcli = fopen(fakeNmcli, "w");
+  CHECK(nmcli != NULL);
+  CHECK(fputs("#!/bin/sh\nprintf '%s\\n' \"$*\" > "
+              "\"$SLIVERBAR_TEST_NMCLI_ARGS\"\n",
+              nmcli) >= 0);
+  CHECK(fclose(nmcli) == 0);
+  CHECK(chmod(fakeNmcli, 0700) == 0);
+  oldPath = getenv("PATH");
+  if (oldPath)
+    snprintf(oldPathCopy, sizeof(oldPathCopy), "%s", oldPath);
+  CHECK(setenv("PATH", wifiScanDirectory, 1) == 0);
+  CHECK(setenv("SLIVERBAR_TEST_NMCLI_ARGS", wifiScanArguments, 1) == 0);
+  pid_t wifiScanChild = wifiRequestScan();
+  CHECK(wifiScanChild > 0);
+  CHECK(waitpid(wifiScanChild, &trackedStatus, 0) == wifiScanChild);
+  CHECK(WIFEXITED(trackedStatus) && WEXITSTATUS(trackedStatus) == 0);
+  char scannedArguments[64];
+  CHECK(readTextFile(wifiScanArguments,
+                     scannedArguments,
+                     sizeof(scannedArguments)) == 0);
+  CHECK(strcmp(scannedArguments, "device wifi rescan") == 0);
+  if (oldPath)
+    CHECK(setenv("PATH", oldPathCopy, 1) == 0);
+  else
+    CHECK(unsetenv("PATH") == 0);
+  CHECK(unsetenv("SLIVERBAR_TEST_NMCLI_ARGS") == 0);
+  CHECK(unlink(wifiScanArguments) == 0);
+  CHECK(unlink(fakeNmcli) == 0);
+  CHECK(rmdir(wifiScanDirectory) == 0);
   PanelState networkState = {0};
   cfg.moduleNetwork = MODULE_AUTO;
   moduleNetwork(&cfg, &networkState);

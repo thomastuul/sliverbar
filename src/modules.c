@@ -665,6 +665,13 @@ int wifiKnownNetworks(WifiNetworkList *list) {
   return 0;
 }
 
+pid_t wifiRequestScan(void) {
+  if (!commandExists("nmcli"))
+    return -1;
+  char *arguments[] = {"nmcli", "device", "wifi", "rescan", NULL};
+  return spawnTracked(arguments);
+}
+
 pid_t wifiActivate(const char *uuid) {
   if (!uuid || !uuid[0] || !commandExists("nmcli"))
     return -1;

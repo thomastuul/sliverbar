@@ -640,16 +640,12 @@ static int openPowerProfiles(NativePopup *popup,
 
 static int openWifiNetworks(NativePopup *popup,
                             NativePanel *panel,
-                            const PanelConfig *config) {
-  WifiNetworkList networks;
-  if (wifiKnownNetworks(&networks)) {
-    logMessage("ERROR", "cannot query known Wi-Fi networks");
-    return -1;
-  }
+                            const PanelConfig *config,
+                            const WifiNetworkList *networks) {
   if (getenv("SLIVERBAR_DEBUG"))
-    logMessage("DEBUG", "known Wi-Fi networks=%zu", networks.count);
+    logMessage("DEBUG", "known Wi-Fi networks=%zu", networks->count);
   PopupItem items[WIFI_NETWORK_MAX] = {0};
-  size_t count = networks.count;
+  size_t count = networks->count;
   if (!count) {
     count = 1;
     snprintf(items[0].label,
@@ -664,17 +660,17 @@ static int openWifiNetworks(NativePopup *popup,
       snprintf(items[i].label,
                sizeof(items[i].label),
                "%s %s  %s",
-               networks.networks[i].active ? "●" : " ",
-               wifiSignalGlyph(networks.networks[i].strength),
-               networks.networks[i].ssid);
+               networks->networks[i].active ? "●" : " ",
+               wifiSignalGlyph(networks->networks[i].strength),
+               networks->networks[i].ssid);
       snprintf(items[i].search,
                sizeof(items[i].search),
                "%s",
-               networks.networks[i].ssid);
+               networks->networks[i].ssid);
       snprintf(items[i].action,
                sizeof(items[i].action),
                "wifi_connect|%s",
-               networks.networks[i].uuid);
+               networks->networks[i].uuid);
     }
   }
   int actionX = 0, actionWidth = 1;
@@ -683,12 +679,64 @@ static int openWifiNetworks(NativePopup *popup,
     nativePanelBounds(panel, &actionX, &panelY, &panelWidth, &panelHeight);
   }
   int result =
-      !networks.count
+      !networks->count
           ? nativePopupOpenInfoAt(popup, items, count, actionX, actionWidth)
           : nativePopupOpenAt(popup, items, count, false, actionX, actionWidth);
   if (result)
     logMessage("ERROR", "cannot open Wi-Fi network menu");
   return result;
+}
+
+static int openWifiScanPending(NativePopup *popup,
+                               NativePanel *panel,
+                               const PanelConfig *config) {
+  PopupItem item = {0};
+  snprintf(item.label,
+           sizeof(item.label),
+           "%s  %s",
+           wifiSignalGlyph(-1),
+           panelLanguageIsGerman(config) ? "WLANs werden gesucht …"
+                                         : "Scanning for Wi-Fi networks …");
+  int actionX = 0, actionWidth = 1;
+  if (!nativePanelActionBounds(panel, "network|menu", &actionX, &actionWidth)) {
+    int panelY = 0, panelWidth = 0, panelHeight = 0;
+    nativePanelBounds(panel, &actionX, &panelY, &panelWidth, &panelHeight);
+  }
+  return nativePopupOpenInfoAt(popup, &item, 1, actionX, actionWidth);
+}
+
+typedef struct {
+  int status;
+  WifiNetworkList networks;
+} WifiQueryResult;
+
+static int startWifiNetworkQuery(Child *query) {
+  int descriptors[2];
+  if (pipe2(descriptors, O_CLOEXEC | O_NONBLOCK))
+    return -1;
+  pid_t pid = fork();
+  if (pid < 0) {
+    close(descriptors[0]);
+    close(descriptors[1]);
+    return -1;
+  }
+  if (!pid) {
+    close(descriptors[0]);
+    sigset_t empty;
+    sigemptyset(&empty);
+    sigprocmask(SIG_SETMASK, &empty, NULL);
+    WifiQueryResult result = {0};
+    result.status = wifiKnownNetworks(&result.networks);
+    ssize_t ignored = write(descriptors[1], &result, sizeof(result));
+    (void)ignored;
+    close(descriptors[1]);
+    _exit(result.status ? 1 : 0);
+  }
+  close(descriptors[1]);
+  query->pid = pid;
+  query->readFd = descriptors[0];
+  query->writeFd = -1;
+  return 0;
 }
 
 static const char *batteryStatusLabel(const char *status, bool german) {
@@ -940,7 +988,7 @@ static void notifyInhibitorState(const PanelConfig *config, bool active) {
   spawnDetached(arguments);
 }
 
-static void stopTimerSound(pid_t pid) {
+static void stopTrackedChild(pid_t pid) {
   if (pid <= 0)
     return;
   kill(pid, SIGTERM);
@@ -1042,6 +1090,9 @@ static void doAction(PanelConfig *c,
                      Timer *timer,
                      pid_t *timerSoundPid,
                      pid_t *wifiConnectPid,
+                     pid_t *wifiScanPid,
+                     unsigned *wifiScanPolls,
+                     bool *wifiMenuOpen,
                      const AgendaSnapshot *agendaSnapshot) {
   char copybuf[1024];
   snprintf(copybuf, sizeof(copybuf), "%s", line);
@@ -1054,6 +1105,10 @@ static void doAction(PanelConfig *c,
     return;
   if (getenv("SLIVERBAR_DEBUG"))
     logMessage("DEBUG", "action=%s arg=%s", kind, arg ? arg : "");
+  if (strcmp(kind, "network") != 0) {
+    *wifiScanPolls = 0;
+    *wifiMenuOpen = false;
+  }
   if (!strcmp(kind, "volume") && arg) {
     if (setVolume(c, arg))
       logMessage("ERROR", "volume action %s failed", arg);
@@ -1172,10 +1227,17 @@ static void doAction(PanelConfig *c,
     else if (c->internalBatteryDetailsAvailable)
       openBatteryDetails(popup, panel, c, &s->batteryDetails);
   } else if (!strcmp(kind, "network") && arg && !strcmp(arg, "menu")) {
-    if (nativePopupIsOpen(popup))
+    if (nativePopupIsOpen(popup)) {
       nativePopupClose(popup);
-    else if (c->internalNetworkMenuAvailable)
-      openWifiNetworks(popup, panel, c);
+      *wifiScanPolls = 0;
+      *wifiMenuOpen = false;
+    } else if (c->internalNetworkMenuAvailable) {
+      openWifiScanPending(popup, panel, c);
+      if (*wifiScanPid <= 0)
+        *wifiScanPid = wifiRequestScan();
+      *wifiScanPolls = 5;
+      *wifiMenuOpen = true;
+    }
   } else if (!strcmp(kind, "wifi_connect") && arg) {
     if (*wifiConnectPid <= 0)
       *wifiConnectPid = wifiActivate(arg);
@@ -2500,6 +2562,10 @@ int main(int argc, char **argv) {
   Timer timer = {0};
   pid_t timerSoundPid = 0;
   pid_t wifiConnectPid = 0;
+  pid_t wifiScanPid = 0;
+  Child wifiQuery = {.readFd = -1, .writeFd = -1};
+  unsigned wifiScanPolls = 0;
+  bool wifiMenuOpen = false;
   pid_t weatherPid = startWeatherRefresh(&cfg);
   moduleStatic(&cfg, &state);
   moduleClock(&cfg, &state);
@@ -2554,6 +2620,16 @@ int main(int argc, char **argv) {
       ticks += (unsigned)n;
       moduleClock(&cfg, &state);
       updateOpenAgenda(popup, &cfg, &agendaSnapshot);
+      if (wifiScanPolls > 0) {
+        if (wifiMenuOpen && nativePopupIsOpen(popup)) {
+          if (wifiQuery.pid <= 0 && startWifiNetworkQuery(&wifiQuery))
+            logMessage("ERROR", "cannot start Wi-Fi network query");
+          wifiScanPolls--;
+        } else {
+          wifiScanPolls = 0;
+          wifiMenuOpen = false;
+        }
+      }
       workspaceBackendRefresh(workspaceBackend, &state);
       updateTitleXcb(
           x, root, active, utf8, netname, cfg.titleMax, &state, &cfg);
@@ -2653,6 +2729,20 @@ int main(int argc, char **argv) {
               }
               moduleNetwork(&cfg, &state);
               dirty = true;
+            } else if (reaped == wifiScanPid) {
+              wifiScanPid = 0;
+            } else if (reaped == wifiQuery.pid) {
+              WifiQueryResult result = {0};
+              ssize_t count = read(wifiQuery.readFd, &result, sizeof(result));
+              close(wifiQuery.readFd);
+              wifiQuery.pid = 0;
+              wifiQuery.readFd = -1;
+              if (count == (ssize_t)sizeof(result) && !result.status &&
+                  wifiMenuOpen && nativePopupIsOpen(popup)) {
+                openWifiNetworks(popup, panel, &cfg, &result.networks);
+              } else if (count != (ssize_t)sizeof(result) || result.status) {
+                logMessage("ERROR", "cannot query known Wi-Fi networks");
+              }
             } else if (reaped == networkEvents.pid) {
               networkEvents.pid = 0;
               if (networkEvents.readFd >= 0)
@@ -2703,6 +2793,9 @@ int main(int argc, char **argv) {
                      &timer,
                      &timerSoundPid,
                      &wifiConnectPid,
+                     &wifiScanPid,
+                     &wifiScanPolls,
+                     &wifiMenuOpen,
                      &agendaSnapshot);
           free(ev);
           continue;
@@ -2724,6 +2817,9 @@ int main(int argc, char **argv) {
                    &timer,
                    &timerSoundPid,
                    &wifiConnectPid,
+                   &wifiScanPid,
+                   &wifiScanPolls,
+                   &wifiMenuOpen,
                    &agendaSnapshot);
           dirty = true;
         }
@@ -2838,6 +2934,9 @@ int main(int argc, char **argv) {
                  &timer,
                  &timerSoundPid,
                  &wifiConnectPid,
+                 &wifiScanPid,
+                 &wifiScanPolls,
+                 &wifiMenuOpen,
                  &agendaSnapshot);
         dirty = true;
       }
@@ -2896,12 +2995,15 @@ int main(int argc, char **argv) {
   close(timerAnimationTfd);
   close(sfd);
   controlServerClose(controlFd, controlPath[0] ? controlPath : NULL);
-  stopTimerSound(timerSoundPid);
+  stopTrackedChild(timerSoundPid);
+  stopTrackedChild(wifiScanPid);
+  stopTrackedChild(wifiConnectPid);
   if (weatherPid > 0) {
     kill(weatherPid, SIGTERM);
     waitpid(weatherPid, NULL, 0);
   }
   stopChild(&networkEvents);
+  stopChild(&wifiQuery);
   stopChild(&titleWindow);
   stopChild(&titleRoot);
   agendaProviderDestroy(agendaProvider);

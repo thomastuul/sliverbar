@@ -483,7 +483,9 @@ percentage. Right-clicking opens an anchored menu containing up to the three
 strongest visible SSIDs that have saved NetworkManager profiles. A filled dot
 `●` marks the active network, and selecting another entry activates its saved
 profile. Two spaces separate each signal glyph from its SSID. The Wi-Fi menu
-remains available while Ethernet is active.
+remains available while Ethernet is active. Opening the menu requests a scan
+without blocking the panel and refreshes the saved-network results once per
+second for up to five seconds.
 
 ## Feature mapping
 
