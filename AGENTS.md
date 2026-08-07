@@ -20,26 +20,26 @@
 
 ## Context7
 
-- Wenn eine Aufgabe aktuelle Bibliotheks-, Framework-, SDK- oder
-  API-Dokumentation erfordert, zuerst Context7 verwenden.
-- Falls Context7 in der aktuellen Codex-Sitzung nicht verfügbar oder nicht
-  ladbar ist, den Anwender ausdrücklich darauf hinweisen, dass Codex
-  möglicherweise ohne den Context7-Wrapper gestartet wurde.
-- Dabei folgenden Neustartbefehl nennen:
+- When a task requires current library, framework, SDK, or API documentation,
+  use Context7 first.
+- If Context7 is unavailable or cannot be loaded in the current Codex session,
+  explicitly tell the user that Codex may have been started without the
+  Context7 wrapper.
+- Provide the following restart command:
 
   ```bash
-  cd /home/thomas/.config/bspwm/sliverbar
+  cd $HOME/.config/bspwm/sliverbar
   ./scripts/codex-context7.sh
   ```
 
-- Zum Fortsetzen einer bestehenden Sitzung den Wrapper so verwenden:
+- To resume an existing session, use the wrapper as follows:
 
   ```bash
   ./scripts/codex-context7.sh resume <SESSION-ID>
   ```
 
-- Nicht stillschweigend auf andere Dokumentationsquellen ausweichen, bevor der
-  Anwender über das fehlende Context7 informiert wurde.
+- Do not silently fall back to other documentation sources before informing the
+  user that Context7 is unavailable.
 
 ## Validation scripts
 
