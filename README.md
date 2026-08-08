@@ -201,6 +201,28 @@ path given in `CONTEXT7_ENV_FILE`, and then starts Codex with your arguments.
 That keeps the API token out of `config.toml` while still making Context7
 available in this repository.
 
+As an alternative on desktops with a Secret Service-compatible keyring such as
+Seahorse, the API key can be stored in the keyring instead of a plaintext
+environment file. This requires `secret-tool`, which is commonly provided by
+the `libsecret` package. Store the key under the attributes expected by the
+alternative wrapper; `secret-tool` reads the value interactively from standard
+input:
+
+```bash
+secret-tool store --label='Context7 MCP API key' service context7 purpose mcp-api-key
+```
+
+Then start or resume Codex through the supplied wrapper:
+
+```bash
+./scripts/codex-context7.sh.alternative
+./scripts/codex-context7.sh.alternative resume <SESSION-ID>
+```
+
+The wrapper retrieves the key with `secret-tool`, exports it only to the Codex
+process environment, and does not store it in a plaintext file. The desktop
+keyring may prompt for its login password when it is locked.
+
 The portable MCP configuration is provided as `.codex/config.toml.example`.
 Codex does not load the example file automatically, and it loads project-local
 `.codex/config.toml` only after the repository has been marked as trusted.

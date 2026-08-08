@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+if ! command -v secret-tool >/dev/null 2>&1; then
+    printf '%s\n' 'Fehler: secret-tool ist nicht installiert oder nicht im PATH.' >&2
+    exit 1
+fi
+
+if ! command -v codex >/dev/null 2>&1; then
+    printf '%s\n' 'Fehler: codex wurde nicht im PATH gefunden.' >&2
+    exit 1
+fi
+
+if ! context7_key="$(
+    secret-tool lookup service context7 purpose mcp-api-key
+)"; then
+    printf '%s\n' 'Fehler: Der Context7 API-Key konnte nicht aus dem Schlüsselbund gelesen werden.' >&2
+    exit 1
+fi
+
+if [[ -z $context7_key ]]; then
+    printf '%s\n' 'Fehler: Im Schlüsselbund wurde kein Context7 API-Key gefunden.' >&2
+    exit 1
+fi
+
+export CONTEXT7_API_KEY="$context7_key"
+unset context7_key
+
+exec codex "$@"
