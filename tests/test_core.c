@@ -349,24 +349,27 @@ int main(int argc, char **argv) {
   CHECK(forecast.days[0].minimumC == -3);
   CHECK(forecast.days[0].maximumValid);
   CHECK(forecast.days[0].maximumC == 12);
+  static const int FORECAST_HOURS[] = {6, 12, 18, 21};
   for (size_t i = 0; i < WEATHER_FORECAST_SLOT_COUNT; i++)
-    CHECK(forecast.days[0].slots[i].hour == 6 + (int)i * 3);
+    CHECK(forecast.days[0].slots[i].hour == FORECAST_HOURS[i]);
   CHECK(forecast.days[0].slots[0].temperatureValid);
   CHECK(forecast.days[0].slots[0].temperatureC == -3);
   CHECK(forecast.days[0].slots[0].rainValid);
   CHECK(forecast.days[0].slots[0].rainPercent == 0);
-  CHECK(forecast.days[0].slots[3].rainPercent == 100);
+  CHECK(forecast.days[0].slots[3].rainPercent == 10);
   CHECK(forecast.days[0].slots[0].condition == WEATHER_CONDITION_CLEAR);
-  CHECK(forecast.days[0].slots[1].condition == WEATHER_CONDITION_CLOUDY);
-  CHECK(forecast.days[0].slots[2].condition == WEATHER_CONDITION_RAIN);
-  CHECK(forecast.days[0].slots[3].condition == WEATHER_CONDITION_THUNDER);
-  CHECK(forecast.days[0].slots[4].condition == WEATHER_CONDITION_SNOW);
-  CHECK(forecast.days[0].slots[5].condition == WEATHER_CONDITION_FOG);
+  CHECK(forecast.days[0].slots[1].condition == WEATHER_CONDITION_RAIN);
+  CHECK(forecast.days[0].slots[2].condition == WEATHER_CONDITION_SNOW);
+  CHECK(forecast.days[0].slots[3].condition == WEATHER_CONDITION_FOG);
+  CHECK(forecast.days[0].slots[0].windSpeedValid);
+  CHECK(forecast.days[0].slots[0].windSpeedKmph == 11);
+  CHECK(forecast.days[0].slots[0].windDirectionValid);
+  CHECK(strcmp(forecast.days[0].slots[0].windDirection, "NNE") == 0);
   CHECK(!forecast.days[1].slots[1].temperatureValid);
-  CHECK(forecast.days[1].slots[1].rainValid);
-  CHECK(forecast.days[1].slots[1].condition == WEATHER_CONDITION_UNKNOWN);
-  CHECK(!forecast.days[1].slots[2].rainValid);
-  CHECK(!forecast.days[1].slots[3].codeValid);
+  CHECK(!forecast.days[1].slots[1].rainValid);
+  CHECK(forecast.days[1].slots[1].condition == WEATHER_CONDITION_RAIN);
+  CHECK(!forecast.days[1].slots[2].windSpeedValid);
+  CHECK(!forecast.days[1].slots[2].windDirectionValid);
   char weekday[32];
   CHECK(strcmp(weatherForecastDayName(
                    "2026-07-23", true, weekday, sizeof(weekday)),
@@ -381,6 +384,9 @@ int main(int argc, char **argv) {
         0);
   CHECK(strcmp(weatherConditionGlyph(WEATHER_CONDITION_UNKNOWN, true), "?") ==
         0);
+  CHECK(strcmp(weatherWindDirectionGlyph("NNE"), "↗") == 0);
+  CHECK(strcmp(weatherWindDirectionGlyph("W"), "←") == 0);
+  CHECK(strcmp(weatherWindDirectionGlyph("BAD"), "–") == 0);
   char updated[64];
   const char *oldTimezone = getenv("TZ");
   char oldTimezoneCopy[128] = "";

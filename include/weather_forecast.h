@@ -6,7 +6,7 @@
 #include <time.h>
 
 #define WEATHER_FORECAST_DAY_COUNT 3
-#define WEATHER_FORECAST_SLOT_COUNT 6
+#define WEATHER_FORECAST_SLOT_COUNT 4
 
 typedef enum {
   WEATHER_CONDITION_UNKNOWN,
@@ -27,6 +27,10 @@ typedef struct {
   bool codeValid;
   int weatherCode;
   WeatherCondition condition;
+  bool windSpeedValid;
+  int windSpeedKmph;
+  bool windDirectionValid;
+  char windDirection[4];
 } WeatherForecastSlot;
 
 typedef struct {
@@ -49,6 +53,7 @@ typedef struct {
 int weatherForecastParse(const char *json, WeatherForecast *forecast);
 WeatherCondition weatherConditionFromCode(int code);
 const char *weatherConditionGlyph(WeatherCondition condition, bool useIconFont);
+const char *weatherWindDirectionGlyph(const char *direction);
 const char *weatherForecastDayName(const char *date,
                                    bool german,
                                    char *buffer,

@@ -24,7 +24,7 @@
 #define POPUP_VISIBLE_ROWS 12
 #define FORECAST_WIDTH 680
 #define FORECAST_TITLE_HEIGHT 34
-#define FORECAST_DAY_HEIGHT 120
+#define FORECAST_DAY_HEIGHT 138
 
 typedef enum {
   POPUP_MODE_MENU,
@@ -357,27 +357,6 @@ static void formatDayTitle(const NativePopup *popup,
   snprintf(output, size, "%s · %s–%s", weekday, minimum, maximum);
 }
 
-static void drawTimeField(NativePopup *popup,
-                          const char *label,
-                          int x,
-                          int y,
-                          int width,
-                          int height) {
-  setColor(popup->cairo, popup->config.colorBg, "#222222");
-  cairo_rectangle(popup->cairo, x + 3, y + 2, width - 6, height - 4);
-  cairo_fill_preserve(popup->cairo);
-  setColor(popup->cairo, popup->config.colorFree, "#bfbfbf");
-  cairo_set_line_width(popup->cairo, 1.0);
-  cairo_stroke(popup->cairo);
-  drawCenteredText(popup,
-                   label,
-                   x + 3,
-                   y + 2,
-                   width - 6,
-                   height - 4,
-                   popup->config.colorClock);
-}
-
 static void drawForecast(NativePopup *popup) {
   setColor(popup->cairo, popup->config.colorPanelBg, "#000000");
   cairo_paint(popup->cairo);
@@ -414,7 +393,7 @@ static void drawForecast(NativePopup *popup) {
   int labelWidth = popup->width >= 560 ? 104 : popup->width / 5;
   if (labelWidth < 72)
     labelWidth = 72;
-  int contentWidth = popup->width - labelWidth - 8;
+  int contentWidth = popup->width - labelWidth;
   int slotWidth = contentWidth / WEATHER_FORECAST_SLOT_COUNT;
   int remainder = contentWidth % WEATHER_FORECAST_SLOT_COUNT;
   const int HEADER_HEIGHT = 26;
@@ -436,6 +415,29 @@ static void drawForecast(NativePopup *popup) {
     int weatherY = timeY + TIME_HEIGHT;
     int temperatureY = weatherY + VALUE_HEIGHT;
     int rainY = temperatureY + VALUE_HEIGHT;
+    int windY = rainY + VALUE_HEIGHT;
+    static const char *const GERMAN_PERIODS[] = {
+        "Morgens", "Mittags", "Abends", "Nachts"};
+    static const char *const ENGLISH_PERIODS[] = {
+        "Morning", "Noon", "Evening", "Night"};
+    const char *const *periods = german ? GERMAN_PERIODS : ENGLISH_PERIODS;
+
+    setColor(popup->cairo, popup->config.colorFree, "#bfbfbf");
+    cairo_set_line_width(popup->cairo, 1.0);
+    int gridX = labelWidth;
+    cairo_move_to(popup->cairo, gridX + 0.5, timeY + 0.5);
+    cairo_line_to(popup->cairo, gridX + 0.5, windY + VALUE_HEIGHT + 0.5);
+    for (size_t slotIndex = 0; slotIndex < WEATHER_FORECAST_SLOT_COUNT;
+         slotIndex++) {
+      gridX += slotWidth + ((int)slotIndex < remainder ? 1 : 0);
+      double lineX = slotIndex + 1 == WEATHER_FORECAST_SLOT_COUNT
+                         ? popup->width - 0.5
+                         : gridX + 0.5;
+      cairo_move_to(popup->cairo, lineX, timeY + 0.5);
+      cairo_line_to(popup->cairo, lineX, windY + VALUE_HEIGHT + 0.5);
+    }
+    cairo_stroke(popup->cairo);
+
     drawText(popup,
              german ? "Wetter" : "Weather",
              10,
@@ -451,14 +453,20 @@ static void drawForecast(NativePopup *popup) {
              10,
              rainY + 3,
              popup->config.colorFree);
+    drawText(popup, "Wind", 10, windY + 3, popup->config.colorFree);
     int slotX = labelWidth;
     for (size_t slotIndex = 0; slotIndex < WEATHER_FORECAST_SLOT_COUNT;
          slotIndex++) {
       int width = slotWidth + ((int)slotIndex < remainder ? 1 : 0);
       const WeatherForecastSlot *slot = &day->slots[slotIndex];
-      char text[16];
-      snprintf(text, sizeof(text), "%02d", slot->hour);
-      drawTimeField(popup, text, slotX, timeY, width, TIME_HEIGHT);
+      char text[32];
+      drawCenteredText(popup,
+                       periods[slotIndex],
+                       slotX,
+                       timeY,
+                       width,
+                       TIME_HEIGHT,
+                       popup->config.colorClock);
       const char *glyph =
           slot->codeValid
               ? weatherConditionGlyph(slot->condition, popup->hasIconFont)
@@ -490,6 +498,28 @@ static void drawForecast(NativePopup *popup) {
                        width,
                        VALUE_HEIGHT,
                        popup->config.colorNetwork);
+      if (slot->windDirectionValid && slot->windSpeedValid)
+        snprintf(text,
+                 sizeof(text),
+                 "%s %d km/h",
+                 weatherWindDirectionGlyph(slot->windDirection),
+                 slot->windSpeedKmph);
+      else if (slot->windSpeedValid)
+        snprintf(text, sizeof(text), "%d km/h", slot->windSpeedKmph);
+      else if (slot->windDirectionValid)
+        snprintf(text,
+                 sizeof(text),
+                 "%s",
+                 weatherWindDirectionGlyph(slot->windDirection));
+      else
+        snprintf(text, sizeof(text), "%s", "–");
+      drawCenteredText(popup,
+                       text,
+                       slotX,
+                       windY,
+                       width,
+                       VALUE_HEIGHT,
+                       popup->config.colorSystem);
       slotX += width;
     }
   }

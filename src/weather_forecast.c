@@ -12,8 +12,7 @@ typedef struct {
   const char *end;
 } JsonValue;
 
-static const int FORECAST_HOURS[WEATHER_FORECAST_SLOT_COUNT] = {
-    6, 9, 12, 15, 18, 21};
+static const int FORECAST_HOURS[WEATHER_FORECAST_SLOT_COUNT] = {6, 12, 18, 21};
 
 static const char *skipWhitespace(const char *cursor, const char *end) {
   while (cursor < end && isspace((unsigned char)*cursor))
@@ -271,6 +270,32 @@ const char *weatherConditionGlyph(WeatherCondition condition,
   return useIconFont ? ICON_GLYPHS[condition] : UNICODE_GLYPHS[condition];
 }
 
+const char *weatherWindDirectionGlyph(const char *direction) {
+  if (!direction)
+    return "–";
+  if (!strcmp(direction, "N"))
+    return "↑";
+  if (!strcmp(direction, "NNE") || !strcmp(direction, "NE") ||
+      !strcmp(direction, "ENE"))
+    return "↗";
+  if (!strcmp(direction, "E"))
+    return "→";
+  if (!strcmp(direction, "ESE") || !strcmp(direction, "SE") ||
+      !strcmp(direction, "SSE"))
+    return "↘";
+  if (!strcmp(direction, "S"))
+    return "↓";
+  if (!strcmp(direction, "SSW") || !strcmp(direction, "SW") ||
+      !strcmp(direction, "WSW"))
+    return "↙";
+  if (!strcmp(direction, "W"))
+    return "←";
+  if (!strcmp(direction, "WNW") || !strcmp(direction, "NW") ||
+      !strcmp(direction, "NNW"))
+    return "↖";
+  return "–";
+}
+
 static bool validDate(int year, int month, int day) {
   static const int DAYS[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
   if (year < 1 || month < 1 || month > 12 || day < 1)
@@ -351,6 +376,20 @@ static void parseSlot(JsonValue hourly, WeatherForecastDay *day) {
     slot->weatherCode = value;
     slot->condition = weatherConditionFromCode(value);
   }
+  if (memberInteger(hourly, "windspeedKmph", &value) && value >= 0 &&
+      value <= 500) {
+    slot->windSpeedValid = true;
+    slot->windSpeedKmph = value;
+  }
+  JsonValue direction;
+  char directionText[sizeof(slot->windDirection)];
+  if (objectMember(hourly, "winddir16Point", &direction) &&
+      valueText(direction, directionText, sizeof(directionText)) &&
+      strcmp(weatherWindDirectionGlyph(directionText), "–") != 0) {
+    slot->windDirectionValid = true;
+    snprintf(
+        slot->windDirection, sizeof(slot->windDirection), "%s", directionText);
+  }
 }
 
 static bool parseDay(JsonValue object, WeatherForecastDay *day) {
@@ -383,7 +422,8 @@ static bool parseDay(JsonValue object, WeatherForecastDay *day) {
   }
   for (size_t i = 0; i < WEATHER_FORECAST_SLOT_COUNT; i++) {
     const WeatherForecastSlot *slot = &day->slots[i];
-    if (slot->temperatureValid || slot->rainValid || slot->codeValid)
+    if (slot->temperatureValid || slot->rainValid || slot->codeValid ||
+        slot->windSpeedValid || slot->windDirectionValid)
       available = true;
   }
   day->available = available;

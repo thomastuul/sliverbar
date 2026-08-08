@@ -277,10 +277,13 @@ rendered natively.
 .PP
 Left click selects among configured locations, middle click refreshes, and
 right click toggles a native three-day forecast below the weather block.
-For each day it shows minimum and maximum temperature plus weather glyph,
-temperature, and rain probability at 06, 09, 12, 15, 18, and 21.
-The time labels are drawn as fixed Cairo fields.  Missing values are shown as
-dashes, and monochrome Unicode symbols are used when no icon font is available.
+For each day it shows minimum and maximum temperature plus four columns for
+Morning, Noon, Evening, and Night, represented by the 06, 12, 18, and 21
+forecast records.  Continuous vertical rules separate the columns without
+horizontal row dividers.  Each column shows a weather glyph,
+temperature, rain probability, wind direction, and wind speed.  Missing values
+are shown as dashes, and monochrome Unicode symbols are used when no icon font
+is available.
 The popup header shows the location on the left and the last successful cache
 update time on the right.  Older cache data also shows its date.
 If a configured location cannot be fetched, the weather block stays visible
