@@ -202,12 +202,14 @@ und als Warnung protokolliert.
 Die Vorschau erscheint direkt unter dem Wetterblock. Für heute und die beiden
 folgenden Tage zeigt sie die Tiefst- und Höchsttemperatur sowie Vorhersagen für
 Morgens, Mittags, Abends und Nachts, repräsentiert durch die Daten für 06, 12,
-18 und 21 Uhr. Durchgehende senkrechte Linien grenzen die vier Spalten
-voneinander ab; waagrechte Zeilentrenner werden nicht gezeichnet.
-Jede Spalte enthält eine Wetter-Glyphe, die Temperatur, die
-Regenwahrscheinlichkeit sowie Windrichtung und Windgeschwindigkeit. Fehlende
-Werte erscheinen als Gedankenstrich; ohne verfügbare Icon-Schrift nutzt
-Sliverbar monochrome Unicode-Symbole.
+18 und 21 Uhr. Ein vollständiges Raster grenzt Beschriftungen, Zeitspalten und
+Wertezeilen voneinander ab. Jede Spalte enthält ein skalierbares, mit den
+konfigurierten Farben gezeichnetes Cairo-Wettericon, die Temperatur, die
+Regenwahrscheinlichkeit sowie Windrichtung und Windgeschwindigkeit. Sonne und
+Mond unterscheiden bei klarem oder teilweise bewölktem Wetter zwischen Tag und
+Nacht. Der erste Tag wird bei aktuellem Datum als `Heute` bezeichnet. Fehlende
+Werte erscheinen als Gedankenstrich; die Wettericons sind unabhängig von der
+konfigurierten Icon-Schrift.
 
 In der Kopfzeile steht links der aktive Ort und rechts der Zeitpunkt der
 letzten erfolgreichen Cache-Aktualisierung. Für Daten vom aktuellen Tag wird

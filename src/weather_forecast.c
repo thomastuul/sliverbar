@@ -203,6 +203,7 @@ WeatherCondition weatherConditionFromCode(int code) {
   case 113:
     return WEATHER_CONDITION_CLEAR;
   case 116:
+    return WEATHER_CONDITION_PARTLY_CLOUDY;
   case 119:
   case 122:
     return WEATHER_CONDITION_CLOUDY;
@@ -256,18 +257,6 @@ WeatherCondition weatherConditionFromCode(int code) {
   default:
     return WEATHER_CONDITION_UNKNOWN;
   }
-}
-
-const char *weatherConditionGlyph(WeatherCondition condition,
-                                  bool useIconFont) {
-  static const char *const ICON_GLYPHS[] = {
-      "?", "", "", "", "", "", ""};
-  static const char *const UNICODE_GLYPHS[] = {
-      "?", "☀", "☁", "☂", "⚡", "❄", "≋"};
-  if (condition < WEATHER_CONDITION_UNKNOWN ||
-      condition > WEATHER_CONDITION_FOG)
-    condition = WEATHER_CONDITION_UNKNOWN;
-  return useIconFont ? ICON_GLYPHS[condition] : UNICODE_GLYPHS[condition];
 }
 
 const char *weatherWindDirectionGlyph(const char *direction) {
@@ -339,6 +328,21 @@ const char *weatherForecastDayName(const char *date,
                 7;
   snprintf(buffer, size, "%s", german ? GERMAN[weekday] : ENGLISH[weekday]);
   return buffer;
+}
+
+const char *weatherForecastDayLabel(
+    const char *date, bool german, time_t now, char *buffer, size_t size) {
+  if (!buffer || size == 0)
+    return "";
+  struct tm local;
+  char today[11];
+  if (localtime_r(&now, &local) &&
+      strftime(today, sizeof(today), "%Y-%m-%d", &local) > 0 && date &&
+      !strcmp(date, today)) {
+    snprintf(buffer, size, "%s", german ? "Heute" : "Today");
+    return buffer;
+  }
+  return weatherForecastDayName(date, german, buffer, size);
 }
 
 static void initializeForecast(WeatherForecast *forecast) {

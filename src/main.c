@@ -2255,13 +2255,18 @@ int main(int argc, char **argv) {
         WeatherForecastSlot *forecastSlot = &forecastDay->slots[slot];
         static const int SMOKE_HOURS[] = {6, 12, 18, 21};
         static const char *const SMOKE_DIRECTIONS[] = {"NE", "E", "SE", "W"};
+        static const int SMOKE_WEATHER_CODES[] = {
+            113, 116, 119, 176, 200, 230, 248};
         forecastSlot->hour = SMOKE_HOURS[slot];
         forecastSlot->temperatureValid = true;
         forecastSlot->temperatureC = 8 + (int)day + (int)slot;
         forecastSlot->rainValid = true;
         forecastSlot->rainPercent = (int)slot * 10;
         forecastSlot->codeValid = true;
-        forecastSlot->weatherCode = slot % 2 == 0 ? 113 : 176;
+        forecastSlot->weatherCode =
+            SMOKE_WEATHER_CODES[(day * WEATHER_FORECAST_SLOT_COUNT + slot) %
+                                (sizeof(SMOKE_WEATHER_CODES) /
+                                 sizeof(SMOKE_WEATHER_CODES[0]))];
         forecastSlot->condition =
             weatherConditionFromCode(forecastSlot->weatherCode);
         forecastSlot->windSpeedValid = true;

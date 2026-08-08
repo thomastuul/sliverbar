@@ -412,18 +412,18 @@ Explicit `language=de` and `language=en` overrides remain available.
 
 Weather mouse bindings are: left opens the native location list when multiple
 locations exist, middle refreshes immediately, and right toggles a native
-three-day forecast anchored below the weather block. Continuous vertical rules
-separate the four columns without horizontal row dividers. The columns are
-Morning, Noon, Evening, and Night, represented by the 06, 12, 18, and 21
-forecast records. Each column shows a weather glyph,
-temperature, rain probability, wind direction, and wind speed. Each localized
-day heading also shows its minimum and maximum temperature. Missing values
-remain visible as dashes, and an unavailable icon font falls back to monochrome
-Unicode symbols. The popup header shows the location on the left and the cache
-update time on the right; older data also includes its date. Existing cache
-data for a newly selected location appears before its asynchronous refresh; an
-open forecast redraws both its values and update time when refreshed data is
-published.
+three-day forecast anchored below the weather block. A complete grid separates
+the row labels and the four Morning, Noon, Evening, and Night columns,
+represented by the 06, 12, 18, and 21 forecast records. Each column shows a
+scalable, theme-colored Cairo weather icon, temperature, rain probability, wind
+direction, and wind speed. Clear and partly cloudy conditions use sun or moon
+artwork according to the forecast hour. The first current-day heading is
+localized as Today, and every heading also shows its minimum and maximum
+temperature. Missing values remain visible as dashes. The popup header shows
+the location on the left and the cache update time on the right; older data also
+includes its date. Existing cache data for a newly selected location appears
+before its asynchronous refresh; an open forecast redraws both its values and
+update time when refreshed data is published.
 
 Sliverbar no longer downloads or caches a forecast PNG and does not launch an
 external image viewer for weather. The legacy `weather_image=` key is accepted
