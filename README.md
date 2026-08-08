@@ -412,15 +412,17 @@ Explicit `language=de` and `language=en` overrides remain available.
 
 Weather mouse bindings are: left opens the native location list when multiple
 locations exist, middle refreshes immediately, and right toggles a native
-three-day forecast anchored below the weather block. The forecast shows 06,
-09, 12, 15, 18, and 21 in Cairo-drawn time fields, followed by a weather glyph,
-temperature, and rain probability for every time. Each localized day heading
-also shows its minimum and maximum temperature. Missing values remain visible
-as dashes, and an unavailable icon font falls back to monochrome Unicode
-symbols. The popup header shows the location on the left and the cache update
-time on the right; older data also includes its date. Existing cache data for a
-newly selected location appears before its asynchronous refresh; an open
-forecast redraws both its values and update time when refreshed data is
+three-day forecast anchored below the weather block. Continuous vertical rules
+separate the four columns without horizontal row dividers. The columns are
+Morning, Noon, Evening, and Night, represented by the 06, 12, 18, and 21
+forecast records. Each column shows a weather glyph,
+temperature, rain probability, wind direction, and wind speed. Each localized
+day heading also shows its minimum and maximum temperature. Missing values
+remain visible as dashes, and an unavailable icon font falls back to monochrome
+Unicode symbols. The popup header shows the location on the left and the cache
+update time on the right; older data also includes its date. Existing cache
+data for a newly selected location appears before its asynchronous refresh; an
+open forecast redraws both its values and update time when refreshed data is
 published.
 
 Sliverbar no longer downloads or caches a forecast PNG and does not launch an

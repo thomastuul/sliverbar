@@ -201,10 +201,13 @@ und als Warnung protokolliert.
 
 Die Vorschau erscheint direkt unter dem Wetterblock. Für heute und die beiden
 folgenden Tage zeigt sie die Tiefst- und Höchsttemperatur sowie Vorhersagen für
-06, 09, 12, 15, 18 und 21 Uhr. Jede Zeitspalte enthält ein mit Cairo
-gezeichnetes Zeitfeld, eine Wetter-Glyphe, die Temperatur und die
-Regenwahrscheinlichkeit. Fehlende Werte erscheinen als Gedankenstrich; ohne
-verfügbare Icon-Schrift nutzt Sliverbar monochrome Unicode-Symbole.
+Morgens, Mittags, Abends und Nachts, repräsentiert durch die Daten für 06, 12,
+18 und 21 Uhr. Durchgehende senkrechte Linien grenzen die vier Spalten
+voneinander ab; waagrechte Zeilentrenner werden nicht gezeichnet.
+Jede Spalte enthält eine Wetter-Glyphe, die Temperatur, die
+Regenwahrscheinlichkeit sowie Windrichtung und Windgeschwindigkeit. Fehlende
+Werte erscheinen als Gedankenstrich; ohne verfügbare Icon-Schrift nutzt
+Sliverbar monochrome Unicode-Symbole.
 
 In der Kopfzeile steht links der aktive Ort und rechts der Zeitpunkt der
 letzten erfolgreichen Cache-Aktualisierung. Für Daten vom aktuellen Tag wird

@@ -2253,7 +2253,9 @@ int main(int argc, char **argv) {
       forecastDay->maximumC = 16 + (int)day;
       for (size_t slot = 0; slot < WEATHER_FORECAST_SLOT_COUNT; slot++) {
         WeatherForecastSlot *forecastSlot = &forecastDay->slots[slot];
-        forecastSlot->hour = 6 + (int)slot * 3;
+        static const int SMOKE_HOURS[] = {6, 12, 18, 21};
+        static const char *const SMOKE_DIRECTIONS[] = {"NE", "E", "SE", "W"};
+        forecastSlot->hour = SMOKE_HOURS[slot];
         forecastSlot->temperatureValid = true;
         forecastSlot->temperatureC = 8 + (int)day + (int)slot;
         forecastSlot->rainValid = true;
@@ -2262,6 +2264,13 @@ int main(int argc, char **argv) {
         forecastSlot->weatherCode = slot % 2 == 0 ? 113 : 176;
         forecastSlot->condition =
             weatherConditionFromCode(forecastSlot->weatherCode);
+        forecastSlot->windSpeedValid = true;
+        forecastSlot->windSpeedKmph = 7 + (int)slot * 3;
+        forecastSlot->windDirectionValid = true;
+        snprintf(forecastSlot->windDirection,
+                 sizeof(forecastSlot->windDirection),
+                 "%s",
+                 SMOKE_DIRECTIONS[slot]);
       }
     }
     nativePopupUpdateForecast(
