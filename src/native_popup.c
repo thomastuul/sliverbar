@@ -413,7 +413,7 @@ static void drawSun(NativePopup *popup, double x, double y, double radius) {
 }
 
 static void drawCloud(NativePopup *popup, double x, double y) {
-  configureIconStroke(popup, popup->config.colorFree);
+  cairo_new_sub_path(popup->cairo);
   cairo_move_to(popup->cairo, x - 15.0, y + 7.0);
   cairo_curve_to(
       popup->cairo, x - 19.0, y + 7.0, x - 20.0, y + 1.0, x - 16.0, y - 2.0);
@@ -429,6 +429,9 @@ static void drawCloud(NativePopup *popup, double x, double y) {
   cairo_curve_to(
       popup->cairo, x - 18.0, y + 11.0, x - 19.0, y + 8.0, x - 15.0, y + 7.0);
   cairo_close_path(popup->cairo);
+  setColor(popup->cairo, popup->config.colorBg, "#222222");
+  cairo_fill_preserve(popup->cairo);
+  configureIconStroke(popup, popup->config.colorFree);
   cairo_stroke(popup->cairo);
 }
 
