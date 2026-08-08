@@ -398,6 +398,7 @@ static void drawSun(NativePopup *popup, double x, double y, double radius) {
   static const double RAY_Y[] = {
       0.0, 0.707, 1.0, 0.707, 0.0, -0.707, -1.0, -0.707};
   configureIconStroke(popup, popup->config.colorWeather);
+  cairo_new_sub_path(popup->cairo);
   cairo_arc(popup->cairo, x, y, radius, 0.0, 2.0 * G_PI);
   cairo_stroke(popup->cairo);
   for (int ray = 0; ray < 8; ray++) {
