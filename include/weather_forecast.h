@@ -11,6 +11,7 @@
 typedef enum {
   WEATHER_CONDITION_UNKNOWN,
   WEATHER_CONDITION_CLEAR,
+  WEATHER_CONDITION_PARTLY_CLOUDY,
   WEATHER_CONDITION_CLOUDY,
   WEATHER_CONDITION_RAIN,
   WEATHER_CONDITION_THUNDER,
@@ -52,12 +53,13 @@ typedef struct {
 
 int weatherForecastParse(const char *json, WeatherForecast *forecast);
 WeatherCondition weatherConditionFromCode(int code);
-const char *weatherConditionGlyph(WeatherCondition condition, bool useIconFont);
 const char *weatherWindDirectionGlyph(const char *direction);
 const char *weatherForecastDayName(const char *date,
                                    bool german,
                                    char *buffer,
                                    size_t size);
+const char *weatherForecastDayLabel(
+    const char *date, bool german, time_t now, char *buffer, size_t size);
 const char *weatherForecastUpdatedLabel(time_t updatedAt,
                                         bool valid,
                                         bool german,

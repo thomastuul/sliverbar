@@ -380,10 +380,8 @@ int main(int argc, char **argv) {
   CHECK(
       strcmp(weatherForecastDayName("invalid", true, weekday, sizeof(weekday)),
              "-") == 0);
-  CHECK(strcmp(weatherConditionGlyph(WEATHER_CONDITION_CLEAR, false), "☀") ==
-        0);
-  CHECK(strcmp(weatherConditionGlyph(WEATHER_CONDITION_UNKNOWN, true), "?") ==
-        0);
+  CHECK(weatherConditionFromCode(116) == WEATHER_CONDITION_PARTLY_CLOUDY);
+  CHECK(weatherConditionFromCode(119) == WEATHER_CONDITION_CLOUDY);
   CHECK(strcmp(weatherWindDirectionGlyph("NNE"), "↗") == 0);
   CHECK(strcmp(weatherWindDirectionGlyph("W"), "←") == 0);
   CHECK(strcmp(weatherWindDirectionGlyph("BAD"), "–") == 0);
@@ -397,6 +395,15 @@ int main(int argc, char **argv) {
   const time_t SAME_DAY_UPDATE = 1784797680;
   const time_t PREVIOUS_DAY_UPDATE = 1784745600;
   const time_t CURRENT_TIME = 1784808000;
+  CHECK(strcmp(weatherForecastDayLabel(
+                   "2026-07-23", true, CURRENT_TIME, weekday, sizeof(weekday)),
+               "Heute") == 0);
+  CHECK(strcmp(weatherForecastDayLabel(
+                   "2026-07-23", false, CURRENT_TIME, weekday, sizeof(weekday)),
+               "Today") == 0);
+  CHECK(strcmp(weatherForecastDayLabel(
+                   "2026-07-24", true, CURRENT_TIME, weekday, sizeof(weekday)),
+               "Freitag") == 0);
   CHECK(strcmp(weatherForecastUpdatedLabel(SAME_DAY_UPDATE,
                                            true,
                                            true,
