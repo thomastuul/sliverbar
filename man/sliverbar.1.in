@@ -275,6 +275,10 @@ Refresh interval in seconds.  Values are limited to 1800 through 14400.
 Deprecated compatibility key.  Its value is ignored because forecasts are
 rendered natively.
 .PP
+The compact weather block shows the highest rain probability in the next
+forecast periods and the current temperature.  Daily minimum and maximum
+temperatures remain available in the three-day forecast.
+.PP
 Left click selects among configured locations, middle click refreshes, and
 right click toggles a native three-day forecast below the weather block.
 For each day it shows minimum and maximum temperature plus four columns for
