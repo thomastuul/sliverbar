@@ -1173,16 +1173,24 @@ void moduleBrightness(const PanelConfig *c, PanelState *s) {
   moduleBrightnessValue(c, s, pct);
 }
 
-static int jsonInteger(char *p) {
-  if (!p)
-    return 0;
+static bool jsonInteger(const char *p, int *value) {
+  if (!p || !value)
+    return false;
   p = strchr(p, ':');
   if (!p)
-    return 0;
+    return false;
   p++;
   while (*p && !(isdigit((unsigned char)*p) || *p == '-'))
     p++;
-  return atoi(p);
+  if (!*p)
+    return false;
+  errno = 0;
+  char *end = NULL;
+  long parsed = strtol(p, &end, 10);
+  if (errno || end == p || parsed < INT_MIN || parsed > INT_MAX)
+    return false;
+  *value = (int)parsed;
+  return true;
 }
 void moduleWeather(const PanelConfig *c, PanelState *s) {
   char data[32768] = "";
@@ -1191,30 +1199,24 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
   s->weather[0] = '\0';
   if (!moduleModeActive(c->moduleWeather, c->location[0] != '\0'))
     return;
-  int rain = 0, min = 0, max = 0;
+  int rain = 0, temperature = 0;
+  bool temperatureValid = false;
   if (data[0]) {
     char *p = strstr(data, "\"chanceofrain\"");
     for (int i = 0; p && i < 8; i++, p = strstr(p + 1, "\"chanceofrain\"")) {
-      int v = jsonInteger(p);
-      if (v > rain)
+      int v = 0;
+      if (jsonInteger(p, &v) && v > rain)
         rain = v;
     }
-    p = strstr(data, "\"mintempC\"");
-    min = jsonInteger(p);
-    p = strstr(data, "\"maxtempC\"");
-    max = jsonInteger(p);
+    p = strstr(data, "\"temp_C\"");
+    temperatureValid = jsonInteger(p, &temperature);
   }
   char text[96], body[256], right[512], middle[768];
-  if (data[0]) {
-    snprintf(text,
-             sizeof(text),
-             "爫%%{O4}%d%%%%{O8}%%{O4}%d°%%{O8}%%{O4}%d°",
-             rain,
-             min,
-             max);
-  } else {
+  if (data[0] && temperatureValid) {
     snprintf(
-        text, sizeof(text), "爫%%{O4}—%%{O8}%%{O4}—%%{O8}%%{O4}—");
+        text, sizeof(text), "殺%%{O4}%d%%%%{O8}﨎%%{O4}%d°", rain, temperature);
+  } else {
+    snprintf(text, sizeof(text), "殺%%{O4}—%%{O8}﨎%%{O4}—");
   }
   block(body, sizeof(body), c, c->colorWeather, text);
   if (c->internalWeatherForecastAvailable)

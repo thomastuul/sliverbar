@@ -2,6 +2,7 @@
   "ignored": {
     "text": "a brace } and an escaped quote \" do not end this object"
   },
+  "current_condition": [{"temp_C": "9"}],
   "weather": [
     {
       "date": "2026-07-23",

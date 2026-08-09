@@ -180,8 +180,10 @@ Zustand wird nach einem Sliverbar-Neustart nicht automatisch wiederhergestellt.
 Das Wettermodul lädt über `curl` JSON-Daten von `wttr.in` und zeigt:
 
 - die höchste Regenwahrscheinlichkeit der nächsten Zeitabschnitte;
-- minimale Temperatur;
-- maximale Temperatur.
+- die aktuelle Temperatur.
+
+Minimale und maximale Tagestemperaturen bleiben in der ausführlichen
+Drei-Tage-Vorschau sichtbar.
 
 Bis zu vier Orte lassen sich mit
 `weather_location=safe-id|Anzeigename|Suchwert` konfigurieren. Der aktive Ort

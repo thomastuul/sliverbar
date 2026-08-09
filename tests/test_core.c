@@ -453,9 +453,10 @@ int main(int argc, char **argv) {
   moduleWeather(&forecastConfig, &forecastState);
   CHECK(strstr(forecastState.weather, "weather|forecast") != NULL);
   CHECK(strstr(forecastState.weather, "weather|open") == NULL);
-  CHECK(strstr(forecastState.weather, "爫%{O4}") != NULL);
-  CHECK(strstr(forecastState.weather, "%{O8}%{O4}") != NULL);
-  CHECK(strstr(forecastState.weather, "%{O8}%{O4}") != NULL);
+  CHECK(strstr(forecastState.weather, "殺%{O4}100%") != NULL);
+  CHECK(strstr(forecastState.weather, "%{O8}﨎%{O4}9°") != NULL);
+  CHECK(strstr(forecastState.weather, "-3°") == NULL);
+  CHECK(strstr(forecastState.weather, "12°") == NULL);
   forecastConfig.internalWeatherForecastAvailable = false;
   moduleWeather(&forecastConfig, &forecastState);
   CHECK(strstr(forecastState.weather, "weather|forecast") == NULL);

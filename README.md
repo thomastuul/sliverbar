@@ -427,6 +427,10 @@ IDs fail `--check-config`. Selection state is stored below
 limit and produce a warning in the log; for example, 900 seconds becomes 1800
 seconds and 42000 seconds becomes 14400 seconds.
 
+The compact weather block shows the highest rain probability in the next
+forecast periods and the current temperature. Daily minimum and maximum
+temperatures remain available in the three-day forecast.
+
 `language=auto` selects German when the system language is German and English
 for every other system language. The same selection is used for Sliverbar's
 menus, confirmations, notifications, clock abbreviations, and weather service.
