@@ -424,7 +424,8 @@ Repeat the preferred short form `weather_location=Display name` for up to 4
 locations. Sliverbar keeps the original Unicode text as both display name and
 wttr.in query, percent-encodes it for the request, and derives only the safe
 internal ID; for example, `München` becomes `munchen` and `Kärdla, Estonia`
-becomes `kardla-estonia`. Set `weather_default` to that ID.
+becomes `kardla-estonia`. Set `weather_default` to the same Unicode display
+name used by `weather_location`, or to its internal ID for compatibility.
 
 The explicit `weather_location=safe-id|Display name|service query` form remains
 available for ambiguous locations and ID collisions. Legacy `location=query`

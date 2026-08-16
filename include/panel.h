@@ -95,7 +95,7 @@ typedef struct {
   bool internalAgendaAvailable;
   WeatherLocation weatherLocations[PANEL_WEATHER_LOCATION_MAX];
   size_t weatherLocationCount, activeWeatherLocation;
-  char defaultWeatherLocation[64];
+  char defaultWeatherLocation[128];
 } PanelConfig;
 
 typedef struct {

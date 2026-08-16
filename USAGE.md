@@ -192,7 +192,7 @@ Unicode-Namen konfigurieren:
 weather_location=München
 weather_location=Uhldingen-Mühlhofen
 weather_location=Kärdla, Estonia
-weather_default=munchen
+weather_default=München
 ```
 
 Sliverbar verwendet den Originaltext unverändert als Anzeigenamen und
@@ -200,7 +200,8 @@ wttr.in-Suchanfrage und kodiert ihn erst für den HTTP-Pfad. Nur die interne ID
 wird lokal abgeleitet, beispielsweise `munchen`, `uhldingen-muhlhofen` und
 `kardla-estonia`. Für mehrdeutige Orte oder kollidierende automatisch erzeugte
 IDs bleibt `weather_location=safe-id|Anzeigename|Suchwert` als explizite
-Langform verfügbar.
+Langform verfügbar. `weather_default` akzeptiert denselben Unicode-Anzeigenamen
+wie `weather_location`; die interne ID bleibt aus Kompatibilitätsgründen gültig.
 
 Der aktive Ort wird unter `$XDG_STATE_HOME/sliverbar` gespeichert; die
 JSON-Caches liegen unter `$XDG_CACHE_HOME/sliverbar/weather`. Beim Umschalten

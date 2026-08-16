@@ -273,7 +273,9 @@ safe internal ID and percent-encodes the query for the request.  The explicit
 form remains available for ambiguous locations and ID collisions.
 .TP
 .B weather_default
-Selects the default weather location by its safe ID.
+Selects the default weather location by the same Unicode display name used for
+.BR weather_location ,
+or by its safe internal ID for compatibility.
 .TP
 .B location
 Legacy single-location weather query.
