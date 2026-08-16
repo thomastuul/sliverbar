@@ -148,6 +148,213 @@ static bool validLocationId(const char *id) {
   return true;
 }
 
+static uint32_t weatherLocationHash(const char *name) {
+  uint32_t hash = 2166136261U;
+  for (const unsigned char *cursor = (const unsigned char *)name; *cursor;
+       cursor++) {
+    hash ^= *cursor;
+    hash *= 16777619U;
+  }
+  return hash;
+}
+
+static bool utf8Codepoint(const unsigned char **cursor, uint32_t *codepoint) {
+  const unsigned char *start = *cursor;
+  if (*start < 0x80U) {
+    *codepoint = *start;
+    *cursor = start + 1;
+    return true;
+  }
+  size_t length = 0;
+  uint32_t value = 0, minimum = 0;
+  if ((*start & 0xe0U) == 0xc0U) {
+    length = 2;
+    value = *start & 0x1fU;
+    minimum = 0x80U;
+  } else if ((*start & 0xf0U) == 0xe0U) {
+    length = 3;
+    value = *start & 0x0fU;
+    minimum = 0x800U;
+  } else if ((*start & 0xf8U) == 0xf0U) {
+    length = 4;
+    value = *start & 0x07U;
+    minimum = 0x10000U;
+  } else {
+    *cursor = start + 1;
+    return false;
+  }
+  for (size_t i = 1; i < length; i++) {
+    if (!start[i] || (start[i] & 0xc0U) != 0x80U) {
+      *cursor = start + 1;
+      return false;
+    }
+    value = (value << 6U) | (start[i] & 0x3fU);
+  }
+  *cursor = start + length;
+  if (value < minimum || value > 0x10ffffU ||
+      (value >= 0xd800U && value <= 0xdfffU))
+    return false;
+  *codepoint = value;
+  return true;
+}
+
+static const char *weatherLocationLatinReplacement(uint32_t codepoint) {
+  switch (codepoint) {
+  case 0x00c0U:
+  case 0x00c1U:
+  case 0x00c2U:
+  case 0x00c3U:
+  case 0x00c4U:
+  case 0x00c5U:
+  case 0x00e0U:
+  case 0x00e1U:
+  case 0x00e2U:
+  case 0x00e3U:
+  case 0x00e4U:
+  case 0x00e5U:
+    return "a";
+  case 0x00c6U:
+  case 0x00e6U:
+    return "ae";
+  case 0x00c7U:
+  case 0x00e7U:
+    return "c";
+  case 0x00c8U:
+  case 0x00c9U:
+  case 0x00caU:
+  case 0x00cbU:
+  case 0x00e8U:
+  case 0x00e9U:
+  case 0x00eaU:
+  case 0x00ebU:
+    return "e";
+  case 0x00ccU:
+  case 0x00cdU:
+  case 0x00ceU:
+  case 0x00cfU:
+  case 0x00ecU:
+  case 0x00edU:
+  case 0x00eeU:
+  case 0x00efU:
+    return "i";
+  case 0x00d0U:
+  case 0x00f0U:
+    return "d";
+  case 0x00d1U:
+  case 0x00f1U:
+    return "n";
+  case 0x00d2U:
+  case 0x00d3U:
+  case 0x00d4U:
+  case 0x00d5U:
+  case 0x00d6U:
+  case 0x00d8U:
+  case 0x00f2U:
+  case 0x00f3U:
+  case 0x00f4U:
+  case 0x00f5U:
+  case 0x00f6U:
+  case 0x00f8U:
+    return "o";
+  case 0x0152U:
+  case 0x0153U:
+    return "oe";
+  case 0x00d9U:
+  case 0x00daU:
+  case 0x00dbU:
+  case 0x00dcU:
+  case 0x00f9U:
+  case 0x00faU:
+  case 0x00fbU:
+  case 0x00fcU:
+    return "u";
+  case 0x00ddU:
+  case 0x00fdU:
+  case 0x00ffU:
+    return "y";
+  case 0x00deU:
+  case 0x00feU:
+    return "th";
+  case 0x00dfU:
+    return "ss";
+  case 0x0141U:
+  case 0x0142U:
+    return "l";
+  default:
+    return NULL;
+  }
+}
+
+bool weatherLocationIdGenerate(const char *name, char *id, size_t idSize) {
+  if (!name || !*name || !id || idSize < 10)
+    return false;
+  char slug[512];
+  size_t used = 0;
+  bool separator = false, unmapped = false;
+  const unsigned char *cursor = (const unsigned char *)name;
+  while (*cursor) {
+    uint32_t codepoint = 0;
+    if (!utf8Codepoint(&cursor, &codepoint)) {
+      unmapped = true;
+      separator = true;
+      continue;
+    }
+    const char *replacement = NULL;
+    char ascii[2] = {0};
+    if (codepoint >= 'A' && codepoint <= 'Z') {
+      ascii[0] = "abcdefghijklmnopqrstuvwxyz"[codepoint - 'A'];
+      replacement = ascii;
+    } else if (codepoint >= 'a' && codepoint <= 'z') {
+      ascii[0] = "abcdefghijklmnopqrstuvwxyz"[codepoint - 'a'];
+      replacement = ascii;
+    } else if (codepoint >= '0' && codepoint <= '9') {
+      ascii[0] = "0123456789"[codepoint - '0'];
+      replacement = ascii;
+    } else {
+      replacement = weatherLocationLatinReplacement(codepoint);
+    }
+    if (!replacement) {
+      if (codepoint >= 0x0300U && codepoint <= 0x036fU)
+        continue;
+      if (codepoint > 0x7fU)
+        unmapped = true;
+      separator = true;
+      continue;
+    }
+    size_t replacementLength = strlen(replacement);
+    if (separator && used > 0 && used + 1 < sizeof(slug))
+      slug[used++] = '-';
+    separator = false;
+    if (used + replacementLength >= sizeof(slug))
+      return false;
+    memcpy(slug + used, replacement, replacementLength);
+    used += replacementLength;
+  }
+  while (used > 0 && slug[used - 1] == '-')
+    used--;
+  slug[used] = '\0';
+  uint32_t hash = weatherLocationHash(name);
+  if (used == 0) {
+    int length = snprintf(id, idSize, "location-%08x", hash);
+    return length > 0 && (size_t)length < idSize;
+  }
+  if (!unmapped && used < idSize) {
+    memcpy(id, slug, used + 1);
+    return true;
+  }
+  size_t prefixLength = idSize - 10;
+  if (prefixLength > used)
+    prefixLength = used;
+  while (prefixLength > 0 && slug[prefixLength - 1] == '-')
+    prefixLength--;
+  if (prefixLength == 0) {
+    int length = snprintf(id, idSize, "location-%08x", hash);
+    return length > 0 && (size_t)length < idSize;
+  }
+  int length = snprintf(id, idSize, "%.*s-%08x", (int)prefixLength, slug, hash);
+  return length > 0 && (size_t)length < idSize;
+}
+
 static bool validColor(const char *value) {
   if (!value || value[0] != '#' || strlen(value) != 7)
     return false;
@@ -231,21 +438,32 @@ static int boundedAgendaNumber(const char *key,
 }
 
 static int addWeatherLocation(PanelConfig *c, const char *value) {
-  if (c->weatherLocationCount >= PANEL_WEATHER_LOCATION_MAX)
+  if (!value || !*value || strlen(value) >= 384 ||
+      c->weatherLocationCount >= PANEL_WEATHER_LOCATION_MAX)
     return -1;
   char copybuf[384];
   copy(copybuf, sizeof(copybuf), value);
   char *first = strchr(copybuf, '|');
-  if (!first)
-    return -1;
-  *first++ = '\0';
-  char *second = strchr(first, '|');
-  if (second)
-    *second++ = '\0';
-  char *id = trim(copybuf);
-  char *label = trim(first);
-  char *query = second ? trim(second) : label;
-  if (!validLocationId(id) || !*label || !*query)
+  char generatedId[sizeof(c->weatherLocations[0].id)];
+  char *id = NULL, *label = NULL, *query = NULL;
+  if (!first) {
+    label = query = trim(copybuf);
+    if (!weatherLocationIdGenerate(label, generatedId, sizeof(generatedId)))
+      return -1;
+    id = generatedId;
+  } else {
+    *first++ = '\0';
+    char *second = strchr(first, '|');
+    if (second)
+      *second++ = '\0';
+    id = trim(copybuf);
+    label = trim(first);
+    query = second ? trim(second) : label;
+  }
+  if (!validLocationId(id) || !*label || !*query ||
+      strlen(id) >= sizeof(c->weatherLocations[0].id) ||
+      strlen(label) >= sizeof(c->weatherLocations[0].label) ||
+      strlen(query) >= sizeof(c->weatherLocations[0].query))
     return -1;
   for (size_t i = 0; i < c->weatherLocationCount; i++)
     if (!strcmp(c->weatherLocations[i].id, id))

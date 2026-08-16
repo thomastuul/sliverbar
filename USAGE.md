@@ -185,11 +185,29 @@ Das Wettermodul lädt über `curl` JSON-Daten von `wttr.in` und zeigt:
 Minimale und maximale Tagestemperaturen bleiben in der ausführlichen
 Drei-Tage-Vorschau sichtbar.
 
-Bis zu vier Orte lassen sich mit
-`weather_location=safe-id|Anzeigename|Suchwert` konfigurieren. Der aktive Ort
-wird unter `$XDG_STATE_HOME/sliverbar` gespeichert; die JSON-Caches liegen
-unter `$XDG_CACHE_HOME/sliverbar/weather`. Beim Umschalten erscheint zuerst ein
-vorhandener Cache, danach wird asynchron aktualisiert.
+Bis zu vier Orte lassen sich in der empfohlenen Kurzform direkt mit ihrem
+Unicode-Namen konfigurieren:
+
+```ini
+weather_location=München
+weather_location=Uhldingen-Mühlhofen
+weather_location=Kärdla, Estonia
+weather_default=munchen
+```
+
+Sliverbar verwendet den Originaltext unverändert als Anzeigenamen und
+wttr.in-Suchanfrage und kodiert ihn erst für den HTTP-Pfad. Nur die interne ID
+wird lokal abgeleitet, beispielsweise `munchen`, `uhldingen-muhlhofen` und
+`kardla-estonia`. Für mehrdeutige Orte oder kollidierende automatisch erzeugte
+IDs bleibt `weather_location=safe-id|Anzeigename|Suchwert` als explizite
+Langform verfügbar.
+
+Der aktive Ort wird unter `$XDG_STATE_HOME/sliverbar` gespeichert; die
+JSON-Caches liegen unter `$XDG_CACHE_HOME/sliverbar/weather`. Beim Umschalten
+erscheint zuerst ein vorhandener Cache, danach wird asynchron aktualisiert.
+`--diagnose` zeigt für jeden Ort ID, Anzeigename und Anfrage sowie aus einem
+vorhandenen Cache die von wttr.in gelieferte `nearest_area`-Auflösung. Die
+Diagnose selbst führt keinen Wetterabruf aus.
 
 `weather_interval` ist auf 1800 bis 14400 Sekunden, also 30 bis 240 Minuten,
 begrenzt. Werte außerhalb des Bereichs werden auf die nächste Grenze gesetzt
