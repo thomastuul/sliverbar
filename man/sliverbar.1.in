@@ -36,6 +36,13 @@ invalid keys cause failure.
 Print the selected configuration, display and workspace backend, optional
 programs, fonts, application roles, launcher catalog, WLAN source, weather
 locations, power actions, and inhibitor backend without starting the panel.
+If a running instance is reachable, its inhibitor state is reported as
+.B inhibitor.active=yes
+or
+.BR inhibitor.active=no .
+Otherwise
+.B inhibitor.active=unavailable
+is reported and the command still exits successfully.
 .TP
 .B \-\-list-pim-sources
 List Evolution Data Server calendar and task sources as tab-separated type,

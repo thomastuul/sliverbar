@@ -1308,6 +1308,71 @@ static void usage(FILE *f, const char *name) {
           name);
 }
 
+static int
+inhibitorDiagnosticPath(pid_t requester, char *path, size_t pathSize) {
+  char runtimeDirectory[PANEL_PATH_MAX], suffix[64];
+  if (requester <= 0 || sliverbarRuntimeDirectory(
+                            runtimeDirectory, sizeof(runtimeDirectory), false))
+    return -1;
+  int length = snprintf(suffix,
+                        sizeof(suffix),
+                        "/inhibitor-%" PRIdMAX ".state",
+                        (intmax_t)requester);
+  if (length < 0 || (size_t)length >= sizeof(suffix) ||
+      joinPath(path, pathSize, runtimeDirectory, suffix)) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  return 0;
+}
+
+#ifdef HAVE_NATIVE_PANEL
+static bool inhibitorDiagnosticRequest(const char *request, pid_t *requester) {
+  static const char PREFIX[] = "diagnose|inhibitor|";
+  if (!request || !requester ||
+      strncmp(request, PREFIX, sizeof(PREFIX) - 1) != 0)
+    return false;
+  const char *value = request + sizeof(PREFIX) - 1;
+  char *end = NULL;
+  errno = 0;
+  intmax_t parsed = strtoimax(value, &end, 10);
+  pid_t parsedPid = (pid_t)parsed;
+  if (errno || !*value || *end || parsed <= 0 || (intmax_t)parsedPid != parsed)
+    return false;
+  *requester = parsedPid;
+  return true;
+}
+#endif
+
+static const char *diagnoseInhibitorState(void) {
+  pid_t requester = getpid();
+  char controlPath[PANEL_PATH_MAX], responsePath[PANEL_PATH_MAX];
+  char request[CONTROL_ACTION_MAX], response[16];
+  if (controlSocketPath(controlPath, sizeof(controlPath)) ||
+      inhibitorDiagnosticPath(requester, responsePath, sizeof(responsePath)))
+    return "unavailable";
+  int length = snprintf(request,
+                        sizeof(request),
+                        "diagnose|inhibitor|%" PRIdMAX,
+                        (intmax_t)requester);
+  if (length < 0 || (size_t)length >= sizeof(request))
+    return "unavailable";
+  unlink(responsePath);
+  if (controlClientSend(controlPath, request))
+    return "unavailable";
+  for (int attempt = 0; attempt < 50; attempt++) {
+    if (!readTextFile(responsePath, response, sizeof(response))) {
+      unlink(responsePath);
+      if (!strcmp(response, "yes") || !strcmp(response, "no"))
+        return !strcmp(response, "yes") ? "yes" : "no";
+      return "unavailable";
+    }
+    usleep(10000);
+  }
+  unlink(responsePath);
+  return "unavailable";
+}
+
 static int runDiagnostics(const PanelConfig *config,
                           const char *configPath,
                           const char *executable) {
@@ -1458,7 +1523,7 @@ static int runDiagnostics(const PanelConfig *config,
     printf("power_profiles.profile.%zu=%s\n", i, profileState.profiles[i].id);
   Inhibitor *inhibitor = inhibitorCreate(executable);
   printf("inhibitor.backend=%s\n", inhibitorBackendName(inhibitor));
-  printf("inhibitor.active=no\n");
+  printf("inhibitor.active=%s\n", diagnoseInhibitorState());
   inhibitorDestroy(inhibitor);
   return 0;
 }
@@ -2945,6 +3010,17 @@ int main(int argc, char **argv) {
       char controlAction[CONTROL_ACTION_MAX];
       while (controlServerReceive(
                  controlFd, controlAction, sizeof(controlAction)) > 0) {
+        pid_t diagnosticRequester;
+        if (inhibitorDiagnosticRequest(controlAction, &diagnosticRequester)) {
+          char responsePath[PANEL_PATH_MAX];
+          if (inhibitorDiagnosticPath(
+                  diagnosticRequester, responsePath, sizeof(responsePath)) ||
+              writeAtomic(responsePath,
+                          inhibitorActive(inhibitor) ? "yes\n" : "no\n",
+                          0600))
+            logMessage("WARNING", "cannot publish inhibitor diagnostic");
+          continue;
+        }
         if (!controlActionValid(controlAction)) {
           logMessage("WARNING", "ignored invalid control action");
           continue;

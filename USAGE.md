@@ -632,7 +632,10 @@ ungültige Schlüssel werden nicht stillschweigend ignoriert.
 Die Laufzeitdiagnose startet kein Panel, sondern meldet unter anderem
 Konfigurationspfad, Display, Workspace-Backend, Schriften, optionale Programme,
 Anwendungsrollen, WLAN-Quelle, Wetterorte, Power-Fähigkeiten, Energieprofile
-und Inhibitor-Backend:
+und Inhibitor-Backend. Bei einer erreichbaren laufenden Instanz lautet der
+Zustand `inhibitor.active=yes` oder `inhibitor.active=no`; andernfalls wird
+`inhibitor.active=unavailable` gemeldet und die Diagnose endet dennoch
+erfolgreich:
 
 ```sh
 sliverbar --config "$HOME/.config/sliverbar/panel.conf" --diagnose
