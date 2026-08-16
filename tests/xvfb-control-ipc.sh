@@ -61,6 +61,9 @@ while [ ! -S "$XDG_RUNTIME_DIR/sliverbar/control.sock" ]; do
     sleep 0.02
 done
 
+"$binary" --config "$config" --diagnose >"$test_root/diagnose-running.log"
+grep -Fx 'inhibitor.active=no' "$test_root/diagnose-running.log"
+
 "$binary" --action refresh volume
 "$binary" --action refresh brightness
 "$binary" --action volume toggle
@@ -84,3 +87,6 @@ wait "$panel_pid"
 panel_pid=
 
 [ ! -e "$XDG_RUNTIME_DIR/sliverbar/control.sock" ]
+
+"$binary" --config "$config" --diagnose >"$test_root/diagnose-stopped.log"
+grep -Fx 'inhibitor.active=unavailable' "$test_root/diagnose-stopped.log"

@@ -413,6 +413,11 @@ omitted, and systems without a battery do not expose the right-click action.
 `--diagnose` reports `power_profiles.backend`, `power_profiles.active`, the
 number of offered profiles, and each profile identifier.
 
+When a running Sliverbar instance is reachable, `--diagnose` reports its live
+inhibitor state as `inhibitor.active=yes` or `inhibitor.active=no`. Without a
+reachable instance, it reports `inhibitor.active=unavailable` and still exits
+successfully.
+
 ### Weather, timer, and inhibitor
 
 Repeat `weather_location=safe-id|Display name|service query` for up to 4
