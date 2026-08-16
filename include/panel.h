@@ -173,6 +173,7 @@ int configLoad(PanelConfig *cfg,
                const char *path,
                char *error,
                size_t errorSize);
+bool weatherLocationIdGenerate(const char *name, char *id, size_t idSize);
 int mkdirP(const char *path, mode_t mode);
 int sliverbarRuntimeBaseDirectory(char *path, size_t size, bool create);
 int sliverbarRuntimeDirectory(char *path, size_t size, bool create);

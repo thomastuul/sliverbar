@@ -1,4 +1,4 @@
-.TH SLIVERBAR 1 "July 2026" "sliverbar @PROJECT_VERSION@" "User Commands"
+.TH SLIVERBAR 1 "August 2026" "sliverbar @PROJECT_VERSION@" "User Commands"
 .SH NAME
 sliverbar \- lightweight native X11 panel
 .SH SYNOPSIS
@@ -266,8 +266,11 @@ without a battery do not expose this right-click action.
 .SS Weather
 .TP
 .B weather_location
-May be repeated up to four times.  Its format is
-.IR safe-id|Display\ name|service\ query .
+May be repeated up to four times.  The preferred form is a Unicode display name
+which is also sent unchanged as the service query.  Sliverbar derives only a
+safe internal ID and percent-encodes the query for the request.  The explicit
+.I safe-id|Display\ name|service\ query
+form remains available for ambiguous locations and ID collisions.
 .TP
 .B weather_default
 Selects the default weather location by its safe ID.
@@ -281,6 +284,12 @@ Refresh interval in seconds.  Values are limited to 1800 through 14400.
 .B weather_image
 Deprecated compatibility key.  Its value is ignored because forecasts are
 rendered natively.
+.PP
+Diagnostics list each configured location's ID, label, and exact query.  When
+a JSON cache exists, they also show the area, region, country, latitude, and
+longitude from the wttr.in
+.B nearest_area
+result.  Diagnostics never fetch weather data.
 .PP
 The compact weather block shows the highest rain probability in the next
 forecast periods and the current temperature.  Daily minimum and maximum

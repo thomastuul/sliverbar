@@ -51,7 +51,21 @@ typedef struct {
   WeatherForecastDay days[WEATHER_FORECAST_DAY_COUNT];
 } WeatherForecast;
 
+typedef struct {
+  char area[128];
+  char region[128];
+  char country[128];
+  char latitude[32];
+  char longitude[32];
+} WeatherResolvedLocation;
+
 int weatherForecastParse(const char *json, WeatherForecast *forecast);
+int weatherResolvedLocationParse(const char *json,
+                                 WeatherResolvedLocation *location);
+int weatherLocationUrl(const char *query,
+                       const char *language,
+                       char *url,
+                       size_t urlSize);
 WeatherCondition weatherConditionFromCode(int code);
 const char *weatherWindDirectionGlyph(const char *direction);
 const char *weatherForecastDayName(const char *date,

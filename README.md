@@ -420,12 +420,23 @@ successfully.
 
 ### Weather, timer, and inhibitor
 
-Repeat `weather_location=safe-id|Display name|service query` for up to 4
-locations and set `weather_default=safe-id`. Legacy `location=query` remains a
-single-location form. A fifth location and empty, duplicate, overlong, or unsafe
-IDs fail `--check-config`. Selection state is stored below
+Repeat the preferred short form `weather_location=Display name` for up to 4
+locations. Sliverbar keeps the original Unicode text as both display name and
+wttr.in query, percent-encodes it for the request, and derives only the safe
+internal ID; for example, `München` becomes `munchen` and `Kärdla, Estonia`
+becomes `kardla-estonia`. Set `weather_default` to that ID.
+
+The explicit `weather_location=safe-id|Display name|service query` form remains
+available for ambiguous locations and ID collisions. Legacy `location=query`
+remains a single-location form. A fifth location and empty, duplicate,
+overlong, or unsafe explicit IDs fail `--check-config`. Selection state is stored below
 `$XDG_STATE_HOME/sliverbar`; JSON caches are isolated by safe ID below
 `$XDG_CACHE_HOME/sliverbar/weather`.
+
+`--diagnose` lists every configured location's ID, label, and exact service
+query. When a JSON cache exists, it also reports the `nearest_area` name,
+region, country, latitude, and longitude returned by wttr.in. Missing cache data
+is reported as `resolved=unavailable`; diagnostics do not fetch weather data.
 
 `weather_interval` is specified in seconds and is limited to 1800–14400 seconds
 (30–240 minutes). Values below or above that range are clamped to the nearest

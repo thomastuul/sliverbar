@@ -343,6 +343,32 @@ int main(int argc, char **argv) {
   CHECK(readTextFile(forecastPath, forecastJson, sizeof(forecastJson)) == 0);
   WeatherForecast forecast;
   CHECK(weatherForecastParse(forecastJson, &forecast) == 0);
+  WeatherResolvedLocation resolvedLocation;
+  CHECK(weatherResolvedLocationParse(forecastJson, &resolvedLocation) == 0);
+  CHECK(strcmp(resolvedLocation.area, "Kardla") == 0);
+  CHECK(strcmp(resolvedLocation.region, "Hiiumaa") == 0);
+  CHECK(strcmp(resolvedLocation.country, "Estonia") == 0);
+  CHECK(strcmp(resolvedLocation.latitude, "58.998") == 0);
+  CHECK(strcmp(resolvedLocation.longitude, "22.749") == 0);
+  CHECK(weatherResolvedLocationParse("{}", &resolvedLocation) != 0);
+  char weatherUrl[512];
+  CHECK(weatherLocationUrl("München", "de", weatherUrl, sizeof(weatherUrl)) ==
+        0);
+  CHECK(strcmp(weatherUrl, "https://wttr.in/M%C3%BCnchen?format=j1&lang=de") ==
+        0);
+  CHECK(weatherLocationUrl(
+            "Uhldingen-Mühlhofen", "de", weatherUrl, sizeof(weatherUrl)) == 0);
+  CHECK(strcmp(weatherUrl,
+               "https://wttr.in/Uhldingen-M%C3%BChlhofen?format=j1&lang=de") ==
+        0);
+  CHECK(weatherLocationUrl(
+            "Kärdla, Estonia", "en", weatherUrl, sizeof(weatherUrl)) == 0);
+  CHECK(strcmp(weatherUrl,
+               "https://wttr.in/K%C3%A4rdla%2C%20Estonia?format=j1&lang=en") ==
+        0);
+  CHECK(weatherLocationUrl(
+            "Berlin", "de&x=1", weatherUrl, sizeof(weatherUrl)) != 0);
+  CHECK(weatherLocationUrl("Berlin", "de", weatherUrl, 16) != 0);
   CHECK(forecast.dayCount == WEATHER_FORECAST_DAY_COUNT);
   CHECK(strcmp(forecast.days[0].date, "2026-07-23") == 0);
   CHECK(forecast.days[0].minimumValid);
@@ -1318,19 +1344,37 @@ int main(int argc, char **argv) {
   char weatherPath[] = "/tmp/sliverbar-weather-XXXXXX";
   fd = mkstemp(weatherPath);
   CHECK(fd >= 0);
-  const char WEATHER_CONFIG[] =
-      "weather_location=munich|München|Munich\n"
-      "weather_location=berlin|Berlin|Berlin, Germany\n"
-      "weather_default=berlin\n";
+  const char WEATHER_CONFIG[] = "weather_location=München\n"
+                                "weather_location=Uhldingen-Mühlhofen\n"
+                                "weather_location=Kärdla, Estonia\n"
+                                "weather_default=kardla-estonia\n";
   CHECK(write(fd, WEATHER_CONFIG, sizeof(WEATHER_CONFIG) - 1) ==
         (ssize_t)(sizeof(WEATHER_CONFIG) - 1));
   CHECK(close(fd) == 0);
   CHECK(configLoad(&weatherConfig, weatherPath, error, sizeof(error)) == 0);
-  CHECK(weatherConfig.weatherLocationCount == 2);
-  CHECK(weatherConfig.activeWeatherLocation == 1);
-  CHECK(strcmp(weatherConfig.location, "Berlin, Germany") == 0);
+  CHECK(weatherConfig.weatherLocationCount == 3);
+  CHECK(weatherConfig.activeWeatherLocation == 2);
+  CHECK(strcmp(weatherConfig.location, "Kärdla, Estonia") == 0);
+  CHECK(strcmp(weatherConfig.weatherLocations[0].id, "munchen") == 0);
   CHECK(strcmp(weatherConfig.weatherLocations[0].label, "München") == 0);
+  CHECK(strcmp(weatherConfig.weatherLocations[0].query, "München") == 0);
+  CHECK(strcmp(weatherConfig.weatherLocations[1].id, "uhldingen-muhlhofen") ==
+        0);
+  CHECK(strcmp(weatherConfig.weatherLocations[2].id, "kardla-estonia") == 0);
   CHECK(unlink(weatherPath) == 0);
+
+  char generatedWeatherId[64];
+  CHECK(weatherLocationIdGenerate(
+      "München", generatedWeatherId, sizeof(generatedWeatherId)));
+  CHECK(strcmp(generatedWeatherId, "munchen") == 0);
+  CHECK(weatherLocationIdGenerate(
+      "Kärdla, Estonia", generatedWeatherId, sizeof(generatedWeatherId)));
+  CHECK(strcmp(generatedWeatherId, "kardla-estonia") == 0);
+  CHECK(weatherLocationIdGenerate(
+      "東京", generatedWeatherId, sizeof(generatedWeatherId)));
+  CHECK(strncmp(generatedWeatherId, "location-", 9) == 0);
+  CHECK(!weatherLocationIdGenerate(
+      "", generatedWeatherId, sizeof(generatedWeatherId)));
 
   PanelConfig deprecatedWeatherImageConfig;
   configDefaults(&deprecatedWeatherImageConfig);
@@ -1429,6 +1473,25 @@ int main(int argc, char **argv) {
                    error,
                    sizeof(error)) != 0);
   CHECK(unlink(duplicateWeatherPath) == 0);
+
+  PanelConfig duplicateGeneratedWeatherConfig;
+  configDefaults(&duplicateGeneratedWeatherConfig);
+  char duplicateGeneratedWeatherPath[] =
+      "/tmp/sliverbar-weather-generated-duplicate-XXXXXX";
+  fd = mkstemp(duplicateGeneratedWeatherPath);
+  CHECK(fd >= 0);
+  const char DUPLICATE_GENERATED_WEATHER[] =
+      "weather_location=München\nweather_location=Munchen\n";
+  CHECK(write(fd,
+              DUPLICATE_GENERATED_WEATHER,
+              sizeof(DUPLICATE_GENERATED_WEATHER) - 1) ==
+        (ssize_t)(sizeof(DUPLICATE_GENERATED_WEATHER) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&duplicateGeneratedWeatherConfig,
+                   duplicateGeneratedWeatherPath,
+                   error,
+                   sizeof(error)) != 0);
+  CHECK(unlink(duplicateGeneratedWeatherPath) == 0);
 
   char invalidPath[] = "/tmp/sliverbar-invalid-XXXXXX";
   fd = mkstemp(invalidPath);

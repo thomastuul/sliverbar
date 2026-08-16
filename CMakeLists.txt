@@ -213,6 +213,12 @@ if(BUILD_TESTING)
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/config-search.sh
                 $<TARGET_FILE:sliverbar>
     )
+    add_test(
+        NAME weather_locations
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/tests/weather-locations.sh
+                $<TARGET_FILE:sliverbar>
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/fixtures/weather-forecast.json
+    )
     set_tests_properties(version PROPERTIES
         PASS_REGULAR_EXPRESSION "^sliverbar ${PROJECT_VERSION}"
     )

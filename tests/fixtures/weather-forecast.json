@@ -2,6 +2,15 @@
   "ignored": {
     "text": "a brace } and an escaped quote \" do not end this object"
   },
+  "nearest_area": [
+    {
+      "areaName": [{"value": "Kardla"}],
+      "region": [{"value": "Hiiumaa"}],
+      "country": [{"value": "Estonia"}],
+      "latitude": "58.998",
+      "longitude": "22.749"
+    }
+  ],
   "current_condition": [{"temp_C": "9"}],
   "weather": [
     {

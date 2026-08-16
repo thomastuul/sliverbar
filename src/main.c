@@ -45,6 +45,50 @@ joinPath(char *out, size_t size, const char *base, const char *suffix) {
   return 0;
 }
 
+static int weatherCachePath(const PanelConfig *config,
+                            size_t locationIndex,
+                            char *path,
+                            size_t pathSize) {
+  if (!config || !path || !pathSize || !config->weatherCacheRoot[0] ||
+      locationIndex >= config->weatherLocationCount) {
+    errno = EINVAL;
+    return -1;
+  }
+  const char *id = config->weatherLocations[locationIndex].id;
+  char suffix[96];
+  int length = snprintf(suffix, sizeof(suffix), "/%s.json", id);
+  if (length < 0 || (size_t)length >= sizeof(suffix) ||
+      joinPath(path, pathSize, config->weatherCacheRoot, suffix)) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  return 0;
+}
+
+static void updateWeatherPaths(PanelConfig *config) {
+  if (!config->weatherCacheRoot[0] || !config->weatherLocationCount)
+    return;
+  weatherCachePath(config,
+                   config->activeWeatherLocation,
+                   config->weatherCache,
+                   sizeof(config->weatherCache));
+}
+
+static bool selectWeatherLocation(PanelConfig *config, const char *id) {
+  for (size_t i = 0; i < config->weatherLocationCount; i++) {
+    if (strcmp(config->weatherLocations[i].id, id) != 0)
+      continue;
+    config->activeWeatherLocation = i;
+    snprintf(config->location,
+             sizeof(config->location),
+             "%s",
+             config->weatherLocations[i].query);
+    updateWeatherPaths(config);
+    return true;
+  }
+  return false;
+}
+
 static const char *timerSoundBackend(void) {
   static const char *const BACKENDS[] = {
       "pw-play", "paplay", "canberra-gtk-play", "aplay"};
@@ -483,16 +527,11 @@ static int scheduleBrightness(const PanelConfig *c,
 static void refreshWeather(const PanelConfig *c) {
   if (!*c->weatherCache || !commandExists("curl"))
     return;
-  char location[256], url[512];
-  snprintf(location, sizeof(location), "%s", c->location);
-  for (char *p = location; *p; p++)
-    if (*p == ' ')
-      *p = '+';
-  snprintf(url,
-           sizeof(url),
-           "https://wttr.in/%s?format=j1&lang=%s",
-           location,
-           panelLanguage(c));
+  char url[512];
+  if (weatherLocationUrl(c->location, panelLanguage(c), url, sizeof(url))) {
+    logMessage("ERROR", "cannot encode weather location: %s", strerror(errno));
+    return;
+  }
   char data[32768];
   char *av[] = {
       "curl", "-fsSL", "--connect-timeout", "3", "--max-time", "15", url, NULL};
@@ -522,33 +561,6 @@ static pid_t startWeatherRefresh(const PanelConfig *c) {
     _exit(0);
   }
   return pid;
-}
-
-static void updateWeatherPaths(PanelConfig *config) {
-  if (!config->weatherCacheRoot[0] || !config->weatherLocationCount)
-    return;
-  const char *id = config->weatherLocations[config->activeWeatherLocation].id;
-  char suffix[96];
-  snprintf(suffix, sizeof(suffix), "/%s.json", id);
-  joinPath(config->weatherCache,
-           sizeof(config->weatherCache),
-           config->weatherCacheRoot,
-           suffix);
-}
-
-static bool selectWeatherLocation(PanelConfig *config, const char *id) {
-  for (size_t i = 0; i < config->weatherLocationCount; i++) {
-    if (strcmp(config->weatherLocations[i].id, id) != 0)
-      continue;
-    config->activeWeatherLocation = i;
-    snprintf(config->location,
-             sizeof(config->location),
-             "%s",
-             config->weatherLocations[i].query);
-    updateWeatherPaths(config);
-    return true;
-  }
-  return false;
 }
 
 static int openApplicationLauncher(NativePopup *popup) {
@@ -1496,9 +1508,33 @@ static int runDiagnostics(const PanelConfig *config,
     printf("role.%s=%s\n", appRoleName(role), description);
   }
   printf("weather.locations=%zu\n", config->weatherLocationCount);
-  if (config->weatherLocationCount)
+  if (config->weatherLocationCount) {
     printf("weather.active=%s\n",
            config->weatherLocations[config->activeWeatherLocation].id);
+    for (size_t i = 0; i < config->weatherLocationCount; i++) {
+      const WeatherLocation *location = &config->weatherLocations[i];
+      printf("weather.location.%zu.id=%s\n", i, location->id);
+      printf("weather.location.%zu.label=%s\n", i, location->label);
+      printf("weather.location.%zu.query=%s\n", i, location->query);
+      char cachePath[PANEL_PATH_MAX], json[32768];
+      WeatherResolvedLocation resolved;
+      if (weatherCachePath(config, i, cachePath, sizeof(cachePath)) ||
+          readTextFile(cachePath, json, sizeof(json)) ||
+          weatherResolvedLocationParse(json, &resolved)) {
+        printf("weather.location.%zu.resolved=unavailable\n", i);
+        continue;
+      }
+      printf("weather.location.%zu.resolved=yes\n", i);
+      printf("weather.location.%zu.resolved.area=%s\n", i, resolved.area);
+      printf("weather.location.%zu.resolved.region=%s\n", i, resolved.region);
+      printf("weather.location.%zu.resolved.country=%s\n", i, resolved.country);
+      printf(
+          "weather.location.%zu.resolved.latitude=%s\n", i, resolved.latitude);
+      printf("weather.location.%zu.resolved.longitude=%s\n",
+             i,
+             resolved.longitude);
+    }
+  }
   PowerAction powerActions[16];
   size_t powerActionCount =
       powerActionList(config,
@@ -1732,7 +1768,6 @@ int main(int argc, char **argv) {
     logMessage("ERROR", "%s", error);
     return 1;
   }
-#ifdef HAVE_NATIVE_PANEL
   const char *home = getenv("HOME");
   const char *cache = getenv("XDG_CACHE_HOME");
   const char *stateHome = getenv("XDG_STATE_HOME");
@@ -1760,7 +1795,6 @@ int main(int argc, char **argv) {
              "/sliverbar/weather");
     updateWeatherPaths(&cfg);
   }
-#endif
   if (check) {
     puts("configuration valid");
     return 0;

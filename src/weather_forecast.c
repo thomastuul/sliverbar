@@ -14,6 +14,61 @@ typedef struct {
 
 static const int FORECAST_HOURS[WEATHER_FORECAST_SLOT_COUNT] = {6, 12, 18, 21};
 
+int weatherLocationUrl(const char *query,
+                       const char *language,
+                       char *url,
+                       size_t urlSize) {
+  if (!query || !*query || !language || !*language || !url || !urlSize) {
+    errno = EINVAL;
+    return -1;
+  }
+  for (const unsigned char *cursor = (const unsigned char *)language; *cursor;
+       cursor++)
+    if (!((*cursor >= 'a' && *cursor <= 'z') ||
+          (*cursor >= 'A' && *cursor <= 'Z') || *cursor == '-')) {
+      errno = EINVAL;
+      return -1;
+    }
+  static const char PREFIX[] = "https://wttr.in/";
+  static const char SUFFIX[] = "?format=j1&lang=";
+  size_t used = sizeof(PREFIX) - 1;
+  if (used >= urlSize) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  memcpy(url, PREFIX, used);
+  static const char HEX[] = "0123456789ABCDEF";
+  for (const unsigned char *cursor = (const unsigned char *)query; *cursor;
+       cursor++) {
+    bool unreserved = (*cursor >= 'A' && *cursor <= 'Z') ||
+                      (*cursor >= 'a' && *cursor <= 'z') ||
+                      (*cursor >= '0' && *cursor <= '9') || *cursor == '-' ||
+                      *cursor == '.' || *cursor == '_' || *cursor == '~';
+    size_t required = unreserved ? 1 : 3;
+    if (used + required >= urlSize) {
+      errno = ENAMETOOLONG;
+      return -1;
+    }
+    if (unreserved) {
+      url[used++] = (char)*cursor;
+    } else {
+      url[used++] = '%';
+      url[used++] = HEX[*cursor >> 4U];
+      url[used++] = HEX[*cursor & 0x0fU];
+    }
+  }
+  size_t suffixLength = sizeof(SUFFIX) - 1;
+  size_t languageLength = strlen(language);
+  if (used + suffixLength + languageLength >= urlSize) {
+    errno = ENAMETOOLONG;
+    return -1;
+  }
+  memcpy(url + used, SUFFIX, suffixLength);
+  used += suffixLength;
+  memcpy(url + used, language, languageLength + 1);
+  return 0;
+}
+
 static const char *skipWhitespace(const char *cursor, const char *end) {
   while (cursor < end && isspace((unsigned char)*cursor))
     cursor++;
@@ -196,6 +251,20 @@ static bool valueInteger(JsonValue value, int *output) {
 static bool memberInteger(JsonValue object, const char *key, int *output) {
   JsonValue value;
   return objectMember(object, key, &value) && valueInteger(value, output);
+}
+
+static bool
+memberText(JsonValue object, const char *key, char *output, size_t size) {
+  JsonValue value;
+  return objectMember(object, key, &value) && valueText(value, output, size);
+}
+
+static bool
+localizedText(JsonValue object, const char *key, char *output, size_t size) {
+  JsonValue values, first;
+  return objectMember(object, key, &values) &&
+         arrayElement(values, 0, &first) &&
+         memberText(first, "value", output, size);
 }
 
 WeatherCondition weatherConditionFromCode(int code) {
@@ -453,6 +522,31 @@ int weatherForecastParse(const char *json, WeatherForecast *forecast) {
       forecast->dayCount = index + 1;
   }
   return forecast->dayCount > 0 ? 0 : -1;
+}
+
+int weatherResolvedLocationParse(const char *json,
+                                 WeatherResolvedLocation *location) {
+  if (!json || !location)
+    return -1;
+  memset(location, 0, sizeof(*location));
+  JsonValue root = {.begin = json, .end = json + strlen(json)};
+  const char *rootEnd = skipValue(root.begin, root.end, 0);
+  if (!rootEnd || skipWhitespace(rootEnd, root.end) != root.end)
+    return -1;
+  JsonValue locations, first;
+  if (!objectMember(root, "nearest_area", &locations) ||
+      !arrayElement(locations, 0, &first) ||
+      !localizedText(
+          first, "areaName", location->area, sizeof(location->area)) ||
+      !localizedText(
+          first, "country", location->country, sizeof(location->country)) ||
+      !memberText(
+          first, "latitude", location->latitude, sizeof(location->latitude)) ||
+      !memberText(
+          first, "longitude", location->longitude, sizeof(location->longitude)))
+    return -1;
+  localizedText(first, "region", location->region, sizeof(location->region));
+  return 0;
 }
 
 const char *weatherForecastUpdatedLabel(time_t updatedAt,
