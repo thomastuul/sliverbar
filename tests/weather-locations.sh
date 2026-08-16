@@ -19,7 +19,7 @@ cat >"$config" <<'EOF'
 weather_location=München
 weather_location=Uhldingen-Mühlhofen
 weather_location=Kärdla, Estonia
-weather_default=kardla-estonia
+weather_default=Kärdla, Estonia
 module_weather=enabled
 EOF
 

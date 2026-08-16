@@ -1347,7 +1347,7 @@ int main(int argc, char **argv) {
   const char WEATHER_CONFIG[] = "weather_location=München\n"
                                 "weather_location=Uhldingen-Mühlhofen\n"
                                 "weather_location=Kärdla, Estonia\n"
-                                "weather_default=kardla-estonia\n";
+                                "weather_default=Kärdla, Estonia\n";
   CHECK(write(fd, WEATHER_CONFIG, sizeof(WEATHER_CONFIG) - 1) ==
         (ssize_t)(sizeof(WEATHER_CONFIG) - 1));
   CHECK(close(fd) == 0);
@@ -1362,6 +1362,27 @@ int main(int argc, char **argv) {
         0);
   CHECK(strcmp(weatherConfig.weatherLocations[2].id, "kardla-estonia") == 0);
   CHECK(unlink(weatherPath) == 0);
+
+  PanelConfig weatherIdDefaultConfig;
+  configDefaults(&weatherIdDefaultConfig);
+  char weatherIdDefaultPath[] = "/tmp/sliverbar-weather-id-default-XXXXXX";
+  fd = mkstemp(weatherIdDefaultPath);
+  CHECK(fd >= 0);
+  const char WEATHER_ID_DEFAULT_CONFIG[] = "weather_location=München\n"
+                                           "weather_location=Berlin\n"
+                                           "weather_default=berlin\n";
+  CHECK(write(fd,
+              WEATHER_ID_DEFAULT_CONFIG,
+              sizeof(WEATHER_ID_DEFAULT_CONFIG) - 1) ==
+        (ssize_t)(sizeof(WEATHER_ID_DEFAULT_CONFIG) - 1));
+  CHECK(close(fd) == 0);
+  CHECK(configLoad(&weatherIdDefaultConfig,
+                   weatherIdDefaultPath,
+                   error,
+                   sizeof(error)) == 0);
+  CHECK(weatherIdDefaultConfig.activeWeatherLocation == 1);
+  CHECK(strcmp(weatherIdDefaultConfig.location, "Berlin") == 0);
+  CHECK(unlink(weatherIdDefaultPath) == 0);
 
   char generatedWeatherId[64];
   CHECK(weatherLocationIdGenerate(

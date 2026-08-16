@@ -798,7 +798,8 @@ int configLoad(PanelConfig *c,
     if (c->defaultWeatherLocation[0]) {
       bool found = false;
       for (size_t i = 0; i < c->weatherLocationCount; i++)
-        if (!strcmp(c->weatherLocations[i].id, c->defaultWeatherLocation)) {
+        if (!strcmp(c->weatherLocations[i].id, c->defaultWeatherLocation) ||
+            !strcmp(c->weatherLocations[i].label, c->defaultWeatherLocation)) {
           selected = i;
           found = true;
           break;
