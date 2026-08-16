@@ -1,4 +1,4 @@
-.TH SLIVERBAR 1 "July 2026" "sliverbar @PROJECT_VERSION@" "User Commands"
+.TH SLIVERBAR 1 "August 2026" "sliverbar @PROJECT_VERSION@" "User Commands"
 .SH NAME
 sliverbar \- lightweight native X11 panel
 .SH SYNOPSIS
