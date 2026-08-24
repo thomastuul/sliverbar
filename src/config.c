@@ -22,10 +22,7 @@ void configDefaults(PanelConfig *c) {
   copy(c->workspaceBackend, sizeof(c->workspaceBackend), "auto");
   copy(c->applicationLauncher, sizeof(c->applicationLauncher), "auto");
   copy(c->powerMenuMode, sizeof(c->powerMenuMode), "auto");
-  copy(c->powerActions,
-       sizeof(c->powerActions),
-       "lock,suspend,hibernate,suspend_then_hibernate,hybrid_sleep,reboot,"
-       "poweroff");
+  copy(c->powerActions, sizeof(c->powerActions), "auto");
   copy(c->powerConfirm,
        sizeof(c->powerConfirm),
        "suspend,hibernate,suspend_then_hibernate,hybrid_sleep,reboot,poweroff");
@@ -766,6 +763,8 @@ int configLoad(PanelConfig *c,
                                           "reboot",
                                           "poweroff"};
   for (size_t listIndex = 0; !rc && listIndex < 2; listIndex++) {
+    if (listIndex == 0 && !strcmp(POWER_LISTS[listIndex], "auto"))
+      continue;
     char list[256];
     copy(list, sizeof(list), POWER_LISTS[listIndex]);
     char *save = NULL;

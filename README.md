@@ -382,13 +382,14 @@ confirmation releases it before a sleep request and restores it if the request
 fails. A generic logout entry is intentionally not guessed because safe logout
 is session- or WM-specific.
 
-`power_actions=` is an ordered comma-separated subset of `lock`, `suspend`,
-`hibernate`, `suspend_then_hibernate`, `hybrid_sleep`, `reboot`, and
-`poweroff`; capability detection may still hide entries. `power_confirm=`
-selects which allowed actions require confirmation and defaults to every action
-except lock. Lock appears only when a known session ScreenSaver service is
-registered; the logind lock signal alone is not treated as proof that a locker
-exists.
+`power_actions=auto` considers every known action in the order `lock`,
+`suspend`, `hibernate`, `suspend_then_hibernate`, `hybrid_sleep`, `reboot`, and
+`poweroff`, then hides entries unavailable through logind. An ordered
+comma-separated subset can be configured instead to restrict or reorder the
+menu. `power_confirm=` selects which allowed actions require confirmation and
+defaults to every action except lock. Lock appears only when a known session
+ScreenSaver service is registered; the logind lock signal alone is not treated
+as proof that a locker exists.
 
 ### Battery power profiles
 
