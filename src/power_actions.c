@@ -43,6 +43,17 @@ static const PowerDefinition DEFINITIONS[] = {
     {"poweroff", "", "Power off", "Ausschalten", "CanPowerOff", "PowerOff"},
 };
 
+static const char AUTO_ACTIONS[] = "lock,suspend,hibernate,suspend_then_"
+                                   "hibernate,hybrid_sleep,reboot,poweroff";
+
+static const PowerDefinition *definitionForId(const char *id, size_t length) {
+  for (size_t i = 0; i < sizeof(DEFINITIONS) / sizeof(DEFINITIONS[0]); i++)
+    if (strlen(DEFINITIONS[i].id) == length &&
+        !memcmp(DEFINITIONS[i].id, id, length))
+      return &DEFINITIONS[i];
+  return NULL;
+}
+
 #ifdef HAVE_GIO
 static GDBusProxy *loginProxy(void) {
   GError *error = NULL;
@@ -132,6 +143,8 @@ static bool capability(GDBusProxy *proxy,
 bool powerActionAllowed(const char *selection, const char *id) {
   if (!selection || !id || !*id)
     return false;
+  if (!strcmp(selection, "auto"))
+    return definitionForId(id, strlen(id)) != NULL;
   const char *cursor = selection;
   size_t idLength = strlen(id);
   while (*cursor) {
@@ -167,7 +180,8 @@ size_t powerActionList(const PanelConfig *config,
   if (!proxy)
     return 0;
   size_t count = 0;
-  const char *cursor = selection;
+  const char *cursor =
+      selection && !strcmp(selection, "auto") ? AUTO_ACTIONS : selection;
   while (cursor && *cursor && count < capacity) {
     while (*cursor == ',' || *cursor == ' ' || *cursor == '\t')
       cursor++;
@@ -177,13 +191,7 @@ size_t powerActionList(const PanelConfig *config,
     size_t length = end ? (size_t)(end - cursor) : strlen(cursor);
     while (length && (cursor[length - 1] == ' ' || cursor[length - 1] == '\t'))
       length--;
-    const PowerDefinition *definition = NULL;
-    for (size_t i = 0; i < sizeof(DEFINITIONS) / sizeof(DEFINITIONS[0]); i++)
-      if (strlen(DEFINITIONS[i].id) == length &&
-          !memcmp(DEFINITIONS[i].id, cursor, length)) {
-        definition = &DEFINITIONS[i];
-        break;
-      }
+    const PowerDefinition *definition = definitionForId(cursor, length);
     cursor = end ? end + 1 : cursor + length;
     if (!definition ||
         (!strcmp(definition->id, "lock") && !sessionLockerAvailable()))

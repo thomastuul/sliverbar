@@ -202,7 +202,10 @@ int main(int argc, char **argv) {
   CHECK(strcmp(cfg.workspaceBackend, "auto") == 0);
   CHECK(strcmp(cfg.applicationLauncher, "auto") == 0);
   CHECK(strcmp(cfg.powerMenuMode, "auto") == 0);
+  CHECK(strcmp(cfg.powerActions, "auto") == 0);
   CHECK(powerActionAllowed(cfg.powerActions, "reboot"));
+  CHECK(powerActionAllowed(cfg.powerActions, "hibernate"));
+  CHECK(!powerActionAllowed(cfg.powerActions, "invalid"));
   CHECK(!powerActionAllowed(cfg.powerConfirm, "lock"));
   CHECK(strstr(cfg.font, "Monospace") != NULL);
   CHECK(cfg.iconFont[0] == '\0');

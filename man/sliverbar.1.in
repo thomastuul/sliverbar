@@ -187,7 +187,12 @@ menu is configured with
 .BR power_menu= .
 .TP
 .B power_actions, power_confirm
-Comma-separated ordered subsets of
+The value
+.B auto
+for
+.B power_actions
+considers every known action and lets systemd-logind hide unavailable ones.
+Alternatively, both settings accept comma-separated ordered subsets of
 .BR lock ,
 .BR suspend ,
 .BR hibernate ,

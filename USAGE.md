@@ -423,8 +423,10 @@ Power-Block. Das interne Menü fragt die Fähigkeiten von
 - Neustart;
 - Ausschalten.
 
-`power_actions` bestimmt die erlaubte und sortierte Teilmenge,
-`power_confirm` die bestätigungspflichtigen Aktionen. Sperren wird nur
+`power_actions=auto` prüft alle bekannten Aktionen in der dargestellten
+Reihenfolge und blendet über logind nicht verfügbare Aktionen aus. Alternativ
+bestimmt eine kommaseparierte Liste die erlaubte und sortierte Teilmenge.
+`power_confirm` legt die bestätigungspflichtigen Aktionen fest. Sperren wird nur
 angeboten, wenn ein bekannter ScreenSaver-Dienst registriert ist. Eine
 allgemeine Logout-Aktion wird nicht geraten, weil sie vom jeweiligen Desktop
 oder Window-Manager abhängt.
