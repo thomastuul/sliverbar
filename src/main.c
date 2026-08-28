@@ -2627,13 +2627,27 @@ int main(int argc, char **argv) {
   cfg.internalLauncherAvailable =
       nativePopupAvailable(popup) && appLauncherHasGio();
   PowerAction availablePowerActions[16];
+  size_t availablePowerActionCount = 0;
+  PowerActionQueryStatus powerActionQueryStatus = POWER_ACTION_QUERY_COMPLETE;
+  if (nativePopupAvailable(popup))
+    powerActionQueryStatus = powerActionQuery(
+        &cfg,
+        cfg.powerActions,
+        availablePowerActions,
+        sizeof(availablePowerActions) / sizeof(availablePowerActions[0]),
+        &availablePowerActionCount);
   cfg.internalPowerAvailable =
-      nativePopupAvailable(popup) &&
-      powerActionList(&cfg,
-                      cfg.powerActions,
-                      availablePowerActions,
-                      sizeof(availablePowerActions) /
-                          sizeof(availablePowerActions[0])) > 0;
+      nativePopupAvailable(popup) && availablePowerActionCount > 0;
+  unsigned powerActionQueryFailures =
+      powerActionQueryStatus == POWER_ACTION_QUERY_FAILED ? 1U : 0U;
+  unsigned powerActionRetryDelaySeconds =
+      powerActionRetryDelay(powerActionQueryFailures);
+  unsigned powerActionRetryTick =
+      powerActionRetryDelaySeconds ? powerActionRetryDelaySeconds + 1U : 0U;
+  if (powerActionRetryDelaySeconds)
+    logMessage("WARNING",
+               "power availability query failed; retrying in %u second(s)",
+               powerActionRetryDelaySeconds);
   PowerProfileState initialProfileState;
   cfg.internalPowerProfilesAvailable =
       nativePopupAvailable(popup) &&
@@ -2779,6 +2793,35 @@ int main(int argc, char **argv) {
       ticks += (unsigned)n;
       moduleClock(&cfg, &state);
       updateOpenAgenda(popup, &cfg, &agendaSnapshot);
+      if (powerActionRetryTick && ticks >= powerActionRetryTick) {
+        availablePowerActionCount = 0;
+        powerActionQueryStatus = powerActionQuery(
+            &cfg,
+            cfg.powerActions,
+            availablePowerActions,
+            sizeof(availablePowerActions) / sizeof(availablePowerActions[0]),
+            &availablePowerActionCount);
+        if (powerActionQueryStatus == POWER_ACTION_QUERY_COMPLETE) {
+          powerActionRetryTick = 0;
+          if (availablePowerActionCount > 0) {
+            cfg.internalPowerAvailable = true;
+            moduleStatic(&cfg, &state);
+            logMessage("INFO", "power actions became available after startup");
+          }
+        } else {
+          powerActionQueryFailures++;
+          unsigned retryDelay = powerActionRetryDelay(powerActionQueryFailures);
+          powerActionRetryTick = retryDelay ? ticks + retryDelay : 0;
+          if (retryDelay)
+            logMessage(
+                "WARNING",
+                "power availability query failed; retrying in %u second(s)",
+                retryDelay);
+          else
+            logMessage("WARNING",
+                       "power availability query failed; retries exhausted");
+        }
+      }
       if (wifiScanPolls > 0) {
         if (wifiMenuOpen && nativePopupIsOpen(popup)) {
           if (wifiQuery.pid <= 0 && startWifiNetworkQuery(&wifiQuery))
