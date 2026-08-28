@@ -1676,6 +1676,36 @@ static int smokeTestNativeTray(NativePanel *panel,
     logMessage("ERROR", "native smoke-test tray cleanup failed");
     return -1;
   }
+
+  xcb_window_t staleIcon = xcb_generate_id(connection);
+  xcb_create_window(connection,
+                    screen->root_depth,
+                    staleIcon,
+                    screen->root,
+                    0,
+                    0,
+                    16,
+                    16,
+                    0,
+                    XCB_WINDOW_CLASS_INPUT_OUTPUT,
+                    screen->root_visual,
+                    XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK,
+                    values);
+  xcb_destroy_window(connection, staleIcon);
+  sync = xcb_get_input_focus_reply(
+      connection, xcb_get_input_focus(connection), NULL);
+  free(sync);
+  dock.data.data32[2] = staleIcon;
+  redraw = false;
+  nativePanelHandleEvent(panel,
+                         (const xcb_generic_event_t *)&dock,
+                         action,
+                         sizeof(action),
+                         &redraw);
+  if (nativePanelTrayIconCount(panel) != 0 || redraw) {
+    logMessage("ERROR", "native smoke-test accepted a stale tray window");
+    return -1;
+  }
   return 0;
 }
 #endif
