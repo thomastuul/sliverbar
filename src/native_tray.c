@@ -154,43 +154,81 @@ static void sendConfigure(NativeTray *tray, const TrayIcon *icon) {
                  (const char *)&configured);
 }
 
+static bool checkedRequest(xcb_connection_t *connection,
+                           xcb_void_cookie_t cookie) {
+  xcb_generic_error_t *error = xcb_request_check(connection, cookie);
+  bool succeeded = error == NULL;
+  free(error);
+  return succeeded;
+}
+
+static void discardIcon(NativeTray *tray,
+                        const TrayIcon *icon,
+                        bool eventSelected,
+                        bool saved) {
+  if (saved)
+    xcb_change_save_set(tray->connection, XCB_SET_MODE_DELETE, icon->window);
+  if (eventSelected) {
+    uint32_t eventMask = XCB_EVENT_MASK_NO_EVENT;
+    xcb_change_window_attributes(
+        tray->connection, icon->window, XCB_CW_EVENT_MASK, &eventMask);
+  }
+  xcb_destroy_window(tray->connection, icon->container);
+  xcb_flush(tray->connection);
+}
+
 static bool dockIcon(NativeTray *tray, xcb_window_t window) {
   if (!tray->ownsSelection || window == XCB_WINDOW_NONE ||
       hasIcon(tray, window) || tray->iconCount >= MAX_TRAY_ICONS)
     return false;
-  TrayIcon *icon = &tray->icons[tray->iconCount++];
-  icon->window = window;
-  icon->width = scaledWidth(tray, window);
-  icon->mapped = iconMapped(tray, window);
-  icon->container = xcb_generate_id(tray->connection);
+  TrayIcon icon = {.window = window,
+                   .width = scaledWidth(tray, window),
+                   .mapped = iconMapped(tray, window),
+                   .container = xcb_generate_id(tray->connection)};
   uint32_t containerValues[] = {XCB_BACK_PIXMAP_PARENT_RELATIVE,
                                 XCB_EVENT_MASK_STRUCTURE_NOTIFY |
                                     XCB_EVENT_MASK_SUBSTRUCTURE_NOTIFY};
-  xcb_create_window(tray->connection,
-                    tray->screen->root_depth,
-                    icon->container,
-                    tray->hostWindow,
-                    0,
-                    0,
-                    (uint16_t)icon->width,
-                    (uint16_t)tray->iconHeight,
-                    0,
-                    XCB_WINDOW_CLASS_INPUT_OUTPUT,
-                    tray->screen->root_visual,
-                    XCB_CW_BACK_PIXMAP | XCB_CW_EVENT_MASK,
-                    containerValues);
+  if (!checkedRequest(
+          tray->connection,
+          xcb_create_window_checked(tray->connection,
+                                    tray->screen->root_depth,
+                                    icon.container,
+                                    tray->hostWindow,
+                                    0,
+                                    0,
+                                    (uint16_t)icon.width,
+                                    (uint16_t)tray->iconHeight,
+                                    0,
+                                    XCB_WINDOW_CLASS_INPUT_OUTPUT,
+                                    tray->screen->root_visual,
+                                    XCB_CW_BACK_PIXMAP | XCB_CW_EVENT_MASK,
+                                    containerValues)))
+    return false;
   uint32_t eventMask =
       XCB_EVENT_MASK_PROPERTY_CHANGE | XCB_EVENT_MASK_STRUCTURE_NOTIFY;
-  xcb_change_window_attributes(
-      tray->connection, window, XCB_CW_EVENT_MASK, &eventMask);
+  if (!checkedRequest(
+          tray->connection,
+          xcb_change_window_attributes_checked(
+              tray->connection, window, XCB_CW_EVENT_MASK, &eventMask))) {
+    discardIcon(tray, &icon, false, false);
+    return false;
+  }
   xcb_change_save_set(tray->connection, XCB_SET_MODE_INSERT, window);
-  xcb_reparent_window(tray->connection, window, icon->container, 0, 0);
+  if (!checkedRequest(tray->connection,
+                      xcb_reparent_window_checked(
+                          tray->connection, window, icon.container, 0, 0))) {
+    discardIcon(tray, &icon, true, true);
+    return false;
+  }
+  tray->icons[tray->iconCount++] = icon;
+  TrayIcon *embeddedIcon = &tray->icons[tray->iconCount - 1];
   int width = nativeTrayWidth(tray);
   nativeTrayLayout(tray, tray->layoutRight - width);
-  sendXembed(tray, icon, XEMBED_EMBEDDED_NOTIFY, icon->container);
-  icon->embedded = true;
+  sendXembed(
+      tray, embeddedIcon, XEMBED_EMBEDDED_NOTIFY, embeddedIcon->container);
+  embeddedIcon->embedded = true;
   nativeTrayLayout(tray, tray->layoutX);
-  sendXembed(tray, icon, XEMBED_WINDOW_ACTIVATE, 0);
+  sendXembed(tray, embeddedIcon, XEMBED_WINDOW_ACTIVATE, 0);
   xcb_flush(tray->connection);
   return true;
 }

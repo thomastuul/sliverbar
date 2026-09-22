@@ -18,6 +18,12 @@ typedef struct {
   const char *method;
 } PowerDefinition;
 
+typedef enum {
+  CAPABILITY_UNAVAILABLE,
+  CAPABILITY_ALLOWED,
+  CAPABILITY_FAILED,
+} CapabilityStatus;
+
 static const PowerDefinition DEFINITIONS[] = {
     {"lock", "", "Lock screen", "Bildschirm sperren", NULL, "LockSessions"},
     {"suspend", "", "Suspend", "Standby", "CanSuspend", "Suspend"},
@@ -110,14 +116,14 @@ static bool sessionLockerAvailable(void) {
   return available;
 }
 
-static bool capability(GDBusProxy *proxy,
-                       const char *method,
-                       char *authorization,
-                       size_t authorizationSize) {
+static CapabilityStatus capability(GDBusProxy *proxy,
+                                   const char *method,
+                                   char *authorization,
+                                   size_t authorizationSize) {
   if (!method) {
     if (authorization)
       snprintf(authorization, authorizationSize, "yes");
-    return true;
+    return CAPABILITY_ALLOWED;
   }
   GError *error = NULL;
   GVariant *reply = g_dbus_proxy_call_sync(
@@ -125,7 +131,7 @@ static bool capability(GDBusProxy *proxy,
   if (error)
     g_error_free(error);
   if (!reply)
-    return false;
+    return CAPABILITY_FAILED;
   const char *answer = NULL;
   g_variant_get(reply, "(&s)", &answer);
   bool allowed =
@@ -136,7 +142,7 @@ static bool capability(GDBusProxy *proxy,
              "%s",
              answer ? answer : "unavailable");
   g_variant_unref(reply);
-  return allowed;
+  return allowed ? CAPABILITY_ALLOWED : CAPABILITY_UNAVAILABLE;
 }
 #endif
 
@@ -169,20 +175,23 @@ const char *powerActionLabel(const PanelConfig *config, const char *id) {
   return id;
 }
 
-size_t powerActionList(const PanelConfig *config,
-                       const char *selection,
-                       PowerAction *actions,
-                       size_t capacity) {
-  if (!actions || capacity == 0)
-    return 0;
+PowerActionQueryStatus powerActionQuery(const PanelConfig *config,
+                                        const char *selection,
+                                        PowerAction *actions,
+                                        size_t capacity,
+                                        size_t *count) {
+  if (count)
+    *count = 0;
+  if (!actions || capacity == 0 || !count)
+    return POWER_ACTION_QUERY_COMPLETE;
 #ifdef HAVE_GIO
   GDBusProxy *proxy = loginProxy();
   if (!proxy)
-    return 0;
-  size_t count = 0;
+    return POWER_ACTION_QUERY_FAILED;
+  bool queryFailed = false;
   const char *cursor =
       selection && !strcmp(selection, "auto") ? AUTO_ACTIONS : selection;
-  while (cursor && *cursor && count < capacity) {
+  while (cursor && *cursor && *count < capacity) {
     while (*cursor == ',' || *cursor == ' ' || *cursor == '\t')
       cursor++;
     if (!*cursor)
@@ -196,32 +205,55 @@ size_t powerActionList(const PanelConfig *config,
     if (!definition ||
         (!strcmp(definition->id, "lock") && !sessionLockerAvailable()))
       continue;
-    if (!capability(proxy,
-                    definition->canMethod,
-                    actions[count].authorization,
-                    sizeof(actions[count].authorization)))
+    CapabilityStatus status = capability(proxy,
+                                         definition->canMethod,
+                                         actions[*count].authorization,
+                                         sizeof(actions[*count].authorization));
+    if (status == CAPABILITY_FAILED) {
+      queryFailed = true;
+      continue;
+    }
+    if (status != CAPABILITY_ALLOWED)
       continue;
     snprintf(
-        actions[count].id, sizeof(actions[count].id), "%s", definition->id);
-    snprintf(actions[count].glyph,
-             sizeof(actions[count].glyph),
+        actions[*count].id, sizeof(actions[*count].id), "%s", definition->id);
+    snprintf(actions[*count].glyph,
+             sizeof(actions[*count].glyph),
              "%s",
              definition->glyph);
-    snprintf(actions[count].label,
-             sizeof(actions[count].label),
+    snprintf(actions[*count].label,
+             sizeof(actions[*count].label),
              "%s",
              panelLanguageIsGerman(config) ? definition->labelDe
                                            : definition->labelEn);
-    count++;
+    (*count)++;
   }
   g_object_unref(proxy);
-  return count;
+  return *count == 0 && queryFailed ? POWER_ACTION_QUERY_FAILED
+                                    : POWER_ACTION_QUERY_COMPLETE;
 #else
   (void)config;
   (void)selection;
   (void)capacity;
-  return 0;
+  return POWER_ACTION_QUERY_COMPLETE;
 #endif
+}
+
+size_t powerActionList(const PanelConfig *config,
+                       const char *selection,
+                       PowerAction *actions,
+                       size_t capacity) {
+  size_t count = 0;
+  powerActionQuery(config, selection, actions, capacity, &count);
+  return count;
+}
+
+unsigned powerActionRetryDelay(unsigned failedAttempts) {
+  static const unsigned DELAYS[] = {1, 2, 4, 8, 16, 32};
+  if (failedAttempts == 0 ||
+      failedAttempts > sizeof(DELAYS) / sizeof(DELAYS[0]))
+    return 0;
+  return DELAYS[failedAttempts - 1];
 }
 
 int powerActionExecute(const char *id) {
@@ -237,7 +269,8 @@ int powerActionExecute(const char *id) {
   if (!strcmp(definition->id, "lock") && !sessionLockerAvailable())
     return -1;
   GDBusProxy *proxy = loginProxy();
-  if (!proxy || !capability(proxy, definition->canMethod, NULL, 0)) {
+  if (!proxy ||
+      capability(proxy, definition->canMethod, NULL, 0) != CAPABILITY_ALLOWED) {
     if (proxy)
       g_object_unref(proxy);
     return -1;

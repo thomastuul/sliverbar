@@ -13,11 +13,22 @@ typedef struct {
   char authorization[16];
 } PowerAction;
 
+typedef enum {
+  POWER_ACTION_QUERY_COMPLETE,
+  POWER_ACTION_QUERY_FAILED,
+} PowerActionQueryStatus;
+
 bool powerActionAllowed(const char *selection, const char *id);
+PowerActionQueryStatus powerActionQuery(const PanelConfig *config,
+                                        const char *selection,
+                                        PowerAction *actions,
+                                        size_t capacity,
+                                        size_t *count);
 size_t powerActionList(const PanelConfig *config,
                        const char *selection,
                        PowerAction *actions,
                        size_t capacity);
+unsigned powerActionRetryDelay(unsigned failedAttempts);
 const char *powerActionLabel(const PanelConfig *config, const char *id);
 int powerActionExecute(const char *id);
 

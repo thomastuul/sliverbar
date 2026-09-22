@@ -1676,6 +1676,36 @@ static int smokeTestNativeTray(NativePanel *panel,
     logMessage("ERROR", "native smoke-test tray cleanup failed");
     return -1;
   }
+
+  xcb_window_t staleIcon = xcb_generate_id(connection);
+  xcb_create_window(connection,
+                    screen->root_depth,
+                    staleIcon,
+                    screen->root,
+                    0,
+                    0,
+                    16,
+                    16,
+                    0,
+                    XCB_WINDOW_CLASS_INPUT_OUTPUT,
+                    screen->root_visual,
+                    XCB_CW_BACK_PIXEL | XCB_CW_EVENT_MASK,
+                    values);
+  xcb_destroy_window(connection, staleIcon);
+  sync = xcb_get_input_focus_reply(
+      connection, xcb_get_input_focus(connection), NULL);
+  free(sync);
+  dock.data.data32[2] = staleIcon;
+  redraw = false;
+  nativePanelHandleEvent(panel,
+                         (const xcb_generic_event_t *)&dock,
+                         action,
+                         sizeof(action),
+                         &redraw);
+  if (nativePanelTrayIconCount(panel) != 0 || redraw) {
+    logMessage("ERROR", "native smoke-test accepted a stale tray window");
+    return -1;
+  }
   return 0;
 }
 #endif
@@ -2597,13 +2627,27 @@ int main(int argc, char **argv) {
   cfg.internalLauncherAvailable =
       nativePopupAvailable(popup) && appLauncherHasGio();
   PowerAction availablePowerActions[16];
+  size_t availablePowerActionCount = 0;
+  PowerActionQueryStatus powerActionQueryStatus = POWER_ACTION_QUERY_COMPLETE;
+  if (nativePopupAvailable(popup))
+    powerActionQueryStatus = powerActionQuery(
+        &cfg,
+        cfg.powerActions,
+        availablePowerActions,
+        sizeof(availablePowerActions) / sizeof(availablePowerActions[0]),
+        &availablePowerActionCount);
   cfg.internalPowerAvailable =
-      nativePopupAvailable(popup) &&
-      powerActionList(&cfg,
-                      cfg.powerActions,
-                      availablePowerActions,
-                      sizeof(availablePowerActions) /
-                          sizeof(availablePowerActions[0])) > 0;
+      nativePopupAvailable(popup) && availablePowerActionCount > 0;
+  unsigned powerActionQueryFailures =
+      powerActionQueryStatus == POWER_ACTION_QUERY_FAILED ? 1U : 0U;
+  unsigned powerActionRetryDelaySeconds =
+      powerActionRetryDelay(powerActionQueryFailures);
+  unsigned powerActionRetryTick =
+      powerActionRetryDelaySeconds ? powerActionRetryDelaySeconds + 1U : 0U;
+  if (powerActionRetryDelaySeconds)
+    logMessage("WARNING",
+               "power availability query failed; retrying in %u second(s)",
+               powerActionRetryDelaySeconds);
   PowerProfileState initialProfileState;
   cfg.internalPowerProfilesAvailable =
       nativePopupAvailable(popup) &&
@@ -2749,6 +2793,35 @@ int main(int argc, char **argv) {
       ticks += (unsigned)n;
       moduleClock(&cfg, &state);
       updateOpenAgenda(popup, &cfg, &agendaSnapshot);
+      if (powerActionRetryTick && ticks >= powerActionRetryTick) {
+        availablePowerActionCount = 0;
+        powerActionQueryStatus = powerActionQuery(
+            &cfg,
+            cfg.powerActions,
+            availablePowerActions,
+            sizeof(availablePowerActions) / sizeof(availablePowerActions[0]),
+            &availablePowerActionCount);
+        if (powerActionQueryStatus == POWER_ACTION_QUERY_COMPLETE) {
+          powerActionRetryTick = 0;
+          if (availablePowerActionCount > 0) {
+            cfg.internalPowerAvailable = true;
+            moduleStatic(&cfg, &state);
+            logMessage("INFO", "power actions became available after startup");
+          }
+        } else {
+          powerActionQueryFailures++;
+          unsigned retryDelay = powerActionRetryDelay(powerActionQueryFailures);
+          powerActionRetryTick = retryDelay ? ticks + retryDelay : 0;
+          if (retryDelay)
+            logMessage(
+                "WARNING",
+                "power availability query failed; retrying in %u second(s)",
+                retryDelay);
+          else
+            logMessage("WARNING",
+                       "power availability query failed; retries exhausted");
+        }
+      }
       if (wifiScanPolls > 0) {
         if (wifiMenuOpen && nativePopupIsOpen(popup)) {
           if (wifiQuery.pid <= 0 && startWifiNetworkQuery(&wifiQuery))
