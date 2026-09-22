@@ -225,24 +225,8 @@ The wrapper retrieves the key with `secret-tool`, exports it only to the Codex
 process environment, and does not store it in a plaintext file. The desktop
 keyring may prompt for its login password when it is locked.
 
-The portable MCP configuration is provided as `.codex/config.toml.example`.
-Codex does not load the example file automatically, and it loads project-local
-`.codex/config.toml` only after the repository has been marked as trusted.
-Review and accept the project trust prompt before relying on this
-configuration. If the checkout must remain untrusted, merge the same MCP blocks
-into the user-level `~/.codex/config.toml` instead.
-
-If no local project configuration exists, copy the example before starting
-Codex:
-
-```bash
-cp .codex/config.toml.example .codex/config.toml
-```
-
-If `.codex/config.toml` already exists, merge the `mcp_servers.context7` and
-`mcp_servers.openaiDeveloperDocs` blocks instead of overwriting the file. Both
-the active configuration and `.codex/context7.env` are ignored so personal
-settings and API keys remain local.
+Personal Codex settings remain local. The files `.codex/config.toml` and
+`.codex/context7.env` are ignored and are not distributed with this repository.
 
 Each main block has a `module_NAME=auto|enabled|disabled` switch. `auto` hides
 blocks whose data source or optional runtime command is unavailable. The
