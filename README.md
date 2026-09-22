@@ -225,24 +225,8 @@ The wrapper retrieves the key with `secret-tool`, exports it only to the Codex
 process environment, and does not store it in a plaintext file. The desktop
 keyring may prompt for its login password when it is locked.
 
-The portable MCP configuration is provided as `.codex/config.toml.example`.
-Codex does not load the example file automatically, and it loads project-local
-`.codex/config.toml` only after the repository has been marked as trusted.
-Review and accept the project trust prompt before relying on this
-configuration. If the checkout must remain untrusted, merge the same MCP blocks
-into the user-level `~/.codex/config.toml` instead.
-
-If no local project configuration exists, copy the example before starting
-Codex:
-
-```bash
-cp .codex/config.toml.example .codex/config.toml
-```
-
-If `.codex/config.toml` already exists, merge the `mcp_servers.context7` and
-`mcp_servers.openaiDeveloperDocs` blocks instead of overwriting the file. Both
-the active configuration and `.codex/context7.env` are ignored so personal
-settings and API keys remain local.
+Personal Codex settings remain local. The files `.codex/config.toml` and
+`.codex/context7.env` are ignored and are not distributed with this repository.
 
 Each main block has a `module_NAME=auto|enabled|disabled` switch. `auto` hides
 blocks whose data source or optional runtime command is unavailable. The
@@ -537,17 +521,17 @@ second for up to five seconds.
 
 ## Feature mapping
 
-| Bash component | C implementation |
-| --- | --- |
-| `start.sh`, `sighandler.sh` | supervisor, `poll`, `timerfd`, `signalfd` |
-| `events.sh`, workspace block | EWMH backend with optional persistent `bspc subscribe report` backend |
-| `xtmon.sh`, `title_server.sh` | native XCB property events |
-| clock, CPU, battery, screencast | native `/proc`, `/sys`, time and XDG logic |
-| volume and brightness | backend detection plus validated action protocol |
-| network worker | `/sys/class/net`, optional nmcli query and monitor |
-| weather worker | non-blocking child, atomic per-location JSON caches |
-| trayer block | native XEmbed tray manager and direct child-window layout |
-| launcher, power and terminal clicks | detached, argument-based exec |
+| Bash component                      | C implementation                                                      |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `start.sh`, `sighandler.sh`         | supervisor, `poll`, `timerfd`, `signalfd`                             |
+| `events.sh`, workspace block        | EWMH backend with optional persistent `bspc subscribe report` backend |
+| `xtmon.sh`, `title_server.sh`       | native XCB property events                                            |
+| clock, CPU, battery, screencast     | native `/proc`, `/sys`, time and XDG logic                            |
+| volume and brightness               | backend detection plus validated action protocol                      |
+| network worker                      | `/sys/class/net`, optional nmcli query and monitor                    |
+| weather worker                      | non-blocking child, atomic per-location JSON caches                   |
+| trayer block                        | native XEmbed tray manager and direct child-window layout             |
+| launcher, power and terminal clicks | detached, argument-based exec                                         |
 
 The Bash directory is not read or executed by `sliverbar`.
 
@@ -556,16 +540,16 @@ gaps between glyphs and values rather than font-dependent spaces.
 
 ## Compatibility matrix
 
-| Area | Status | Coverage |
-| --- | --- | --- |
-| Linux x86-64, Debian 13 container | tested | GCC, Clang, CLI-only, ASan/UBSan |
-| X11, one RandR monitor | tested | Xvfb rendering and input smoke test |
-| Multiple monitors and X screens | tested | Xvfb right-monitor selection and second X screen |
-| bspwm | supported | optional report backend with EWMH fallback |
-| Other EWMH window managers | supported | generic properties; WM-specific behavior is best effort |
-| Non-EWMH window managers | best effort | independent modules work; workspaces/title may be absent |
-| Fedora 42 and Arch | best effort | reproducible manual compatibility containers |
-| Non-x86-64 | best effort | source build expected, not yet automated |
+| Area                              | Status      | Coverage                                                 |
+| --------------------------------- | ----------- | -------------------------------------------------------- |
+| Linux x86-64, Debian 13 container | tested      | GCC, Clang, CLI-only, ASan/UBSan                         |
+| X11, one RandR monitor            | tested      | Xvfb rendering and input smoke test                      |
+| Multiple monitors and X screens   | tested      | Xvfb right-monitor selection and second X screen         |
+| bspwm                             | supported   | optional report backend with EWMH fallback               |
+| Other EWMH window managers        | supported   | generic properties; WM-specific behavior is best effort  |
+| Non-EWMH window managers          | best effort | independent modules work; workspaces/title may be absent |
+| Fedora 42 and Arch                | best effort | reproducible manual compatibility containers             |
+| Non-x86-64                        | best effort | source build expected, not yet automated                 |
 
 Optional module backends are not panel prerequisites: `wpctl`/`pactl`/`amixer`
 for volume (with native `wpctl` preferred for mute on PipeWire), logind plus
