@@ -736,6 +736,8 @@ int nativePanelDraw(NativePanel *panel, const PanelState *state) {
   char markup[sizeof(panel->lastMarkup)];
   if (moduleModeActive(panel->config.moduleTray,
                        nativeTrayAvailable(panel->tray))) {
+    if (nativeTrayRefresh(panel->tray))
+      panel->repaintRequested = true;
     int width = nativeTrayWidth(panel->tray);
     snprintf(rendered.tray,
              sizeof(rendered.tray),

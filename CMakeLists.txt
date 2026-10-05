@@ -223,8 +223,17 @@ if(BUILD_TESTING)
         PASS_REGULAR_EXPRESSION "^sliverbar ${PROJECT_VERSION}"
     )
     if(SLIVERBAR_NATIVE_PANEL)
+        add_executable(test_native_tray tests/test_native_tray.c src/native_tray.c)
+        target_link_libraries(test_native_tray PRIVATE sliverbar_core PkgConfig::XCB)
+        target_compile_options(test_native_tray PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+        if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(test_native_tray PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(test_native_tray PRIVATE -fsanitize=address,undefined)
+        endif()
         find_program(XVFB_RUN xvfb-run)
         if(XVFB_RUN)
+            add_test(NAME native_tray_visibility
+                     COMMAND ${XVFB_RUN} -a $<TARGET_FILE:test_native_tray>)
             add_test(
                 NAME native_panel_smoke
                 COMMAND ${XVFB_RUN} -a $<TARGET_FILE:sliverbar>
