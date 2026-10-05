@@ -177,6 +177,12 @@ compositors render it as a seamless part of the panel. The renderer reserves
 the host's measured width. Sliverbar does not require the external `trayer`
 package.
 
+Tray clients requesting XEmbed visibility are shown even when Bluetooth is
+disabled. Hidden clients keep their registration but reserve no icon space or
+inter-icon gap; showing them again restores their original order. Sliverbar
+subscribes before reading a client's visibility and refreshes it before rendering
+to recover from missed visibility updates.
+
 ## Architecture
 
 The technical architecture, build targets, runtime flow, optional integrations,

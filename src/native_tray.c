@@ -2,7 +2,6 @@
 
 #include "panel.h"
 
-#include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -183,7 +182,6 @@ static bool dockIcon(NativeTray *tray, xcb_window_t window) {
     return false;
   TrayIcon icon = {.window = window,
                    .width = scaledWidth(tray, window),
-                   .mapped = iconMapped(tray, window),
                    .container = xcb_generate_id(tray->connection)};
   uint32_t containerValues[] = {XCB_BACK_PIXMAP_PARENT_RELATIVE,
                                 XCB_EVENT_MASK_STRUCTURE_NOTIFY |
@@ -213,6 +211,8 @@ static bool dockIcon(NativeTray *tray, xcb_window_t window) {
     discardIcon(tray, &icon, false, false);
     return false;
   }
+  /* Subscribe before reading so visibility changes cannot be missed. */
+  icon.mapped = iconMapped(tray, window);
   xcb_change_save_set(tray->connection, XCB_SET_MODE_INSERT, window);
   if (!checkedRequest(tray->connection,
                       xcb_reparent_window_checked(
@@ -442,6 +442,11 @@ bool nativeTrayHandleEvent(NativeTray *tray, const xcb_generic_event_t *event) {
         return true;
       }
     }
+  } else if (type == XCB_UNMAP_NOTIFY) {
+    /* A client can unmap itself without changing its XEmbed visibility. */
+    xcb_window_t window = ((const xcb_unmap_notify_event_t *)event)->window;
+    if (hasIcon(tray, window) && iconMapped(tray, window))
+      return true;
   } else if (type == XCB_CONFIGURE_REQUEST) {
     const xcb_configure_request_event_t *request =
         (const xcb_configure_request_event_t *)event;
@@ -461,6 +466,20 @@ bool nativeTrayHandleEvent(NativeTray *tray, const xcb_generic_event_t *event) {
     }
   }
   return false;
+}
+
+bool nativeTrayRefresh(NativeTray *tray) {
+  if (!tray || !tray->ownsSelection)
+    return false;
+  bool changed = false;
+  for (size_t i = 0; i < tray->iconCount; i++) {
+    bool mapped = iconMapped(tray, tray->icons[i].window);
+    if (mapped != tray->icons[i].mapped) {
+      tray->icons[i].mapped = mapped;
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 void nativeTrayLayout(NativeTray *tray, int x) {
@@ -485,6 +504,11 @@ void nativeTrayLayout(NativeTray *tray, int x) {
   int cursor = 0;
   for (size_t remaining = tray->iconCount; remaining > 0; remaining--) {
     TrayIcon *icon = &tray->icons[remaining - 1];
+    if (!icon->mapped) {
+      xcb_unmap_window(tray->connection, icon->window);
+      xcb_unmap_window(tray->connection, icon->container);
+      continue;
+    }
     uint32_t values[] = {(uint32_t)cursor,
                          (uint32_t)((tray->panelHeight - tray->iconHeight) / 2),
                          (uint32_t)icon->width,
@@ -544,10 +568,14 @@ int nativeTrayWidth(const NativeTray *tray) {
   if (!tray || !tray->ownsSelection || !tray->iconCount)
     return 0;
   int width = 0;
-  for (size_t i = 0; i < tray->iconCount; i++)
+  size_t visibleCount = 0;
+  for (size_t i = 0; i < tray->iconCount; i++) {
+    if (!tray->icons[i].mapped)
+      continue;
+    if (visibleCount++)
+      width += tray->gap;
     width += tray->icons[i].width;
-  if (tray->iconCount > 1 && tray->iconCount - 1 <= (size_t)INT_MAX)
-    width += (int)(tray->iconCount - 1) * tray->gap;
+  }
   return width;
 }
 

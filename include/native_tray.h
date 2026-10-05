@@ -16,6 +16,7 @@ NativeTray *nativeTrayCreate(xcb_connection_t *connection,
 void nativeTrayDestroy(NativeTray *tray);
 bool nativeTrayAcquire(NativeTray *tray);
 bool nativeTrayHandleEvent(NativeTray *tray, const xcb_generic_event_t *event);
+bool nativeTrayRefresh(NativeTray *tray);
 void nativeTrayLayout(NativeTray *tray, int x);
 void nativeTraySetVisible(NativeTray *tray, bool visible);
 bool nativeTrayOwnsSelection(const NativeTray *tray);
