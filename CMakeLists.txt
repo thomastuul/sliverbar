@@ -223,15 +223,36 @@ if(BUILD_TESTING)
         PASS_REGULAR_EXPRESSION "^sliverbar ${PROJECT_VERSION}"
     )
     if(SLIVERBAR_NATIVE_PANEL)
+        add_executable(test_native_popup tests/test_native_popup.c src/native_popup.c)
+        target_compile_definitions(test_native_popup PRIVATE
+            HAVE_NATIVE_PANEL=1
+            SLIVERBAR_TEST_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}"
+        )
+        target_link_libraries(test_native_popup PRIVATE
+            sliverbar_core PkgConfig::XCB PkgConfig::CAIRO_XCB PkgConfig::PANGOCAIRO
+        )
+        target_compile_options(test_native_popup PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+        if(XKBCOMMON_X11_FOUND)
+            target_compile_definitions(test_native_popup PRIVATE HAVE_XKBCOMMON_X11=1)
+            target_link_libraries(test_native_popup PRIVATE PkgConfig::XKBCOMMON_X11)
+        endif()
         add_executable(test_native_tray tests/test_native_tray.c src/native_tray.c)
         target_link_libraries(test_native_tray PRIVATE sliverbar_core PkgConfig::XCB)
         target_compile_options(test_native_tray PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
         if(SLIVERBAR_SANITIZERS AND CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
+            target_compile_options(test_native_popup PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
+            target_link_options(test_native_popup PRIVATE -fsanitize=address,undefined)
             target_compile_options(test_native_tray PRIVATE -fsanitize=address,undefined -fno-omit-frame-pointer)
             target_link_options(test_native_tray PRIVATE -fsanitize=address,undefined)
         endif()
         find_program(XVFB_RUN xvfb-run)
         if(XVFB_RUN)
+            if(XKBCOMMON_X11_FOUND)
+                add_test(NAME native_popup_forecast
+                         COMMAND ${XVFB_RUN} -a -s "-screen 0 1800x1400x24"
+                                 $<TARGET_FILE:test_native_popup>)
+                set_tests_properties(native_popup_forecast PROPERTIES TIMEOUT 30)
+            endif()
             add_test(NAME native_tray_visibility
                      COMMAND ${XVFB_RUN} -a $<TARGET_FILE:test_native_tray>)
             add_test(
