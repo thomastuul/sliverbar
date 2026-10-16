@@ -1,3 +1,4 @@
 /build/
+/.serena/
 .codex/config.toml
 .codex/context7.env
