@@ -200,3 +200,16 @@ requires explicit approval.
 Packaging changes follow `docs/packaging.md`, including `./scripts/test.sh` and
 package validation. They require a live-system test only when they affect
 installation or runtime behavior on the target host.
+
+## Auftrag „PR“
+
+Ein Auftrag mit „PR“ umfasst den vollständigen Git-Ablauf für die zum Auftrag gehörenden Änderungen:
+
+1. Änderungen und Dokumentation prüfen, erforderliche Tests ausführen und nur die zum Auftrag gehörenden Pfade committen.
+2. Den Entwicklungsbranch pushen und einen Pull Request nach `Hauptbranch` erstellen.
+3. Vorhandene CI-Prüfungen abwarten. Erst nach erfolgreicher CI und erfüllten Merge-Voraussetzungen nach `Hauptbranch` mergen. Gibt es keine CI, die tatsächlich ausgeführten lokalen Prüfungen im PR dokumentieren.
+4. Nach bestätigtem Merge lokal nach `Hauptbranch` wechseln und mit `git pull --ff-only` aktualisieren.
+5. Den gemergten Entwicklungsbranch lokal und auf dem Remote löschen. Vorher sicherstellen, dass keine ungemergten Commits oder fremden Arbeiten verloren gehen.
+6. Abschließend PR-Link, Prüfergebnisse, Merge und den synchronisierten Stand von `Hauptbranch` berichten.
+
+Diese Schritte sind durch den Auftrag „PR“ autorisiert und benötigen keine erneute Rückfrage. Bei fehlgeschlagenen Prüfungen, fehlender Berechtigung oder drohendem Datenverlust anhalten und die konkrete Blockade melden. Unabhängige Änderungen erhalten.
