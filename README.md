@@ -461,6 +461,11 @@ includes its date. Existing cache data for a newly selected location appears
 before its asynchronous refresh; an open forecast redraws both its values and
 update time when refreshed data is published.
 
+Forecast rows and columns grow with the configured font's measured dimensions,
+keeping text clear of the grid and weather artwork. The popup stays within the
+monitor width; text that cannot fit on a narrow monitor is ellipsized within its
+own cell.
+
 Sliverbar no longer downloads or caches a forecast PNG and does not launch an
 external image viewer for weather. The legacy `weather_image=` key is accepted
 for compatibility, ignored, and reported as deprecated.
