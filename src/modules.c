@@ -1230,6 +1230,9 @@ void moduleWeather(const PanelConfig *c, PanelState *s) {
     snprintf(s->weather, sizeof(s->weather), "%s", middle);
 }
 
+static const char *const WORKSPACE_NUMBER_ICONS[] = {
+    "󰬺", "󰬻", "󰬼", "󰬽", "󰬾", "󰬿", "󰭀", "󰭁", "󰭂"};
+
 void moduleWorkspace(const PanelConfig *c, PanelState *s, const char *report) {
   static const char *icons[] = {
       "", "", "", "", "", "", "", "", ""};
@@ -1272,7 +1275,10 @@ void moduleWorkspace(const PanelConfig *c, PanelState *s, const char *report) {
         bg = c->colorUrgentBg;
       }
       char part[512];
-      const char *tag = idx < 9 ? icons[idx] : name;
+      const char *tag =
+          idx < 9 ? (s->workspaceNumericIcons ? WORKSPACE_NUMBER_ICONS[idx]
+                                              : icons[idx])
+                  : name;
       snprintf(part,
                sizeof(part),
                "%%{F%s}%%{B%s}%%{U%s}%%{+u}%%{A1:workspace|%s:} %s "
@@ -1345,7 +1351,8 @@ void moduleWorkspaceEwmh(const PanelConfig *c,
              bg,
              c->colorNetwork,
              i,
-             label);
+             s->workspaceNumericIcons && i < 9 ? WORKSPACE_NUMBER_ICONS[i]
+                                               : label);
     strncat(
         s->workspace, part, sizeof(s->workspace) - strlen(s->workspace) - 1);
   }

@@ -522,6 +522,31 @@ Die Mausradaktionen in Sliverbar sind davon unabhängig und verwenden ihre
 eigenen Backends. Werden Werte extern geändert, übernimmt Sliverbar sie bei der
 nächsten Aktualisierung beziehungsweise beim passenden Ereignis.
 
+## Workspace-Icons umschalten
+
+Mit `sliverbar --action workspace toggle-icons` wechselt die laufende Leiste
+sofort zwischen ihrer bisherigen Workspace-Darstellung und den Zahlenglyphen
+1–9 (`U+F0B3A` bis `U+F0B42`). Ein erneuter Aufruf stellt die normale
+Darstellung mit dem aktuellen Fokus- und Belegungszustand wieder her. Der Modus
+gilt für die laufende Instanz, auch nach einem Monitorwechsel; nach einem
+Sliverbar-Neustart erscheinen wieder die bisherigen Beschriftungen.
+
+Der Befehl nutzt den vorhandenen lokalen Steuerungssocket. In sxhkd kann er
+beispielsweise so eingebunden werden:
+
+```sxhkd
+super + ctrl + n
+    sliverbar --action workspace toggle-icons
+```
+
+Die neun Glyphen sind fest hinterlegt; `nummern.txt` wird nicht eingelesen.
+Sie werden mit **JetBrainsMono Nerd Font** in der konfigurierten Icon-Größe
+gezeichnet. Diese Schrift muss installiert sein. Andere Icons behalten ihre
+bisherige Schrift. Desktop-Namen, Klickziele, Farben und Reihenfolge bleiben
+erhalten. Workspaces ab Position 10 behalten ihre normale Beschriftung.
+Das Umschalten funktioniert mit dem bspwm- und dem EWMH-Backend; bei
+`workspace_backend=none` bleibt der Workspace-Block ausgeblendet.
+
 ## Generisches EWMH-Backend
 
 `workspace_backend=auto` bevorzugt bspwm, wenn ein erreichbares `bspc`

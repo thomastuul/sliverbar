@@ -59,8 +59,13 @@ socket.  Supported combinations are
 .BR "brightness up" ,
 .BR "brightness down" ,
 .BR "refresh volume" ,
+.BR "refresh brightness" ,
 and
-.BR "refresh brightness" .
+.BR "workspace toggle-icons" .
+The workspace action immediately toggles labels 1 through 9 to fixed Nerd Font
+numeric glyphs.  A second invocation restores the normal labels.  The mode is
+not saved across panel restarts.  Numeric glyphs use JetBrainsMono Nerd Font;
+other icons retain the configured icon font.
 .TP
 .B \-\-version
 Print the program name and version, then exit successfully.

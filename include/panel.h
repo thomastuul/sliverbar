@@ -124,6 +124,7 @@ typedef struct {
   bool brightnessUpdatePending;
   bool brightnessHardware;
   unsigned brightnessMaximum;
+  bool workspaceNumericIcons;
   bool focusedWorkspaceKnown;
   bool focusedWorkspaceOccupied;
   char brightnessOutput[64];

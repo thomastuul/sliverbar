@@ -62,6 +62,7 @@ struct NativePanel {
   PangoLayout *layout;
   PangoFontDescription *font;
   PangoFontDescription *iconFont;
+  PangoFontDescription *workspaceNumberFont;
   NativeTray *tray;
   PanelConfig config;
   int x;
@@ -377,6 +378,9 @@ NativePanel *nativePanelCreate(xcb_connection_t *connection,
   } else {
     panel->iconFont = pango_font_description_copy(panel->font);
   }
+  panel->workspaceNumberFont = pango_font_description_copy(panel->iconFont);
+  pango_font_description_set_family(panel->workspaceNumberFont,
+                                    "JetBrainsMono Nerd Font");
   pango_layout_set_font_description(panel->layout, panel->font);
   xcb_flush(connection);
   if (cairo_surface_status(panel->surface) != CAIRO_STATUS_SUCCESS ||
@@ -398,6 +402,8 @@ void nativePanelDestroy(NativePanel *panel) {
     pango_font_description_free(panel->font);
   if (panel->iconFont)
     pango_font_description_free(panel->iconFont);
+  if (panel->workspaceNumberFont)
+    pango_font_description_free(panel->workspaceNumberFont);
   if (panel->cairo)
     cairo_destroy(panel->cairo);
   if (panel->presentCairo)
@@ -568,7 +574,11 @@ static void prepareLayout(NativePanel *panel, const char *text) {
   while (*cursor) {
     const char *next = g_utf8_next_char(cursor);
     if (iconCodepoint(g_utf8_get_char(cursor))) {
-      PangoAttribute *attribute = pango_attr_font_desc_new(panel->iconFont);
+      gunichar codepoint = g_utf8_get_char(cursor);
+      PangoAttribute *attribute = pango_attr_font_desc_new(
+          codepoint >= 0xf0b3aU && codepoint <= 0xf0b42U
+              ? panel->workspaceNumberFont
+              : panel->iconFont);
       attribute->start_index = (guint)(cursor - text);
       attribute->end_index = (guint)(next - text);
       pango_attr_list_insert(attributes, attribute);

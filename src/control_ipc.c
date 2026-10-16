@@ -12,6 +12,8 @@
 #include <unistd.h>
 
 static bool operationAllowed(const char *module, const char *operation) {
+  if (!strcmp(module, "workspace"))
+    return !strcmp(operation, "toggle-icons");
   if (!strcmp(module, "volume"))
     return !strcmp(operation, "up") || !strcmp(operation, "down") ||
            !strcmp(operation, "toggle");
