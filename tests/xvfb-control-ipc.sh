@@ -48,7 +48,7 @@ export PATH="$test_root/bin:$PATH"
 export SLIVERBAR_TEST_PACTL_LOG="$test_root/pactl.log"
 export SLIVERBAR_TEST_WPCTL_LOG="$test_root/wpctl.log"
 
-"$binary" --config "$config" >"$test_root/panel.log" 2>&1 &
+SLIVERBAR_DEBUG=1 "$binary" --config "$config" >"$test_root/panel.log" 2>&1 &
 panel_pid=$!
 
 attempt=0
@@ -66,6 +66,8 @@ grep -Fx 'inhibitor.active=no' "$test_root/diagnose-running.log"
 
 "$binary" --action refresh volume
 "$binary" --action refresh brightness
+"$binary" --action workspace toggle-icons
+"$binary" --action workspace toggle-icons
 "$binary" --action volume toggle
 
 attempt=0
@@ -77,6 +79,8 @@ while [ ! -s "$SLIVERBAR_TEST_PACTL_LOG" ]; do
     fi
     sleep 0.02
 done
+
+[ "$(grep -c 'action=workspace arg=toggle-icons' "$test_root/panel.log")" -eq 2 ]
 
 grep -Fx 'set-sink-mute @DEFAULT_SINK@ toggle' "$SLIVERBAR_TEST_PACTL_LOG"
 [ ! -s "$SLIVERBAR_TEST_WPCTL_LOG" ]

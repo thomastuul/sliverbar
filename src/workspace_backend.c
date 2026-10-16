@@ -25,6 +25,7 @@ struct WorkspaceBackend {
   pid_t childPid;
   int childFd;
   char report[PANEL_TEXT_MAX];
+  char lastReport[PANEL_TEXT_MAX];
   size_t reportUsed;
   WorkspaceSnapshot snapshot;
   bool hasSnapshot;
@@ -304,7 +305,8 @@ bool workspaceBackendRead(WorkspaceBackend *backend, PanelState *state) {
     while ((newline = memchr(line, '\n', (size_t)(end - line)))) {
       *newline = '\0';
       if (*line) {
-        moduleWorkspace(&backend->config, state, line);
+        snprintf(backend->lastReport, sizeof(backend->lastReport), "%s", line);
+        moduleWorkspace(&backend->config, state, backend->lastReport);
         changed = true;
       }
       line = newline + 1;
@@ -367,6 +369,18 @@ bool workspaceBackendChildExited(WorkspaceBackend *backend,
   backend->type = WORKSPACE_BACKEND_EWMH;
   backend->hasSnapshot = false;
   return workspaceBackendRefresh(backend, state);
+}
+
+void workspaceBackendToggleIcons(WorkspaceBackend *backend, PanelState *state) {
+  if (!backend || !state)
+    return;
+  state->workspaceNumericIcons = !state->workspaceNumericIcons;
+  if (backend->type == WORKSPACE_BACKEND_BSPWM)
+    moduleWorkspace(&backend->config,
+                    state,
+                    backend->lastReport[0] ? backend->lastReport : NULL);
+  else if (backend->type == WORKSPACE_BACKEND_EWMH && backend->hasSnapshot)
+    moduleWorkspaceEwmh(&backend->config, state, &backend->snapshot);
 }
 
 int workspaceBackendSwitch(WorkspaceBackend *backend, const char *workspace) {

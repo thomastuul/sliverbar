@@ -126,6 +126,12 @@ int main(int argc, char **argv) {
   CHECK(!controlActionBuild(
       "power_action", "poweroff", controlAction, sizeof(controlAction)));
   CHECK(controlActionValid("volume|toggle"));
+  CHECK(controlActionBuild(
+      "workspace", "toggle-icons", controlAction, sizeof(controlAction)));
+  CHECK(strcmp(controlAction, "workspace|toggle-icons") == 0);
+  CHECK(controlActionValid("workspace|toggle-icons"));
+  CHECK(!controlActionValid("workspace|1"));
+  CHECK(!controlActionValid("workspace|toggle-icons|extra"));
   CHECK(controlActionValid("refresh|brightness"));
   CHECK(!controlActionValid("volume|invalid"));
   CHECK(!controlActionValid("power_action|poweroff"));
@@ -1357,6 +1363,47 @@ int main(int argc, char **argv) {
   moduleWorkspace(&cfg, &state, "WMDP-3:F1:o2:f3:LT:TT:G");
   CHECK(state.focusedWorkspaceKnown);
   CHECK(!state.focusedWorkspaceOccupied);
+
+  const char *numberIcons[] = {
+      "󰬺", "󰬻", "󰬼", "󰬽", "󰬾", "󰬿", "󰭀", "󰭁", "󰭂"};
+  const char *workspaceReport =
+      "WmHDMI-1:Oother:LT:MDP-3:Oone:otwo:fthree:ufour:ffive:osix:"
+      "fseven:feight:fnine:ften:LT:TT:G";
+  char originalWorkspaces[PANEL_TEXT_MAX];
+  moduleWorkspace(&cfg, &state, workspaceReport);
+  snprintf(
+      originalWorkspaces, sizeof(originalWorkspaces), "%s", state.workspace);
+  state.workspaceNumericIcons = true;
+  moduleWorkspace(&cfg, &state, workspaceReport);
+  for (size_t i = 0; i < 9; i++)
+    CHECK(strstr(state.workspace, numberIcons[i]) != NULL);
+  CHECK(strstr(state.workspace, "workspace|one:") != NULL);
+  CHECK(strstr(state.workspace, "workspace|nine:") != NULL);
+  CHECK(strstr(state.workspace, " ten ") != NULL);
+  CHECK(strstr(state.workspace, "other") == NULL);
+  CHECK(strstr(state.workspace, "[TILED]") != NULL);
+  CHECK(state.focusedWorkspaceKnown && state.focusedWorkspaceOccupied);
+  moduleWorkspace(&cfg, &state, "WMDP-3:Fone:otwo:LM:TT:G");
+  CHECK(strstr(state.workspace, numberIcons[0]) != NULL);
+  CHECK(strstr(state.workspace, "[MONOCLE]") != NULL);
+  CHECK(state.focusedWorkspaceKnown && !state.focusedWorkspaceOccupied);
+  state.workspaceNumericIcons = false;
+  moduleWorkspace(&cfg, &state, workspaceReport);
+  CHECK(strcmp(state.workspace, originalWorkspaces) == 0);
+
+  snapshot.count = 10;
+  moduleWorkspaceEwmh(&cfg, &state, &snapshot);
+  snprintf(
+      originalWorkspaces, sizeof(originalWorkspaces), "%s", state.workspace);
+  state.workspaceNumericIcons = true;
+  moduleWorkspaceEwmh(&cfg, &state, &snapshot);
+  for (size_t i = 0; i < 9; i++)
+    CHECK(strstr(state.workspace, numberIcons[i]) != NULL);
+  CHECK(strstr(state.workspace, "workspace|9:") != NULL);
+  CHECK(strstr(state.workspace, " 10 ") != NULL);
+  state.workspaceNumericIcons = false;
+  moduleWorkspaceEwmh(&cfg, &state, &snapshot);
+  CHECK(strcmp(state.workspace, originalWorkspaces) == 0);
 
   PanelConfig weatherConfig;
   configDefaults(&weatherConfig);

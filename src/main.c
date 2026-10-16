@@ -1126,7 +1126,10 @@ static void doAction(PanelConfig *c,
       logMessage("ERROR", "volume action %s failed", arg);
     *volumeDirty = true;
   } else if (!strcmp(kind, "workspace") && arg) {
-    workspaceBackendSwitch(workspaceBackend, arg);
+    if (!strcmp(arg, "toggle-icons"))
+      workspaceBackendToggleIcons(workspaceBackend, s);
+    else
+      workspaceBackendSwitch(workspaceBackend, arg);
   } else if (!strcmp(kind, "inhibitor") && arg && !strcmp(arg, "toggle")) {
     if (!inhibitorToggle(inhibitor)) {
       bool active = inhibitorActive(inhibitor);
@@ -1315,7 +1318,8 @@ static void usage(FILE *f, const char *name) {
           "Usage: %s [--config PATH] [--check-config] [--diagnose] "
           "[--list-pim-sources] [--smoke-test] [--version]\n"
           "       %s --action {volume {up|down|toggle}|"
-          "brightness {up|down}|refresh {volume|brightness}}\n",
+          "brightness {up|down}|refresh {volume|brightness}|"
+          "workspace toggle-icons}\n",
           name,
           name);
 }
@@ -2066,6 +2070,27 @@ int main(int argc, char **argv) {
                     smoke.focusedWorkspaceOccupied &&
                     strstr(smoke.workspace, "workspace|1") &&
                     !workspaceBackendSwitch(smokeWorkspace, "2");
+    }
+    if (workspaceOk && !strcmp(workspaceBackendName(smokeWorkspace), "bspwm")) {
+      struct pollfd workspaceFd = {
+          workspaceBackendPollFd(smokeWorkspace), POLLIN, 0};
+      workspaceOk = poll(&workspaceFd, 1, 1000) > 0 &&
+                    workspaceBackendRead(smokeWorkspace, &smoke);
+    }
+    if (workspaceOk) {
+      char originalWorkspaces[PANEL_TEXT_MAX];
+      snprintf(originalWorkspaces,
+               sizeof(originalWorkspaces),
+               "%s",
+               smoke.workspace);
+      workspaceBackendToggleIcons(smokeWorkspace, &smoke);
+      workspaceOk = smoke.workspaceNumericIcons &&
+                    (!strcmp(workspaceBackendName(smokeWorkspace), "none")
+                         ? !smoke.workspace[0]
+                         : strstr(smoke.workspace, "󰬺") != NULL);
+      workspaceBackendToggleIcons(smokeWorkspace, &smoke);
+      workspaceOk = workspaceOk && !smoke.workspaceNumericIcons &&
+                    !strcmp(smoke.workspace, originalWorkspaces);
     }
     if (!workspaceOk) {
       logMessage("ERROR", "EWMH workspace backend smoke-test failed");

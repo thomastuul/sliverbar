@@ -25,6 +25,7 @@ bool workspaceBackendChildExited(WorkspaceBackend *backend,
                                  pid_t pid,
                                  int status,
                                  PanelState *state);
+void workspaceBackendToggleIcons(WorkspaceBackend *backend, PanelState *state);
 int workspaceBackendSwitch(WorkspaceBackend *backend, const char *workspace);
 
 #endif

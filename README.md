@@ -143,6 +143,7 @@ Send a validated action to the running panel:
 sliverbar --action volume up
 sliverbar --action brightness down
 sliverbar --action refresh volume
+sliverbar --action workspace toggle-icons
 ```
 
 The installed usage manual is available with:
