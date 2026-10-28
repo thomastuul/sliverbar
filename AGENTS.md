@@ -201,15 +201,25 @@ Packaging changes follow `docs/packaging.md`, including `./scripts/test.sh` and
 package validation. They require a live-system test only when they affect
 installation or runtime behavior on the target host.
 
-## Auftrag „PR“
+## Request “PR”
 
-Ein Auftrag mit „PR“ umfasst den vollständigen Git-Ablauf für die zum Auftrag gehörenden Änderungen:
+A request containing “PR” includes the complete Git workflow for the changes
+that belong to the request:
 
-1. Änderungen und Dokumentation prüfen, erforderliche Tests ausführen und nur die zum Auftrag gehörenden Pfade committen.
-2. Den Entwicklungsbranch pushen und einen Pull Request nach `Hauptbranch` erstellen.
-3. Vorhandene CI-Prüfungen abwarten. Erst nach erfolgreicher CI und erfüllten Merge-Voraussetzungen nach `Hauptbranch` mergen. Gibt es keine CI, die tatsächlich ausgeführten lokalen Prüfungen im PR dokumentieren.
-4. Nach bestätigtem Merge lokal nach `Hauptbranch` wechseln und mit `git pull --ff-only` aktualisieren.
-5. Den gemergten Entwicklungsbranch lokal und auf dem Remote löschen. Vorher sicherstellen, dass keine ungemergten Commits oder fremden Arbeiten verloren gehen.
-6. Abschließend PR-Link, Prüfergebnisse, Merge und den synchronisierten Stand von `Hauptbranch` berichten.
+1. Review the changes and documentation, run the required tests, and commit
+   only the paths that belong to the request.
+2. Push the development branch and create a pull request targeting the
+   `main branch`.
+3. Wait for all existing CI checks. Merge into the `main branch` only after CI
+   succeeds and all merge requirements are met. If there is no CI, document
+   the local checks that were actually run in the PR.
+4. After the merge is confirmed, switch locally to the `main branch` and
+   update it with `git pull --ff-only`.
+5. Delete the merged development branch locally and on the remote. First
+   ensure that no unmerged commits or unrelated work will be lost.
+6. Finally, report the PR link, check results, merge, and synchronized state of
+   the `main branch`.
 
-Diese Schritte sind durch den Auftrag „PR“ autorisiert und benötigen keine erneute Rückfrage. Bei fehlgeschlagenen Prüfungen, fehlender Berechtigung oder drohendem Datenverlust anhalten und die konkrete Blockade melden. Unabhängige Änderungen erhalten.
+The request “PR” authorizes these steps; they do not require another
+confirmation. Stop and report the specific blocker if checks fail, permissions
+are missing, or data loss is imminent. Preserve unrelated changes.
