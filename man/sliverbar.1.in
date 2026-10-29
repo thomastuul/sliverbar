@@ -155,6 +155,17 @@ and
 .BR power .
 .B auto
 hides a block when its required data or runtime helper is unavailable.
+.SS Screencast status
+The screencast module observes
+.BR $XDG_RUNTIME_DIR/screencast.pid .
+In auto mode it appears while this recording marker exists.
+If
+.B $XDG_RUNTIME_DIR/screencast.silent
+also exists, a crossed-out microphone is added to indicate recording without
+audio.  Without the additional marker, the original recording indicator is
+used.  The external recording script must remove both markers when recording
+stops.  Sliverbar displays the markers; it does not start recordings or select
+audio devices.
 .SS Applications and menus
 .TP
 .B terminal

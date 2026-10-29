@@ -244,6 +244,15 @@ example, a deliberately minimal panel can start from the example configuration
 and set every module except `clock` and `title` to `disabled`, plus
 `workspace_backend=none`.
 
+The screencast module observes `$XDG_RUNTIME_DIR/screencast.pid`. In `auto`
+mode it appears while that marker exists. If the recording script also creates
+`$XDG_RUNTIME_DIR/screencast.silent`, the block adds a crossed-out microphone
+for a recording without audio. Recordings without the additional marker retain
+the original indicator. Remove both markers when recording stops. Sliverbar
+only displays this state; the external recorder selects and captures audio.
+See the [usage guide](USAGE.md#p--screencast-indikator) for the bspwm recorder's
+microphone selection and silent-recording behavior.
+
 The compiled text-font fallback is the generic Pango `Monospace` family; the
 shipped example selects `JetBrainsMono Nerd Font Mono`. An empty `icon_font`
 uses the regular font and Pango's installed fallback fonts, so a Nerd Font
@@ -424,7 +433,8 @@ name used by `weather_location`, or to its internal ID for compatibility.
 The explicit `weather_location=safe-id|Display name|service query` form remains
 available for ambiguous locations and ID collisions. Legacy `location=query`
 remains a single-location form. A fifth location and empty, duplicate,
-overlong, or unsafe explicit IDs fail `--check-config`. Selection state is stored below
+overlong, or unsafe explicit IDs fail `--check-config`. Selection state is stored
+below
 `$XDG_STATE_HOME/sliverbar`; JSON caches are isolated by safe ID below
 `$XDG_CACHE_HOME/sliverbar/weather`.
 
@@ -533,17 +543,17 @@ second for up to five seconds.
 
 ## Feature mapping
 
-| Bash component | C implementation |
-| --- | --- |
-| `start.sh`, `sighandler.sh` | supervisor, `poll`, `timerfd`, `signalfd` |
-| `events.sh`, workspace block | EWMH backend with optional persistent `bspc subscribe report` backend |
-| `xtmon.sh`, `title_server.sh` | native XCB property events |
-| clock, CPU, battery, screencast | native `/proc`, `/sys`, time and XDG logic |
-| volume and brightness | backend detection plus validated action protocol |
-| network worker | `/sys/class/net`, optional nmcli query and monitor |
-| weather worker | non-blocking child, atomic per-location JSON caches |
-| trayer block | native XEmbed tray manager and direct child-window layout |
-| launcher, power and terminal clicks | detached, argument-based exec |
+| Bash component                      | C implementation                                                      |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `start.sh`, `sighandler.sh`         | supervisor, `poll`, `timerfd`, `signalfd`                             |
+| `events.sh`, workspace block        | EWMH backend with optional persistent `bspc subscribe report` backend |
+| `xtmon.sh`, `title_server.sh`       | native XCB property events                                            |
+| clock, CPU, battery, screencast     | native `/proc`, `/sys`, time and XDG logic                            |
+| volume and brightness               | backend detection plus validated action protocol                      |
+| network worker                      | `/sys/class/net`, optional nmcli query and monitor                    |
+| weather worker                      | non-blocking child, atomic per-location JSON caches                   |
+| trayer block                        | native XEmbed tray manager and direct child-window layout             |
+| launcher, power and terminal clicks | detached, argument-based exec                                         |
 
 The Bash directory is not read or executed by `sliverbar`.
 
@@ -552,16 +562,16 @@ gaps between glyphs and values rather than font-dependent spaces.
 
 ## Compatibility matrix
 
-| Area | Status | Coverage |
-| --- | --- | --- |
-| Linux x86-64, Debian 13 container | tested | GCC, Clang, CLI-only, ASan/UBSan |
-| X11, one RandR monitor | tested | Xvfb rendering and input smoke test |
-| Multiple monitors and X screens | tested | Xvfb right-monitor selection and second X screen |
-| bspwm | supported | optional report backend with EWMH fallback |
-| Other EWMH window managers | supported | generic properties; WM-specific behavior is best effort |
-| Non-EWMH window managers | best effort | independent modules work; workspaces/title may be absent |
-| Fedora 42 and Arch | best effort | reproducible manual compatibility containers |
-| Non-x86-64 | best effort | source build expected, not yet automated |
+| Area                              | Status      | Coverage                                                 |
+| --------------------------------- | ----------- | -------------------------------------------------------- |
+| Linux x86-64, Debian 13 container | tested      | GCC, Clang, CLI-only, ASan/UBSan                         |
+| X11, one RandR monitor            | tested      | Xvfb rendering and input smoke test                      |
+| Multiple monitors and X screens   | tested      | Xvfb right-monitor selection and second X screen         |
+| bspwm                             | supported   | optional report backend with EWMH fallback               |
+| Other EWMH window managers        | supported   | generic properties; WM-specific behavior is best effort  |
+| Non-EWMH window managers          | best effort | independent modules work; workspaces/title may be absent |
+| Fedora 42 and Arch                | best effort | reproducible manual compatibility containers             |
+| Non-x86-64                        | best effort | source build expected, not yet automated                 |
 
 Optional module backends are not panel prerequisites: `wpctl`/`pactl`/`amixer`
 for volume (with native `wpctl` preferred for mute on PipeWire), logind plus

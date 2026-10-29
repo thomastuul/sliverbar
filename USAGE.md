@@ -38,12 +38,12 @@ Sliverbar teilt die Panelbreite in drei Zonen:
 
 In dieser Anleitung bedeuten:
 
-| Bezeichnung | Eingabe |
-| --- | --- |
-| Linksklick | Maustaste 1 |
-| Mittelklick | Maustaste 2 |
-| Rechtsklick | Maustaste 3 |
-| Mausrad hoch | Maustaste 4 |
+| Bezeichnung      | Eingabe     |
+| ---------------- | ----------- |
+| Linksklick       | Maustaste 1 |
+| Mittelklick      | Maustaste 2 |
+| Rechtsklick      | Maustaste 3 |
+| Mausrad hoch     | Maustaste 4 |
 | Mausrad herunter | Maustaste 5 |
 
 Nicht jeder Block besitzt eine Aktion. Reine Anzeigen reagieren bewusst nicht
@@ -126,7 +126,26 @@ Der Screencast-Block erscheint im Standardmodus nur, wenn unter
 `$XDG_RUNTIME_DIR/screencast.pid` eine Aufnahmemarkierung existiert. Damit kann
 ein externes Aufnahme-Skript Sliverbar ohne zusätzliche IPC über eine laufende
 Bildschirmaufnahme informieren. Ein aktiver Screencast wird in der kritischen
-Farbe dargestellt.
+Farbe dargestellt. Existiert zusätzlich `$XDG_RUNTIME_DIR/screencast.silent`,
+erscheint ein durchgestrichenes Mikrofon für eine Aufnahme ohne Ton. Ohne diese
+Zusatzdatei bleibt die bisherige Anzeige erhalten.
+
+Das bspwm-Skript bevorzugt FIFINE, danach Poly Studio P5. Ist keines verfügbar,
+zeichnet es ohne Ton auf. `SCREENCAST_AUDIO=none` erzwingt diesen Modus für Tests.
+Der Mikrofonhinweis erfolgt nur, wenn die Standardausgabe ein Terminal ist;
+beim Shortcut informiert das Panel ohne Desktop-Benachrichtigung. Echte
+Startfehler werden dagegen auf der Standardfehlerausgabe und, sofern verfügbar,
+über `notify-send` gemeldet. Andere Mikrofone und Monitorquellen werden nicht
+automatisch als Ersatz ausgewählt.
+
+`Super+Alt+S` startet `~/.config/bspwm/bin/screencast.sh`; der nächste Aufruf
+beendet die Aufnahme unabhängig von verfügbaren Mikrofonen. Die Aufnahme liegt
+unter `~/Videos/screencast-*.mkv`. FFmpeg-Diagnosen stehen in
+`$XDG_RUNTIME_DIR/screencast.log`; dieses Protokoll wird bei jedem Start ersetzt.
+Beim Stoppen entfernt das Skript die Statusdateien `screencast.pid`,
+`screencast.silent` und `screencast.file`. Die Aufnahmedatei bleibt erhalten.
+Weitere Skriptvoraussetzungen und Laufzeitdateien beschreibt die
+[bspwm-Anleitung](https://github.com/thomastuul/bspwm#screen-recording).
 
 **Mausaktion:** keine.
 
@@ -134,14 +153,14 @@ Farbe dargestellt.
 
 Der integrierte Timer benötigt kein externes Timerprogramm.
 
-| Zustand | Anzeige |
-| --- | --- |
-| leer | grünes Standardsymbol |
-| eingestellt | rote Minutenangabe und Symbol für einen gestellten Timer |
-| laufend | rote Minutenangabe und achtteilige Animation |
-| pausiert | rote Minutenangabe und Pausensymbol |
-| regulär abgelaufen | Ablaufsymbol während der Tonwiedergabe beziehungsweise kurz bei nicht startbarem Ton |
-| manuell zurückgesetzt | Rücksetzsymbol für 1,5 Sekunden |
+| Zustand               | Anzeige                                                                              |
+| --------------------- | ------------------------------------------------------------------------------------ |
+| leer                  | grünes Standardsymbol                                                                |
+| eingestellt           | rote Minutenangabe und Symbol für einen gestellten Timer                             |
+| laufend               | rote Minutenangabe und achtteilige Animation                                         |
+| pausiert              | rote Minutenangabe und Pausensymbol                                                  |
+| regulär abgelaufen    | Ablaufsymbol während der Tonwiedergabe beziehungsweise kurz bei nicht startbarem Ton |
+| manuell zurückgesetzt | Rücksetzsymbol für 1,5 Sekunden                                                      |
 
 Die acht Animationsphasen wechseln alle 125 Millisekunden und ergeben einen
 Umlauf pro Sekunde. Beim ersten Start und nach jedem Fortsetzen beginnt die
@@ -440,11 +459,11 @@ dem Aufruf. Schlägt die Aktion fehl, stellt Sliverbar die Sperre wieder her.
 
 Die drei Programme haben klar getrennte Aufgaben:
 
-| Komponente | Aufgabe |
-| --- | --- |
-| bspwm | verwaltet Monitore, Arbeitsflächen, Fenster, Fokus und Layout |
-| sxhkd | bindet Tastenkombinationen an Befehle, meistens `bspc` |
-| Sliverbar | visualisiert Zustände, verarbeitet Panel-Mausaktionen und stellt Launcher, Tray sowie Popups bereit |
+| Komponente | Aufgabe                                                                                             |
+| ---------- | --------------------------------------------------------------------------------------------------- |
+| bspwm      | verwaltet Monitore, Arbeitsflächen, Fenster, Fokus und Layout                                       |
+| sxhkd      | bindet Tastenkombinationen an Befehle, meistens `bspc`                                              |
+| Sliverbar  | visualisiert Zustände, verarbeitet Panel-Mausaktionen und stellt Launcher, Tray sowie Popups bereit |
 
 Der normale Informationsfluss sieht so aus:
 
@@ -552,12 +571,12 @@ Das Umschalten funktioniert mit dem bspwm- und dem EWMH-Backend; bei
 `workspace_backend=auto` bevorzugt bspwm, wenn ein erreichbares `bspc`
 vorhanden ist, und verwendet ansonsten EWMH. Weitere Möglichkeiten sind:
 
-| Wert | Verhalten |
-| --- | --- |
-| `auto` | bspwm bevorzugen, sonst EWMH |
-| `bspwm` | bspwm anfordern, bei Ausfall auf EWMH zurückfallen |
-| `ewmh` | ausschließlich das generische EWMH-Backend verwenden |
-| `none` | Arbeitsflächenblock ausblenden |
+| Wert    | Verhalten                                            |
+| ------- | ---------------------------------------------------- |
+| `auto`  | bspwm bevorzugen, sonst EWMH                         |
+| `bspwm` | bspwm anfordern, bei Ausfall auf EWMH zurückfallen   |
+| `ewmh`  | ausschließlich das generische EWMH-Backend verwenden |
+| `none`  | Arbeitsflächenblock ausblenden                       |
 
 Das EWMH-Backend verwendet insbesondere `_NET_NUMBER_OF_DESKTOPS`,
 `_NET_CURRENT_DESKTOP`, `_NET_DESKTOP_NAMES`, `_NET_CLIENT_LIST`,
@@ -635,19 +654,19 @@ RandR-Anordnung neu an.
 Fehlende Hilfsprogramme beenden Sliverbar nicht. Im `auto`-Modus wird nur das
 betroffene Modul verborgen oder eingeschränkt.
 
-| Programm oder Dienst | Verwendung |
-| --- | --- |
-| `bspc` | erweitertes bspwm-Workspace-Backend |
-| `pactl`, `wpctl` oder `amixer` | Lautstärke lesen und ändern |
-| `xrandr` | Helligkeit lesen und ändern |
-| `nmcli` | SSID, WLAN-Fallback und Netzwerkereignisse |
-| `curl` | Wetterdaten im JSON-Format |
-| `notify-send` | Timer-, Inhibitor- und Statusbenachrichtigungen |
-| `systemd-inhibit` | Standby- und Hibernation-Sperre |
-| `pw-play`, `paplay`, `canberra-gtk-play` oder `aplay` | Timerklang |
-| GIO und `shared-mime-info` | Desktop-Anwendungen und Standard-Dateihandler |
-| logind über D-Bus | Hardware-Helligkeit und internes Power-Menü |
-| `power-profiles-daemon` über D-Bus | optionale Auswahl von Energieprofilen |
+| Programm oder Dienst                                  | Verwendung                                      |
+| ----------------------------------------------------- | ----------------------------------------------- |
+| `bspc`                                                | erweitertes bspwm-Workspace-Backend             |
+| `pactl`, `wpctl` oder `amixer`                        | Lautstärke lesen und ändern                     |
+| `xrandr`                                              | Helligkeit lesen und ändern                     |
+| `nmcli`                                               | SSID, WLAN-Fallback und Netzwerkereignisse      |
+| `curl`                                                | Wetterdaten im JSON-Format                      |
+| `notify-send`                                         | Timer-, Inhibitor- und Statusbenachrichtigungen |
+| `systemd-inhibit`                                     | Standby- und Hibernation-Sperre                 |
+| `pw-play`, `paplay`, `canberra-gtk-play` oder `aplay` | Timerklang                                      |
+| GIO und `shared-mime-info`                            | Desktop-Anwendungen und Standard-Dateihandler   |
+| logind über D-Bus                                     | Hardware-Helligkeit und internes Power-Menü     |
+| `power-profiles-daemon` über D-Bus                    | optionale Auswahl von Energieprofilen           |
 
 ## Energieprofile über die Batterieanzeige
 

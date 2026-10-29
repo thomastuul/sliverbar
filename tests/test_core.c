@@ -199,6 +199,34 @@ int main(int argc, char **argv) {
 
   PanelConfig cfg;
   configDefaults(&cfg);
+  PanelState screencastState = {0};
+  char screencastDirectory[] = "/tmp/sliverbar-screencast-XXXXXX";
+  CHECK(mkdtemp(screencastDirectory) != NULL);
+  moduleScreencast(&cfg, &screencastState, screencastDirectory);
+  CHECK(screencastState.screencast[0] == '\0');
+  char marker[PANEL_PATH_MAX];
+  snprintf(marker, sizeof(marker), "%s/screencast.pid", screencastDirectory);
+  FILE *markerFile = fopen(marker, "w");
+  CHECK(markerFile != NULL);
+  CHECK(fclose(markerFile) == 0);
+  moduleScreencast(&cfg, &screencastState, screencastDirectory);
+  CHECK(strstr(screencastState.screencast, "壘") != NULL);
+  CHECK(strstr(screencastState.screencast, "󰍭") == NULL);
+  char silentMarker[PANEL_PATH_MAX];
+  snprintf(silentMarker,
+           sizeof(silentMarker),
+           "%s/screencast.silent",
+           screencastDirectory);
+  markerFile = fopen(silentMarker, "w");
+  CHECK(markerFile != NULL);
+  CHECK(fclose(markerFile) == 0);
+  moduleScreencast(&cfg, &screencastState, screencastDirectory);
+  CHECK(strstr(screencastState.screencast, "󰍭") != NULL);
+  CHECK(unlink(marker) == 0);
+  moduleScreencast(&cfg, &screencastState, screencastDirectory);
+  CHECK(screencastState.screencast[0] == '\0');
+  CHECK(unlink(silentMarker) == 0);
+  CHECK(rmdir(screencastDirectory) == 0);
   CHECK(cfg.height == 25);
   CHECK(cfg.blockPadding == 6);
   CHECK(cfg.volumeStep == 2);

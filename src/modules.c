@@ -353,6 +353,10 @@ void moduleScreencast(const PanelConfig *c,
         c,
         active ? c->colorCritical : c->colorFree,
         "壘");
+  snprintf(p, sizeof(p), "%s/screencast.silent", runtime);
+  if (active && access(p, F_OK) == 0)
+    block(
+        s->screencast, sizeof(s->screencast), c, c->colorCritical, "壘 󰍭");
 }
 
 static bool pactlMaxRawVolume(const char *output, unsigned long *maximum) {
