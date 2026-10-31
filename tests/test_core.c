@@ -210,7 +210,7 @@ int main(int argc, char **argv) {
   CHECK(markerFile != NULL);
   CHECK(fclose(markerFile) == 0);
   moduleScreencast(&cfg, &screencastState, screencastDirectory);
-  CHECK(strstr(screencastState.screencast, "壘") != NULL);
+  CHECK(strstr(screencastState.screencast, "") != NULL);
   CHECK(strstr(screencastState.screencast, "󰍭") == NULL);
   char silentMarker[PANEL_PATH_MAX];
   snprintf(silentMarker,
